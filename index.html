@@ -28,6 +28,7 @@
     --r:18px; --sans:"Quicksand",ui-rounded,"SF Pro Rounded",system-ui,sans-serif; --display:"Fredoka",var(--sans);
   }
   *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url("eggiebackground.png") center top/cover no-repeat fixed;opacity:.22;}
   body{background:var(--bg);background-image:radial-gradient(80% 50% at 100% 0%,#f7e0f0 0%,transparent 60%),radial-gradient(70% 50% at 0% 0%,#e9e0fb 0%,transparent 55%);background-attachment:fixed;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased;min-height:100vh;}
   h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;}
   .muted{color:var(--muted);} .soft{color:var(--ink-soft);} .pink{color:var(--pink-deep);} .lav{color:var(--lav-deep);} .mint{color:var(--mint);}
@@ -46,15 +47,18 @@
   .pill-pink{background:#fde4ef;color:var(--pink-deep);} .pill-lav{background:#ece2fb;color:var(--lav-deep);}
   .pill-mint{background:#ddf4ec;color:#2f9d79;} .pill-peach{background:#fdeadb;color:#cc7a3e;} .pill-gray{background:#f2ebf2;color:var(--muted);}
   ::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:#ecd7ef;border-radius:9px;}
-  #rail{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:20;background:rgba(255,255,255,.78);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
-  .brand{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;}
+  #rail{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:20;background:rgba(255,255,255,.78);backdrop-filter:blur(12px);border-bottom:2px solid transparent;border-image:linear-gradient(90deg,#5cc6a3,#8fb8f0,#a98fe0,#ec7faf) 1;}
+  .brand{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px;}
+  .brand-logo-img{height:26px;width:auto;display:block;flex:0 0 auto;filter:drop-shadow(0 1px 3px rgba(141,111,209,.3));}
+  .brand-name{background:linear-gradient(120deg,#5cc6a3,#8d6fd1 45%,#db5e98);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;letter-spacing:.02em;font-size:17px;}
   nav{display:flex;gap:4px;flex-wrap:wrap;}
   .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
   .tab.active{background:linear-gradient(135deg,#fde4ef,#ece2fb);color:var(--pink-deep);} .tab:hover{color:var(--pink-deep);}
   #rail .right{display:flex;align-items:center;gap:10px;}
   .chip{font-size:11px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--line-2);color:var(--muted);background:#fff;}
   .chip.on{color:var(--mint);border-color:#bfe9d8;background:#f0fbf6;} .chip.demo{color:var(--lav-deep);border-color:#ddcdf6;background:#f6f0ff;}
-  .avatar{width:32px;height:32px;border-radius:999px;background:linear-gradient(135deg,var(--pink),var(--lav));display:grid;place-items:center;color:#fff;font-weight:700;}
+  .avatar{width:32px;height:32px;border-radius:999px;background:linear-gradient(135deg,var(--pink),var(--lav));display:grid;place-items:center;color:#fff;font-weight:700;overflow:hidden;}
+  .avatar img{width:100%;height:100%;object-fit:cover;}
   main{padding:18px;max-width:1380px;margin:0 auto;}
   .grid-home{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;}
   .col{display:flex;flex-direction:column;gap:16px;}
@@ -124,14 +128,14 @@
 <body>
 <div id="rail">
   <div style="display:flex;align-items:center;gap:22px">
-    <span class="brand">🐙 Eggie OS</span>
+    <span class="brand"><img class="brand-logo-img" src="EGGIE%20LOGOTYPE%20-%20FLAT%20GRADIENT.png" alt="Eggie" /><span class="brand-name">OS</span></span>
     <nav id="nav"></nav>
   </div>
   <div class="right">
     <span id="status" class="chip">…</span>
     <button class="chip" data-act="settings" title="Accessibility + display">⚙️</button>
     <button id="demoChip" class="chip" data-act="toggleDemo">demo</button>
-    <span class="avatar">🐙</span>
+    <span class="avatar"><img src="favicon.png" alt="Eggie" /></span>
   </div>
 </div>
 <main id="view"></main>
