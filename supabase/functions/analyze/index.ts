@@ -117,7 +117,16 @@ Deno.serve(async (req) => {
           if (d && d.approximate_member_count != null) out.discord = Number(d.approximate_member_count);
         } catch { /* ignore */ }
       }
-      if (!Object.keys(out).length) return json({ error: "Nothing to pull — set YOUTUBE_API_KEY (+ channel id) and/or a Discord invite." }, 400);
+      // Twitch followers via DecAPI (free, public, no auth — the chat-command service)
+      const th = body.twitchHandle || Deno.env.get("TWITCH_HANDLE");
+      if (th) {
+        try {
+          const t = await fetch(`https://decapi.me/twitch/followcount/${encodeURIComponent(th)}`).then((x) => x.text());
+          const n = parseInt((t || "").replace(/[^0-9]/g, ""), 10);
+          if (!isNaN(n) && n > 0) out.twitch = n;
+        } catch { /* ignore */ }
+      }
+      if (!Object.keys(out).length) return json({ error: "Nothing to pull — set YOUTUBE_API_KEY (+ channel id), a Discord invite, and/or a Twitch handle." }, 400);
       try {
         const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         const today = new Date().toLocaleDateString("en-CA");

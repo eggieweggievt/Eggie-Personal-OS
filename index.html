@@ -123,6 +123,7 @@ const CONFIG = {
   readOnly: false,
   youtubeChannelId: "UCafRwkDb29wF0MPuZa4zzPA", // EggieWeggie VT — for auto channel-pull
   discordInvite: "suckegg",                      // discord.gg/suckegg — for member count
+  twitchHandle: "eggieweggievt",                 // for Twitch follower auto-pull (via DecAPI, no key)
   taxRate: 0.25,  // suggested % of income to set aside for taxes/savings
   // Pasted verbatim into generated video/stream descriptions — edit freely.
   descFooter: `🔗 Everywhere: https://eggieweggie.ca\n▸ Twitch: https://twitch.tv/eggieweggievt\n▸ Discord: https://discord.gg/suckegg\n▸ TikTok / IG / X: @eggieweggievt\n▸ Support: https://ko-fi.com/eggieweggievt · https://throne.com/eggieweggievt\n\n💜 Sponsors — code SUCKEGG for 10% off:\n▸ GamerSupps: https://gamersupps.gg\n▸ Stoneforged PCs: https://stoneforged.tech/SUCKEGG\n▸ Xepher Arcade: https://shop.xepherarcade.com/?cc=SUCKEGG`,
@@ -317,9 +318,9 @@ async function renderHome(){
     </div>`;
   }
   return `<div class="grid-home">
-    <div class="col">${cardCreator(day)}${cardChannel(day)}${cardPipelineSnap(content)}</div>
-    <div class="col">${cardSession()}${cardHabits(day)}${cardShipToday(content)}</div>
-    <div class="col">${cardGoals(goals)}${cardSponsorsMini(sponsors)}</div>
+    <div class="col">${cardCreator(day)}${cardChannel(day)}${cardSchedule(goals.schedule)}${cardPipelineSnap(content)}</div>
+    <div class="col">${cardSession(day,content)}${cardHabits(day)}${cardShipToday(content)}</div>
+    <div class="col">${cardGoals(goals)}${cardJournal(day)}${cardSponsorsMini(sponsors)}</div>
   </div>`;
 }
 function cardCreator(day){
@@ -336,9 +337,14 @@ function cardCreator(day){
     <button class="hbtn ${streamDay?'done':''}" data-act="streamDay" ${RO?"disabled":""} style="margin-top:8px;width:100%;display:flex;justify-content:space-between;align-items:center"><span>🎙️ Stream day</span><span class="check ${streamDay?'on':''}"></span></button>
   </section>`;
 }
-function cardSession(){
+function cardSession(day,content){
+  day=day||{}; content=content||[];
+  const inFlight=content.filter(c=>!c.parent_id&&c.stage!=="published").length;
+  const energy=day.energy||"medium"; const counts=(day.habits&&day.habits.counts)||{};
+  const hDone=(state.lib||[]).filter(h=>(counts[h.id]||0)>=(h.total||1)).length;
   return `<section class="panel"><div class="card-head"><span class="label">Session</span><span id="clock" class="label"></span></div>
     <h2 style="font-size:20px">${greeting()}, ${CONFIG.creator.name} ${CONFIG.creator.emoji}</h2>
+    <div class="soft-card" style="margin:8px 0;font-size:12.5px">☀️ <b>Today:</b> ${inFlight} in flight · ${hDone} habit${hDone===1?"":"s"} done · ${energy} energy${energy==="low"?" — gentle day 🌙":""}</div>
     <p class="soft" style="font-size:12.5px;margin:4px 0 12px">Sustainable beats perfect. A paused streak is still a streak. 🌸</p>
     <div class="label" style="margin-bottom:5px">Brain dump → captures</div>
     <div style="display:flex;gap:8px"><input class="inp" id="capInput" placeholder="A bit idea, a reminder, anything…" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="capture" ${RO?"disabled":""}>capture</button></div></section>`;
@@ -721,6 +727,7 @@ function settingsModal(){
       <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
       <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
     </div>
+    <button class="btn" data-act="exportData" style="margin-top:14px;width:100%">⬇️ Export all my data (backup)</button>
     <p class="soft" style="font-size:11.5px;margin-top:12px">Your device's "reduce motion" setting is always honoured too.</p>
   </div></div>`;
 }
@@ -760,14 +767,14 @@ function renderOptimize(){
     <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}"></textarea>
     <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
     <div id="optOut" style="margin-top:14px"></div>
-    ${live?"":`<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
+    <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
       <div class="label">🖼️ Thumbnail check</div>
-      <p class="soft" style="font-size:12px;margin:4px 0 8px">Upload your thumbnail — see it at real feed sizes and get a click-potential read.</p>
+      <p class="soft" style="font-size:12px;margin:4px 0 8px">Upload your ${live?"stream/VOD ":""}thumbnail — see it at real feed sizes and get a click-potential read.</p>
       <input type="file" id="thumbFile" accept="image/*" class="inp" />
       <div id="thumbPrev" style="margin-top:10px"></div>
       <button class="btn btn-pink" data-act="checkThumb" style="margin-top:8px">🖼️ check thumbnail</button>
       <div id="thumbOut" style="margin-top:12px"></div>
-    </div>`}
+    </div>
   </div>`;
 }
 function loadThumb(file){
@@ -822,6 +829,38 @@ async function runOptimize(){
   }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
 }
 
+/* ===================== SCHEDULE · JOURNAL · BACKUP ===================== */
+const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+async function loadSchedule(){ const s=await DB.daily(SENTINEL); return s.schedule||[]; }
+async function saveSchedule(list){ await DB.saveDaily(SENTINEL,n=>({...n,schedule:list})); }
+function cardSchedule(sched){
+  sched=sched||[]; const order=d=>DAYS.indexOf(d);
+  const rows=sched.slice().sort((a,b)=>order(a.day)-order(b.day)).map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav" style="min-width:36px;text-align:center">${esc(s.day)}</span><span class="grow" style="font-size:12.5px">${esc(s.title||"Stream")}</span><span class="label">${esc(s.time||"")}</span></div>`).join("")||`<div class="soft" style="font-size:12.5px">No stream days set — tap edit to add yours. 🌸</div>`;
+  return `<section class="panel"><div class="card-head"><span class="label">Stream schedule 🗓️</span><button class="btn" data-act="editSchedule" ${RO?"disabled":""}>edit</button></div>${rows}</section>`;
+}
+function scheduleModal(){ loadSchedule().then(sched=>{
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🗓️ Stream schedule</h3><button class="btn" data-act="closeModal">✕</button></div>
+    ${sched.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav">${esc(s.day)}</span><span class="grow" style="font-size:12.5px">${esc(s.title||"")} <span class="label">${esc(s.time||"")}</span></span><button class="label" data-act="delSlot" data-id="${s.id}" style="background:none;border:none;color:var(--rose)">remove</button></div>`).join("")||`<div class="soft" style="font-size:12.5px">No slots yet.</div>`}
+    <div class="label" style="margin:12px 0 4px">Add a stream day</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><select class="inp" id="slDay" style="width:88px">${DAYS.map(d=>`<option value="${d}">${d}</option>`).join("")}</select><input class="inp" id="slTime" placeholder="4–6pm EDT" style="flex:1;min-width:90px" /><input class="inp" id="slTitle" placeholder="what / game" style="flex:2;min-width:120px" /></div>
+    <button class="btn btn-pink" data-act="addSlot" style="margin-top:8px">+ add</button>
+  </div></div>`;
+}); }
+async function addSlot(){ const day=document.getElementById("slDay").value,time=document.getElementById("slTime").value.trim(),title=document.getElementById("slTitle").value.trim(); const sched=await loadSchedule(); sched.push({id:"s"+uid().slice(0,8),day,time,title}); await saveSchedule(sched); scheduleModal(); }
+async function delSlot(id){ const sched=(await loadSchedule()).filter(s=>s.id!==id); await saveSchedule(sched); scheduleModal(); }
+function cardJournal(day){
+  return `<section class="panel"><div class="card-head"><span class="label">Journal 🌙</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 6px">A line about today — how it went, a thought, nothing fancy.</p>
+    <textarea class="inp" id="journalBox" rows="3" ${RO?"disabled":""} placeholder="today I…">${esc((day&&day.journal)||"")}</textarea>
+    <button class="btn btn-pink" data-act="saveJournal" ${RO?"disabled":""} style="margin-top:8px">💾 save</button></section>`;
+}
+async function exportData(){
+  toast("Packing your backup… 🐙");
+  const [content,income,sponsors,savings,days]=await Promise.all([DB.content(),DB.income(),DB.sponsors(),DB.savings(),DB.dailyRange(400)]);
+  const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),user:UID,content,income,sponsors,savings,daily:days},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`eggie-os-backup-${TODAY}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast("Backup downloaded ⬇️");
+}
+
 /* ===================== HELPERS ===================== */
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening";}
@@ -837,7 +876,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -888,6 +927,11 @@ document.addEventListener("click",async(e)=>{
   if(act==="copy"){ const t=document.getElementById(el.dataset.target); if(t){navigator.clipboard&&navigator.clipboard.writeText(t.value);toast("Copied 💗");} return; }
   if(act==="savePitch"){ const b=pitchVal("pBrand"); if(!b){toast("Add a brand name first 🌸");return;} await DB.addSponsor({brand:b,deal_type:pitchVal("pType"),stage:"draft",note:pitchVal("pAngle")||null}); toast("Saved to pipeline 💌"); return; }
   if(act==="settings")return settingsModal();
+  if(act==="exportData")return exportData();
+  if(act==="editSchedule")return scheduleModal();
+  if(act==="addSlot")return addSlot();
+  if(act==="delSlot")return delSlot(id);
+  if(act==="saveJournal"){ const v=document.getElementById("journalBox").value; await DB.saveDaily(TODAY,n=>({...n,journal:v})); toast("Journaled 🌙"); return; }
   if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); settingsModal(); return; }
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); settingsModal(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); settingsModal(); render(); return; }
@@ -903,7 +947,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="delMed")return delMed(id);
   if(act==="editChannel")return editChannel();
   if(act==="saveChannel")return saveChannel();
-  if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
+  if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite,twitchHandle:CONFIG.twitchHandle}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
   if(act==="optMode"){ state.optMode=el.dataset.v; return render(); }
   if(act==="runOptimize")return runOptimize();
   if(act==="checkThumb")return checkThumb();

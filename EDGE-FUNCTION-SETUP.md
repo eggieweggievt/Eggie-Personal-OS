@@ -44,9 +44,13 @@ To make the **↻ auto** button on Channel Pulse fill your YouTube subs + Discor
 supabase secrets set YOUTUBE_API_KEY=AIza...          # free: console.cloud.google.com → enable "YouTube Data API v3" → create an API key
 supabase secrets set YOUTUBE_CHANNEL_ID=UCafRwkDb29wF0MPuZa4zzPA   # your EggieWeggie VT channel
 supabase secrets set DISCORD_INVITE=suckegg           # the code from discord.gg/suckegg
+supabase secrets set TWITCH_HANDLE=eggieweggievt      # Twitch followers via DecAPI (free, no key)
 ```
 
-(Twitch / TikTok / X / Instagram don't offer free auto-counts, so those stay manual.)
+What auto-pulls for free: **YouTube** subs (needs the API key above), **Twitch** followers (DecAPI, no key),
+**Discord** members (from the invite, no key). **TikTok / X / Instagram** have no reliable free
+auto-count, so those stay manual. (The ↻ button on Channel Pulse passes your handles from CONFIG, so it
+works without these secrets — the secrets are only needed for the *weekly cron* to know your handles.)
 
 ### Optional — refresh weekly on a schedule
 
@@ -60,6 +64,42 @@ no page open. (It uses the `YOUTUBE_CHANNEL_ID` + `DISCORD_INVITE` secrets above
 
 > Whenever you change `supabase/functions/analyze/index.ts`, redeploy:
 > `supabase functions deploy analyze --no-verify-jwt`
+
+---
+
+## ☀️ Morning briefing email (daily 9am)
+
+A second function, `briefing`, emails you a warm daily summary (today's stream, what's in flight,
+week goals, yesterday's habits, this month's money) via **Resend** (free).
+
+**1. Get a Resend key:** sign up at [resend.com](https://resend.com) → **API Keys → Create** → copy it.
+
+**2. Sender address — pick one:**
+- *Quickest (test):* leave the default `onboarding@resend.dev`. Resend will deliver it to **your own
+  account email** only — fine since the briefing goes to you.
+- *Proper (recommended):* in Resend → **Domains → Add** `eggieweggie.ca`, add the DNS records it
+  shows, then set `BRIEFING_FROM` below to something like `Eggie OS <os@eggieweggie.ca>`.
+
+**3. Set secrets + deploy:**
+```bash
+supabase secrets set RESEND_API_KEY=re_xxxxxxxx
+supabase secrets set BRIEFING_TO=eggie@eggieweggie.ca
+# optional once your domain is verified:
+# supabase secrets set BRIEFING_FROM="Eggie OS <os@eggieweggie.ca>"
+# optional, links the email's button to your live site:
+# supabase secrets set BRIEFING_LINK=youruser.github.io/eggie-personal-os
+supabase functions deploy briefing --no-verify-jwt
+```
+
+**4. Test it now:** in Supabase → **Edge Functions → briefing → Invoke** (or
+`supabase functions invoke briefing`). Check your inbox 🐙.
+
+**5. Schedule 9am daily:** Supabase → **Integrations → Cron → Create job**
+- **Schedule:** `0 13 * * *`  (that's **9am Eastern** in summer/EDT; use `0 14 * * *` in winter/EST)
+- **Type:** Supabase Edge Function → `briefing`
+- **HTTP body:** `{}`
+
+It runs on Supabase's servers, so the email arrives even when your computer is off.
 
 ## 4. Deploy the function
 
