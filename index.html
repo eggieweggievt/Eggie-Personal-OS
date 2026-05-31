@@ -94,6 +94,18 @@
   .chiptog.on{background:#fde4ef;border-color:var(--pink);color:var(--pink-deep);}
   .spark{display:flex;align-items:flex-end;gap:2px;height:34px;}
   .spark span{flex:1;background:linear-gradient(180deg,var(--pink),var(--lav));border-radius:3px 3px 0 0;min-height:2px;opacity:.85;}
+  /* brain-dump note chips */
+  .note{display:inline-block;background:var(--panel-soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--ink);cursor:pointer;max-width:100%;transition:.15s;}
+  .note:hover{border-color:var(--pink);}
+  /* floating sticky notes */
+  #stickyLayer{position:fixed;inset:0;z-index:80;pointer-events:none;}
+  .sticky{position:absolute;width:184px;min-height:120px;border-radius:12px;box-shadow:0 8px 22px rgba(120,80,120,.22);pointer-events:auto;display:flex;flex-direction:column;transform:rotate(-1deg);}
+  .sticky-head{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;cursor:grab;border-radius:12px 12px 0 0;}
+  .sticky-head:active{cursor:grabbing;}
+  .sticky-dot{width:13px;height:13px;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);cursor:pointer;}
+  .sticky-x{border:none;background:none;font-size:15px;line-height:1;color:rgba(74,58,77,.55);cursor:pointer;}
+  .sticky textarea{flex:1;border:none;background:transparent;resize:none;outline:none;font-family:var(--sans);font-size:12.5px;color:#4a3a4d;padding:2px 10px 10px;}
+  #addStickyBtn{position:fixed;left:16px;bottom:16px;z-index:81;border:none;border-radius:999px;width:46px;height:46px;font-size:18px;background:linear-gradient(135deg,var(--pink),var(--lav));color:#fff;box-shadow:var(--shadow);}
 </style>
 </head>
 <body>
@@ -112,6 +124,8 @@
 <main id="view"></main>
 <div id="toast"></div>
 <div id="modal"></div>
+<div id="stickyLayer"></div>
+<button id="addStickyBtn" data-act="addSticky" title="New sticky note">🗒️+</button>
 
 <script>
 "use strict";
@@ -251,12 +265,17 @@ const DB = {
   async dailyRange(days){ if(DEMO){ return Object.entries(demo.daily).filter(([d])=>d!==SENTINEL).map(([date,notes])=>({date,notes})); } const since=dayAgo(-days); const {data}=await SB.from("daily_logs").select("log_date,notes").eq("user_id",UID).gte("log_date",since).order("log_date",{ascending:false}).limit(100000); return (data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {date:r.log_date,notes:n};}); },
   async captures(){ if(DEMO)return demo.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return data||[]; },
   async addCapture(text){ if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
+  async delCapture(id){ if(DEMO){demo.captures=demo.captures.filter(c=>c.id!==id);return;} await SB.from("raw_captures").delete().eq("id",id).eq("user_id",UID); },
 };
 /* editable settings live on the sentinel daily_logs row */
 async function loadLib(){ const s=await DB.daily(SENTINEL); const lib=s.habitsLib; return (lib&&lib.length)?lib:CONFIG.defaultHabits.map(h=>({...h})); }
 async function saveLib(list){ await DB.saveDaily(SENTINEL,n=>({...n,habitsLib:list})); }
 async function loadMeds(){ const s=await DB.daily(SENTINEL); return s.medsList||[]; }
 async function saveMeds(list){ await DB.saveDaily(SENTINEL,n=>({...n,medsList:list})); }
+/* editable config overrides (set in the ⚙️ settings → details editor; merged over CONFIG) */
+let STICKIES=[];
+function mergeCfg(o){ if(!o)return; ["taxRate","descFooter","youtubeChannelId","twitchHandle","discordInvite"].forEach(k=>{if(o[k]!=null&&o[k]!=="")CONFIG[k]=o[k];}); if(o.creator)Object.assign(CONFIG.creator,o.creator); if(o.rateCard&&Object.keys(o.rateCard).length)CONFIG.rateCard=o.rateCard; }
+function saveStickies(){ DB.saveDaily(SENTINEL,n=>({...n,stickies:STICKIES})).catch(e=>console.error("sticky save",e)); }
 /* accessibility prefs live in localStorage (instant, per-device) */
 function applySettings(){
   try{
@@ -283,7 +302,9 @@ async function render(){
   const st=document.getElementById("status"); st.textContent=DEMO?"◇ demo data":"● live"; st.className="chip"+(DEMO?" demo":" on");
   const dc=document.getElementById("demoChip"); dc.textContent=DEMO?"● demo":"demo"; dc.className="chip"+(DEMO?" demo":"");
   if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
-  state.lib = await loadLib();
+  const _sent = await DB.daily(SENTINEL);
+  state.lib = (_sent.habitsLib && _sent.habitsLib.length) ? _sent.habitsLib : CONFIG.defaultHabits.map(h=>({...h}));
+  mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || [];
   const view=document.getElementById("view"); view.innerHTML=`<div class="label">loading…</div>`;
   try{
     if(state.tab==="home") view.innerHTML=await renderHome();
@@ -295,12 +316,12 @@ async function render(){
     else if(state.tab==="pitch") view.innerHTML=await renderPitch();
     else if(state.tab==="review") view.innerHTML=await renderReview();
     else if(state.tab==="ask") view.innerHTML=renderAsk();
-    postRender();
+    postRender(); renderStickies();
   }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
 async function renderHome(){
-  const [content,day,goals,sponsors]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors()]);
+  const [content,day,goals,sponsors,captures]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures()]);
   if(state.focus){
     const energy=day.energy||"medium";
     const live=content.filter(c=>!c.parent_id&&c.stage!=="published").sort((a,b)=>b.priority-a.priority).slice(0,3);
@@ -319,7 +340,7 @@ async function renderHome(){
   }
   return `<div class="grid-home">
     <div class="col">${cardCreator(day)}${cardChannel(day)}${cardSchedule(goals.schedule)}${cardPipelineSnap(content)}</div>
-    <div class="col">${cardSession(day,content)}${cardHabits(day)}${cardShipToday(content)}</div>
+    <div class="col">${cardSession(day,content)}${cardHabits(day)}${cardShipToday(content)}${cardBrainDump(captures)}</div>
     <div class="col">${cardGoals(goals)}${cardJournal(day)}${cardSponsorsMini(sponsors)}</div>
   </div>`;
 }
@@ -727,7 +748,8 @@ function settingsModal(){
       <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
       <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
     </div>
-    <button class="btn" data-act="exportData" style="margin-top:14px;width:100%">⬇️ Export all my data (backup)</button>
+    <button class="btn" data-act="editConfig" style="margin-top:14px;width:100%">✏️ Your details & config</button>
+    <button class="btn" data-act="exportData" style="margin-top:8px;width:100%">⬇️ Export all my data (backup)</button>
     <p class="soft" style="font-size:11.5px;margin-top:12px">Your device's "reduce motion" setting is always honoured too.</p>
   </div></div>`;
 }
@@ -861,6 +883,53 @@ async function exportData(){
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`eggie-os-backup-${TODAY}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast("Backup downloaded ⬇️");
 }
 
+/* ===================== STICKY NOTES ===================== */
+function renderStickies(){
+  const layer=document.getElementById("stickyLayer"); if(!layer)return;
+  layer.innerHTML=(STICKIES||[]).map(n=>`<div class="sticky" data-sid="${n.id}" style="left:${n.x||60}px;top:${n.y||110}px;background:${n.color||'#fff3b0'}">
+    <div class="sticky-head" data-act="stickyDrag" data-id="${n.id}"><button class="sticky-dot" data-act="stickyColor" data-id="${n.id}" title="colour"></button><button class="sticky-x" data-act="delSticky" data-id="${n.id}" ${RO?'style="display:none"':''}>×</button></div>
+    <textarea data-act="stickyEdit" data-id="${n.id}" placeholder="note…" ${RO?"readonly":""}>${esc(n.text||"")}</textarea>
+  </div>`).join("");
+  const btn=document.getElementById("addStickyBtn"); if(btn)btn.style.display=RO?"none":"";
+}
+function addSticky(text){ if(RO)return; STICKIES.push({id:"n"+uid().slice(0,8),text:text||"",color:"#fff3b0",x:60+(STICKIES.length*20)%220,y:110+(STICKIES.length*18)%240}); saveStickies(); renderStickies(); }
+
+/* ===================== BRAIN DUMP ===================== */
+function cardBrainDump(caps){
+  caps=caps||[]; const list=caps.slice(0,8);
+  return `<section class="panel"><div class="card-head"><span class="label">Brain dump 🧠</span><span class="label">${caps.length}</span></div>
+    ${list.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(c=>`<span class="note" data-act="openNote" data-id="${c.id}">${esc((c.raw_text||"").slice(0,60))}${(c.raw_text||"").length>60?"…":""}</span>`).join("")}</div>`:`<div class="soft" style="font-size:12.5px">Nothing captured yet — use the box above to park a thought. 🌸</div>`}
+  </section>`;
+}
+function openNote(id){ DB.captures().then(caps=>{ const c=caps.find(x=>x.id===id); if(!c)return;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%"><div class="card-head"><span class="label">🧠 note · ${(c.created_at||"").slice(0,10)}</span><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="white-space:pre-wrap;font-size:13px;margin:6px 0 12px">${esc(c.raw_text||"")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pink" data-act="noteToContent" data-id="${c.id}" ${RO?"disabled":""}>→ content idea</button><button class="btn" data-act="noteSticky" data-id="${c.id}" ${RO?"disabled":""}>📌 sticky</button><button class="btn" data-act="delCapture" data-id="${c.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑 delete</button></div>
+  </div></div>`;
+}); }
+
+/* ===================== CONFIG EDITOR ===================== */
+function configModal(){ DB.daily(SENTINEL).then(()=>{ const c=CONFIG.creator;
+  const rc=Object.entries(CONFIG.rateCard).map(([k,v])=>`${k} = ${v}`).join("\n");
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:520px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">✏️ Your details & config</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 10px">Change anything here instead of editing code — saves to your account. 🌸</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:140px"><div class="label">Name</div><input class="inp" id="cf_name" value="${esc(c.name)}"/></div><div class="grow" style="min-width:140px"><div class="label">Handle</div><input class="inp" id="cf_handle" value="${esc(c.handle)}"/></div></div>
+    <div class="label" style="margin-top:8px">Niche (one sentence)</div><input class="inp" id="cf_niche" value="${esc(c.niche||"")}"/>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:140px"><div class="label">Email</div><input class="inp" id="cf_email" value="${esc(c.email||"")}"/></div><div style="width:100px"><div class="label">Region</div><input class="inp" id="cf_region" value="${esc(c.region||"")}"/></div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div style="width:80px"><div class="label">Tax %</div><input class="inp num" id="cf_tax" type="number" value="${Math.round((CONFIG.taxRate||0)*100)}"/></div><div class="grow" style="min-width:120px"><div class="label">Twitch handle</div><input class="inp" id="cf_twitch" value="${esc(CONFIG.twitchHandle||"")}"/></div><div class="grow" style="min-width:120px"><div class="label">Discord invite</div><input class="inp" id="cf_discord" value="${esc(CONFIG.discordInvite||"")}"/></div></div>
+    <div class="label" style="margin-top:8px">YouTube channel ID</div><input class="inp" id="cf_yt" value="${esc(CONFIG.youtubeChannelId||"")}"/>
+    <div class="label" style="margin-top:8px">Rate card (one per line: Name = price)</div><textarea class="inp mono" id="cf_rate" rows="4">${esc(rc)}</textarea>
+    <div class="label" style="margin-top:8px">Links / sponsor footer (used in descriptions)</div><textarea class="inp" id="cf_footer" rows="5">${esc(CONFIG.descFooter||"")}</textarea>
+    <button class="btn btn-pink" data-act="saveConfig" style="margin-top:14px">💾 save settings</button>
+  </div></div>`;
+}); }
+async function saveConfig(){
+  const gv=id=>(document.getElementById(id)?.value||"").trim();
+  const rate={}; (document.getElementById("cf_rate").value||"").split("\n").forEach(l=>{const i=l.lastIndexOf("=");if(i>0){const k=l.slice(0,i).trim();const v=parseFloat(l.slice(i+1));if(k)rate[k]=isNaN(v)?0:v;}});
+  const o={ creator:{ name:gv("cf_name"),handle:gv("cf_handle"),niche:gv("cf_niche"),email:gv("cf_email"),region:gv("cf_region") }, taxRate:(parseFloat(document.getElementById("cf_tax").value)||0)/100, twitchHandle:gv("cf_twitch"), discordInvite:gv("cf_discord"), youtubeChannelId:gv("cf_yt"), rateCard:rate, descFooter:document.getElementById("cf_footer").value };
+  await DB.saveDaily(SENTINEL,n=>({...n,appConfig:o})); mergeCfg(o); document.getElementById("modal").innerHTML=""; toast("Settings saved 🌸"); render();
+}
+
 /* ===================== HELPERS ===================== */
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening";}
@@ -876,7 +945,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -927,7 +996,16 @@ document.addEventListener("click",async(e)=>{
   if(act==="copy"){ const t=document.getElementById(el.dataset.target); if(t){navigator.clipboard&&navigator.clipboard.writeText(t.value);toast("Copied 💗");} return; }
   if(act==="savePitch"){ const b=pitchVal("pBrand"); if(!b){toast("Add a brand name first 🌸");return;} await DB.addSponsor({brand:b,deal_type:pitchVal("pType"),stage:"draft",note:pitchVal("pAngle")||null}); toast("Saved to pipeline 💌"); return; }
   if(act==="settings")return settingsModal();
+  if(act==="editConfig")return configModal();
+  if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
+  if(act==="openNote")return openNote(id);
+  if(act==="noteToContent"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){await DB.addContent({title:c.raw_text.slice(0,120),stage:"idea",priority:60});} document.getElementById("modal").innerHTML=""; toast("Added to content 🎬"); render(); return; }
+  if(act==="noteSticky"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c)addSticky(c.raw_text); document.getElementById("modal").innerHTML=""; toast("Pinned 📌"); return; }
+  if(act==="delCapture"){ await DB.delCapture(id); document.getElementById("modal").innerHTML=""; toast("Deleted"); render(); return; }
+  if(act==="addSticky"){ addSticky(""); return; }
+  if(act==="stickyColor"){ const cols=["#fff3b0","#ffd6e8","#d6f5e3","#e0d6fb","#cfe8ff"]; const n=STICKIES.find(s=>s.id===id); if(n){const i=cols.indexOf(n.color); n.color=cols[(i+1)%cols.length]; saveStickies(); renderStickies();} return; }
+  if(act==="delSticky"){ STICKIES=STICKIES.filter(s=>s.id!==id); saveStickies(); renderStickies(); return; }
   if(act==="editSchedule")return scheduleModal();
   if(act==="addSlot")return addSlot();
   if(act==="delSlot")return delSlot(id);
@@ -955,7 +1033,13 @@ document.addEventListener("click",async(e)=>{
   if(act==="saveReview")return saveReview();
   if(act==="ask")return ask();
 });
-document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]); });
+document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
+  if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} } });
+/* sticky drag */
+let dragSticky=null,dragOff={x:0,y:0};
+document.addEventListener("mousedown",e=>{ if(RO)return; if(e.target.closest('[data-act="stickyColor"],[data-act="delSticky"]'))return; const h=e.target.closest('[data-act="stickyDrag"]'); if(!h)return; const el=h.closest(".sticky"); if(!el)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; e.preventDefault(); });
+document.addEventListener("mousemove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
+document.addEventListener("mouseup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
 document.addEventListener("keydown",async(e)=>{
   if(e.key!=="Enter")return; const t=e.target;
   if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
