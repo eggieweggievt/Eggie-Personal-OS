@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eggie OS 🐙</title>
+<!-- =========================================================================
+  Eggie OS — a gentle VTuber content operating system, for Eggie 🐙
+  Content pipeline (by format + pillar) · editable spoon-theory habits ·
+  income + tax set-aside + sponsors · weekly review · ask.
+
+  CONFIGURE: paste your Supabase URL + anon key in CONFIG below, then run
+  supabase/eggie-os-setup.sql. Leave blank to run in demo mode.
+  Everything (habits, goals, briefs, income) is editable right in the page.
+========================================================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Fredoka:wght@500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#fbf3f9; --bg2:#f3ecfb; --panel:#fff; --panel-soft:#fef7fc;
+    --line:#f0dcec; --line-2:#ecd7ef; --ink:#4a3a4d; --ink-soft:#7c6a80; --muted:#ab9bb0;
+    --pink:#ec7faf; --pink-deep:#db5e98; --lav:#a98fe0; --lav-deep:#8d6fd1;
+    --mint:#5cc6a3; --peach:#f3a978; --rose:#ef7a85;
+    --shadow:0 6px 22px rgba(180,120,170,.12); --shadow-sm:0 2px 8px rgba(180,120,170,.10);
+    --r:18px; --sans:"Quicksand",ui-rounded,"SF Pro Rounded",system-ui,sans-serif; --display:"Fredoka",var(--sans);
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);background-image:radial-gradient(80% 50% at 100% 0%,#f7e0f0 0%,transparent 60%),radial-gradient(70% 50% at 0% 0%,#e9e0fb 0%,transparent 55%);background-attachment:fixed;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased;min-height:100vh;}
+  h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;}
+  .muted{color:var(--muted);} .soft{color:var(--ink-soft);} .pink{color:var(--pink-deep);} .lav{color:var(--lav-deep);} .mint{color:var(--mint);}
+  .num{font-variant-numeric:tabular-nums;} a{color:var(--lav-deep);}
+  button{font-family:inherit;cursor:pointer;font-weight:600;} input,textarea,select{font-family:inherit;font-weight:500;}
+  .label{font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:16px;}
+  .inp{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;padding:9px 12px;color:var(--ink);font-size:13px;width:100%;outline:none;}
+  .inp:focus{border-color:var(--pink);box-shadow:0 0 0 3px rgba(236,127,175,.12);}
+  textarea.inp{resize:vertical;}
+  .btn{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;color:var(--ink-soft);font-size:12px;padding:7px 14px;transition:.15s;}
+  .btn:hover{border-color:var(--pink);color:var(--pink-deep);}
+  .btn-pink{background:linear-gradient(135deg,var(--pink),var(--lav));color:#fff;border:none;box-shadow:var(--shadow-sm);}
+  .btn-pink:hover{filter:brightness(1.05);color:#fff;}
+  .pill{font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;letter-spacing:.03em;}
+  .pill-pink{background:#fde4ef;color:var(--pink-deep);} .pill-lav{background:#ece2fb;color:var(--lav-deep);}
+  .pill-mint{background:#ddf4ec;color:#2f9d79;} .pill-peach{background:#fdeadb;color:#cc7a3e;} .pill-gray{background:#f2ebf2;color:var(--muted);}
+  ::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:#ecd7ef;border-radius:9px;}
+  #rail{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:20;background:rgba(255,255,255,.78);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+  .brand{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;}
+  nav{display:flex;gap:4px;flex-wrap:wrap;}
+  .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
+  .tab.active{background:linear-gradient(135deg,#fde4ef,#ece2fb);color:var(--pink-deep);} .tab:hover{color:var(--pink-deep);}
+  #rail .right{display:flex;align-items:center;gap:10px;}
+  .chip{font-size:11px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--line-2);color:var(--muted);background:#fff;}
+  .chip.on{color:var(--mint);border-color:#bfe9d8;background:#f0fbf6;} .chip.demo{color:var(--lav-deep);border-color:#ddcdf6;background:#f6f0ff;}
+  .avatar{width:32px;height:32px;border-radius:999px;background:linear-gradient(135deg,var(--pink),var(--lav));display:grid;place-items:center;color:#fff;font-weight:700;}
+  main{padding:18px;max-width:1380px;margin:0 auto;}
+  .grid-home{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;}
+  .col{display:flex;flex-direction:column;gap:16px;}
+  @media(max-width:1040px){.grid-home{grid-template-columns:1fr;}}
+  .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap;}
+  .soft-card{background:var(--panel-soft);border:1px solid var(--line);border-radius:14px;padding:12px;}
+  .seg{display:inline-flex;background:#f6eef6;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap;}
+  .seg button{border:none;background:none;border-radius:999px;padding:5px 11px;font-size:12px;color:var(--ink-soft);}
+  .seg button.on{background:#fff;color:var(--pink-deep);box-shadow:var(--shadow-sm);}
+  .hbtn{text-align:left;border:1.5px solid var(--line-2);border-radius:13px;padding:9px 11px;background:#fff;transition:.15s;}
+  .hbtn.done{border-color:#bfe9d8;background:#f1fbf6;} .hbtn:hover{border-color:var(--pink);}
+  .check{width:18px;height:18px;border-radius:7px;border:2px solid var(--line-2);background:#fff;flex:none;} .check.on{background:var(--mint);border-color:var(--mint);}
+  .kanban{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px;}
+  @media(max-width:1100px){.kanban{grid-template-columns:repeat(7,180px);}}
+  .kcol{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:120px;}
+  .citem{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;padding:9px;transition:.15s;cursor:grab;box-shadow:var(--shadow-sm);}
+  .citem:hover{border-color:var(--pink);} .citem.dim{opacity:.35;} .citem.hit{border-color:var(--lav);}
+  .bar{height:6px;border-radius:999px;background:#f0e6f2;overflow:hidden;} .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--lav));}
+  .modal-bg{position:fixed;inset:0;background:rgba(90,60,90,.32);z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;}
+  th{text-align:left;padding:8px 6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);font-weight:700;}
+  td{padding:8px 6px;font-size:13px;border-bottom:1px solid var(--line);}
+  .hidden{display:none!important;} .grow{flex:1;}
+  .meter{position:relative;height:10px;border-radius:999px;background:#f0e6f2;overflow:hidden;}
+  .meter>i{position:absolute;top:0;bottom:0;background:rgba(141,111,209,.18);} /* target band */
+  .meter>b{position:absolute;top:0;bottom:0;left:0;border-radius:999px;background:linear-gradient(90deg,var(--pink),var(--lav));}
+  .meter.ok>b{background:linear-gradient(90deg,#7ed0b0,var(--mint));}
+</style>
+</head>
+<body>
+<div id="rail">
+  <div style="display:flex;align-items:center;gap:22px">
+    <span class="brand">🐙 Eggie OS</span>
+    <nav id="nav"></nav>
+  </div>
+  <div class="right">
+    <span id="status" class="chip">…</span>
+    <button id="demoChip" class="chip" data-act="toggleDemo">demo</button>
+    <span class="avatar">🐙</span>
+  </div>
+</div>
+<main id="view"></main>
+<div id="toast"></div>
+<div id="modal"></div>
+
+<script>
+"use strict";
+/* ===================== CONFIG (everything here is yours to change) ===== */
+const CONFIG = {
+  url: "https://clpfyxlenotepuceczbh.supabase.co",     // your Supabase project URL
+  anonKey: "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2", // Supabase publishable (public) key
+  userId: "eggie",
+  readOnly: false,
+  taxRate: 0.25,  // suggested % of income to set aside for taxes/savings
+  // Your rate card — used by the Pitch Builder. Edit freely; 0 = "let's talk".
+  rateCard: { "Sponsored short": 150, "Sponsored stream": 250, "Dedicated long-form video": 400, "Affiliate / code": 0 },
+  creator: { name:"Eggie", emoji:"🐙", handle:"@EggieWeggieVT", niche:"VTuber learning out loud", kofi:"https://ko-fi.com/eggieweggie", email:"you@example.com" },
+  platforms: { youtube:"YouTube", tiktok:"TikTok", instagram:"Instagram", twitter:"X", twitch:"Twitch", fansly:"Fansly" },
+  // Default habit library — you can add/edit/delete these right in the 🌸 Habits tab.
+  // energy: essential = always shows · normal = medium+ days · intensive = high / stream days
+  defaultHabits: [
+    { id:"techcheck", label:"Tech check — audio + model", emoji:"🎛️", cat:"Pre-stream", energy:"essential" },
+    { id:"scene", label:"Set scene title + tags", emoji:"🏷️", cat:"Pre-stream", energy:"normal" },
+    { id:"greet", label:"Greet every new chatter", emoji:"👋", cat:"On-air", energy:"essential" },
+    { id:"talk", label:"Talk through quiet moments", emoji:"🗣️", cat:"On-air", energy:"normal" },
+    { id:"adbreak", label:"Announce ad breaks 60s early", emoji:"📢", cat:"On-air", energy:"normal" },
+    { id:"clip", label:"Clip 1 stream highlight", emoji:"✂️", cat:"Post-stream", energy:"normal" },
+    { id:"notes", label:"Quick stream notes", emoji:"📝", cat:"Post-stream", energy:"essential" },
+    { id:"short", label:"Post 1 short", emoji:"📲", cat:"Content", energy:"normal" },
+    { id:"replies", label:"Genuine replies on X", emoji:"💬", cat:"Content", energy:"normal", total:5 },
+    { id:"personality", label:"1 personality post", emoji:"✨", cat:"Content", energy:"normal" },
+    { id:"discord", label:"Check in on Discord", emoji:"🫧", cat:"Community", energy:"essential" },
+    { id:"thank", label:"Thank new subs / followers", emoji:"💗", cat:"Community", energy:"essential" },
+    { id:"meal", label:"Eat a real meal", emoji:"🍙", cat:"Health", energy:"essential" },
+    { id:"screen", label:"Step away from the screen", emoji:"🌿", cat:"Health", energy:"essential" },
+    { id:"sleep", label:"Wind down before 2am", emoji:"🌙", cat:"Health", energy:"normal" },
+    { id:"income", label:"Log today's income", emoji:"💰", cat:"Business", energy:"normal" },
+    { id:"pitch", label:"Send 1 sponsor pitch", emoji:"💌", cat:"Business", energy:"intensive" },
+  ],
+};
+/* ===================== SUPABASE / DEMO ===================== */
+let DEMO = !CONFIG.url || !CONFIG.anonKey;
+let RO = CONFIG.readOnly;
+const SB = (!DEMO && window.supabase) ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
+const UID = CONFIG.userId;
+const TODAY = new Date().toLocaleDateString("en-CA");
+const SENTINEL = "2000-01-01";
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(36).slice(2));
+const monthKey = () => { const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),1).toLocaleDateString("en-CA"); };
+const monthKeyAgo = n => { const d=new Date(); return new Date(d.getFullYear(),d.getMonth()-n,1).toLocaleDateString("en-CA"); };
+const monthLabel = mk => { const d=new Date(mk); return d.toLocaleDateString("en-US",{month:"short"}); };
+const yearOf = mk => mk.slice(0,4);
+function isoAgo(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString();}
+function dayAgo(n){const d=new Date();d.setDate(d.getDate()+n);return d.toLocaleDateString("en-CA");}
+
+const STAGES = [["idea","💡 Idea"],["scripting","✍️ Script"],["recording","🎥 Record"],["editing","✂️ Edit"],["thumbnail","🖼️ Thumb"],["scheduled","📅 Sched"],["published","✅ Live"]];
+const FORMATS = { short:"Short form", long:"Long form", twitter:"Twitter post" };
+const PILLARS = { growth:"Growth", retention:"Retention", experimental:"Experimental" };
+const PILLAR_TARGETS = { growth:[20,40], retention:[45,70], experimental:[10,15] }; // % of pillared items
+const INCOME_SOURCES = ["twitch","youtube","kofi","patreon","tips","throne","sponsor","merch","tiktok","fansly","other"];
+const EXPENSE_CATS = ["gear","software","art / models","subscriptions","fees / cuts","merch costs","marketing","other"];
+const DEAL_TYPES = ["seeding","paid integration","ambassador","stream sponsor","affiliate / code","gifted","other"];
+const SPONSOR_STAGES = [["draft","Draft"],["sent","Sent"],["responded","Responded"],["signed","Signed ✨"],["passed","Passed"]];
+const CRITERIA = [["relevant","Relevant"],["nonobvious","Non-obvious"],["absorbable","Absorbable"],["actionable","Actionable"]];
+const CHANNEL_STATS = [["twitch","Twitch followers"],["twitch_subs","Twitch subs"],["youtube","YouTube subs"],["tiktok","TikTok"],["twitter","X"],["discord","Discord"]];
+
+/* ---- demo store ---- */
+const demo = {
+  content: [
+    { id:"c1", title:"Souls boss rage → calm edit", format:"short", platform:"youtube", stage:"editing", pillar:"retention", hook:"I died 47 times and stayed soft about it", hashtags:["#vtuber","#soulslike","#eldenring","#gaming","#streamerclips"], thumbnail_status:"wip", analyzer_score:78, criteria:{relevant:true,nonobvious:true,absorbable:true,actionable:false}, parent_id:null, priority:90, updated_at:isoAgo(-1) },
+    { id:"c1a", title:"Record b-roll for boss edit", format:null, platform:null, stage:"editing", parent_id:"c1", priority:80, updated_at:isoAgo(-1) },
+    { id:"c2", title:"Why niching down isn't a cage", format:"short", platform:"tiktok", stage:"idea", pillar:"growth", hook:"\"variety streamer\" = 300k other people", hashtags:[], thumbnail_status:"none", criteria:{}, parent_id:null, priority:60, updated_at:isoAgo(-2) },
+    { id:"c3", title:"Cozy debut anniversary post", format:"twitter", platform:"twitter", stage:"scripting", pillar:"retention", hook:"one year of being a little guy 🐙", hashtags:[], thumbnail_status:"none", criteria:{relevant:true}, parent_id:null, priority:55, updated_at:isoAgo(-1) },
+    { id:"c4", title:"Chat names the boss (stream VOD)", format:"long", platform:"youtube", stage:"recording", pillar:"retention", hook:"chat will regret this", criteria:{}, parent_id:null, priority:50, updated_at:isoAgo(-3) },
+    { id:"c5", title:"VTuber setup on a budget", format:"long", platform:"youtube", stage:"scheduled", pillar:"growth", analyzer_score:84, thumbnail_status:"done", scheduled_for:dayAgo(1), criteria:{relevant:true,nonobvious:true,absorbable:true,actionable:true}, parent_id:null, priority:70, updated_at:isoAgo(0) },
+    { id:"c6", title:"Spoon theory for streamers", format:"short", platform:"tiktok", stage:"published", pillar:"growth", analyzer_score:91, published_at:isoAgo(-4), criteria:{relevant:true,nonobvious:true,absorbable:true,actionable:true}, parent_id:null, priority:40, updated_at:isoAgo(-4) },
+    { id:"c7", title:"Experiment: 60s lore animatic", format:"short", platform:"youtube", stage:"idea", pillar:"experimental", hook:"what if the octopus had a tragic backstory", criteria:{}, parent_id:null, priority:45, updated_at:isoAgo(-1) },
+  ],
+  income: [
+    { id:"i1", kind:"in", source:"twitch", amount:182, month:monthKey() },
+    { id:"i2", kind:"in", source:"kofi", amount:64, month:monthKey() },
+    { id:"i3", kind:"in", source:"youtube", amount:41, month:monthKey() },
+    { id:"i4", kind:"in", source:"sponsor", amount:250, month:monthKey() },
+    { id:"i5", kind:"in", source:"tips", amount:28, month:monthKey() },
+    { id:"e1", kind:"out", source:"software", category:"software", amount:22, month:monthKey(), note:"VTube Studio plugins" },
+    { id:"e2", kind:"out", source:"art / models", category:"art / models", amount:140, month:monthKey(), note:"emote commission" },
+    { id:"e3", kind:"out", source:"subscriptions", category:"subscriptions", amount:18, month:monthKey() },
+    { id:"i6", kind:"in", source:"twitch", amount:210, month:monthKeyAgo(1) },
+    { id:"i7", kind:"in", source:"kofi", amount:52, month:monthKeyAgo(1) },
+    { id:"e4", kind:"out", source:"gear", category:"gear", amount:95, month:monthKeyAgo(1), note:"pop filter + arm" },
+    { id:"i8", kind:"in", source:"twitch", amount:165, month:monthKeyAgo(2) },
+    { id:"i9", kind:"in", source:"sponsor", amount:150, month:monthKeyAgo(2) },
+    { id:"e5", kind:"out", source:"fees / cuts", category:"fees / cuts", amount:40, month:monthKeyAgo(2) },
+  ],
+  savings: [
+    { id:"sv1", name:"Tax pot", emoji:"🏦", target:1200, saved:430 },
+    { id:"sv2", name:"New mic", emoji:"🎙️", target:180, saved:95 },
+    { id:"sv3", name:"TwitchCon trip", emoji:"✈️", target:900, saved:120 },
+  ],
+  sponsors: [
+    { id:"s1", brand:"GamerSupps", deal_type:"affiliate", stage:"signed", value:0, note:"affiliate code live", updated_at:isoAgo(-6) },
+    { id:"s2", brand:"Indie horror game", deal_type:"stream", stage:"responded", value:200, note:"waiting on keys", updated_at:isoAgo(-2) },
+    { id:"s3", brand:"Cozy keyboard brand", deal_type:"seeding", stage:"sent", value:0, note:"pitched via email", updated_at:isoAgo(-1) },
+  ],
+  daily: {}, captures: [
+    { id:"p1", raw_text:"bit idea: rate chat's childhood games out of 10", created_at:isoAgo(-1) },
+    { id:"p2", raw_text:"ask the keyboard brand if they do creator seeding", created_at:isoAgo(-2) },
+  ],
+};
+demo.daily[TODAY] = { energy:"medium", streamDay:false, habits:{ counts:{ techcheck:1, greet:1, meal:1, discord:1, replies:3 } },
+  channel:{ twitch:1240, twitch_subs:84, youtube:880, tiktok:5300, twitter:2100, discord:430 } };
+demo.daily[SENTINEL] = {
+  goals_week_items:[ {id:"g1",text:"Ship 3 shorts",done:false},{id:"g2",text:"Send 2 sponsor pitches",done:true},{id:"g3",text:"Debut anniversary post",done:false} ],
+  goals_month_items:[ {id:"g4",text:"Hit Twitch Affiliate goals",done:false},{id:"g5",text:"Launch a Ko-fi membership tier",done:false} ],
+  review:{}, taxRate:0.25, setAside:{}, habitsLib:null,
+};
+
+/* ===================== DATA LAYER ===================== */
+const DB = {
+  async content(){ if(DEMO)return demo.content; const {data}=await SB.from("content_items").select("*").eq("user_id",UID).order("priority",{ascending:false}).limit(100000); return data||[]; },
+  async addContent(c){ const row={user_id:UID,title:c.title,format:c.format||null,platform:c.platform||null,stage:c.stage||"idea",pillar:c.pillar||null,priority:c.priority??50,parent_id:c.parent_id||null,criteria:c.criteria||{},hashtags:c.hashtags||[]}; if(DEMO){const r={...row,id:uid(),updated_at:new Date().toISOString()};demo.content.unshift(r);return r;} const {data}=await SB.from("content_items").insert(row).select().single(); return data; },
+  async updateContent(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.content.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("content_items").update(patch).eq("id",id).eq("user_id",UID); },
+  async delContent(id){ if(DEMO){demo.content=demo.content.filter(x=>x.id!==id&&x.parent_id!==id);return;} await SB.from("content_items").delete().eq("id",id).eq("user_id",UID); },
+  async income(){ if(DEMO)return demo.income; const {data}=await SB.from("income_entries").select("*").eq("user_id",UID).order("month",{ascending:false}).limit(100000); return data||[]; },
+  async addIncome(e){ const row={user_id:UID,kind:e.kind||"in",source:e.source,category:e.category||null,amount:e.amount,month:e.month||monthKey(),note:e.note||null}; if(DEMO){demo.income.unshift({...row,id:uid()});return;} await SB.from("income_entries").insert(row); },
+  async delIncome(id){ if(DEMO){demo.income=demo.income.filter(x=>x.id!==id);return;} await SB.from("income_entries").delete().eq("id",id).eq("user_id",UID); },
+  async savings(){ if(DEMO)return demo.savings; const {data}=await SB.from("savings_goals").select("*").eq("user_id",UID).order("created_at",{ascending:true}).limit(100000); return data||[]; },
+  async addGoal(g){ const row={user_id:UID,name:g.name,emoji:g.emoji||null,target:g.target||0,saved:g.saved||0}; if(DEMO){demo.savings.push({...row,id:uid()});return;} await SB.from("savings_goals").insert(row); },
+  async updateGoal(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.savings.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("savings_goals").update(patch).eq("id",id).eq("user_id",UID); },
+  async delGoal(id){ if(DEMO){demo.savings=demo.savings.filter(x=>x.id!==id);return;} await SB.from("savings_goals").delete().eq("id",id).eq("user_id",UID); },
+  async sponsors(){ if(DEMO)return demo.sponsors; const {data}=await SB.from("sponsors").select("*").eq("user_id",UID).order("updated_at",{ascending:false}).limit(100000); return data||[]; },
+  async addSponsor(s){ const row={user_id:UID,brand:s.brand,deal_type:s.deal_type||null,stage:s.stage||"draft",value:s.value||null,note:s.note||null}; if(DEMO){demo.sponsors.unshift({...row,id:uid(),updated_at:new Date().toISOString()});return;} await SB.from("sponsors").insert(row); },
+  async updateSponsor(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.sponsors.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("sponsors").update(patch).eq("id",id).eq("user_id",UID); },
+  async daily(date){ if(DEMO)return demo.daily[date]||{}; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(!data||!data.notes)return{}; try{return JSON.parse(data.notes);}catch{return{};} },
+  async saveDaily(date,merge){ const cur=await DB.daily(date); const next=merge({...cur}); if(DEMO){demo.daily[date]=next;return next;} await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); return next; },
+  async captures(){ if(DEMO)return demo.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return data||[]; },
+  async addCapture(text){ if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
+};
+/* editable settings live on the sentinel daily_logs row */
+async function loadLib(){ const s=await DB.daily(SENTINEL); const lib=s.habitsLib; return (lib&&lib.length)?lib:CONFIG.defaultHabits.map(h=>({...h})); }
+async function saveLib(list){ await DB.saveDaily(SENTINEL,n=>({...n,habitsLib:list})); }
+
+/* ===================== STATE + ROUTER ===================== */
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["habits","🌸 Habits"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
+const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in" };
+function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
+
+async function render(){
+  document.getElementById("nav").innerHTML = TABS.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("");
+  const st=document.getElementById("status"); st.textContent=DEMO?"◇ demo data":"● live"; st.className="chip"+(DEMO?" demo":" on");
+  const dc=document.getElementById("demoChip"); dc.textContent=DEMO?"● demo":"demo"; dc.className="chip"+(DEMO?" demo":"");
+  if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
+  state.lib = await loadLib();
+  const view=document.getElementById("view"); view.innerHTML=`<div class="label">loading…</div>`;
+  try{
+    if(state.tab==="home") view.innerHTML=await renderHome();
+    else if(state.tab==="content") view.innerHTML=await renderContent();
+    else if(state.tab==="habits") view.innerHTML=await renderHabits();
+    else if(state.tab==="income") view.innerHTML=await renderIncome();
+    else if(state.tab==="pitch") view.innerHTML=await renderPitch();
+    else if(state.tab==="review") view.innerHTML=await renderReview();
+    else if(state.tab==="ask") view.innerHTML=renderAsk();
+    postRender();
+  }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
+}
+/* ===================== HOME ===================== */
+async function renderHome(){
+  const [content,day,goals,sponsors]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors()]);
+  return `<div class="grid-home">
+    <div class="col">${cardCreator(day)}${cardChannel(day)}${cardPipelineSnap(content)}</div>
+    <div class="col">${cardSession()}${cardHabits(day)}${cardShipToday(content)}</div>
+    <div class="col">${cardGoals(goals)}${cardSponsorsMini(sponsors)}</div>
+  </div>`;
+}
+function cardCreator(day){
+  const energy=day.energy||"medium", streamDay=!!day.streamDay;
+  const opt=(v,emoji,lbl)=>`<button data-act="energy" data-v="${v}" ${RO?"disabled":""} class="${energy===v?'on':''}">${emoji} ${lbl}</button>`;
+  return `<section class="panel">
+    <div class="card-head"><span class="label">Creator</span><span class="pill pill-mint">● online</span></div>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="avatar" style="width:46px;height:46px;font-size:22px">${CONFIG.creator.emoji}</div>
+      <div><div style="font-family:var(--display);font-size:17px">${CONFIG.creator.name}</div><div class="label" style="margin-top:1px">${esc(CONFIG.creator.handle)}</div></div>
+    </div>
+    <div class="soft-card" style="margin-top:12px"><div class="label">Niche · one sentence</div><div class="soft" style="font-size:12.5px;margin-top:3px;font-style:italic">${esc(CONFIG.creator.niche)}</div></div>
+    <div style="margin-top:12px"><div class="label" style="margin-bottom:5px">Energy today 🥄</div><div class="seg">${opt("low","🌙","Low")}${opt("medium","🌤","Med")}${opt("high","🌞","High")}</div></div>
+    <button class="hbtn ${streamDay?'done':''}" data-act="streamDay" ${RO?"disabled":""} style="margin-top:8px;width:100%;display:flex;justify-content:space-between;align-items:center"><span>🎙️ Stream day</span><span class="check ${streamDay?'on':''}"></span></button>
+  </section>`;
+}
+function cardSession(){
+  return `<section class="panel"><div class="card-head"><span class="label">Session</span><span id="clock" class="label"></span></div>
+    <h2 style="font-size:20px">${greeting()}, ${CONFIG.creator.name} ${CONFIG.creator.emoji}</h2>
+    <p class="soft" style="font-size:12.5px;margin:4px 0 12px">Sustainable beats perfect. A paused streak is still a streak. 🌸</p>
+    <div class="label" style="margin-bottom:5px">Brain dump → captures</div>
+    <div style="display:flex;gap:8px"><input class="inp" id="capInput" placeholder="A bit idea, a reminder, anything…" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="capture" ${RO?"disabled":""}>capture</button></div></section>`;
+}
+function cardHabits(day){
+  const energy=day.energy||"medium", streamDay=!!day.streamDay;
+  const visible=state.lib.filter(h=>habitVisible(h,energy,streamDay));
+  const counts=(day.habits&&day.habits.counts)||{};
+  const done=visible.filter(h=>(counts[h.id]||0)>=(h.total||1)).length;
+  const cells=visible.map(h=>{const c=counts[h.id]||0,t=h.total||1,ok=c>=t;return `<button class="hbtn ${ok?'done':''}" data-act="habit" data-id="${h.id}" ${RO?"disabled":""} style="display:flex;align-items:center;gap:8px"><span class="check ${ok?'on':''}"></span><span class="grow" style="font-size:12px">${h.emoji?h.emoji+" ":""}${esc(h.label)}</span>${t>1?`<span class="label num">${c}/${t}</span>`:""}</button>`;}).join("");
+  return `<section class="panel"><div class="card-head"><span class="label">Today's habits · ${energy} energy</span><span class="pill pill-pink">${done}/${visible.length}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${cells||`<div class="soft" style="font-size:12px">Rest is productive too. 🌙</div>`}</div>
+    <div class="label" style="margin-top:8px">Showing habits that fit your energy · edit the full library in 🌸 Habits</div></section>`;
+}
+function cardShipToday(content){
+  const live=content.filter(c=>!c.parent_id&&c.stage!=="published").sort((a,b)=>b.priority-a.priority).slice(0,4);
+  const rows=live.length?live.map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav">${stageShort(c.stage)}</span><span class="grow" style="font-size:13px">${esc(c.title)}</span>${c.format?`<span class="label">${FORMATS[c.format]||c.format}</span>`:""}</div>`).join(""):`<div class="soft" style="font-size:12.5px">Nothing in flight — add an idea in 🎬 Content.</div>`;
+  return `<section class="panel"><div class="card-head"><span class="label">In flight 🎬</span><button class="btn" data-act="tab" data-tab="content">open pipeline</button></div>${rows}</section>`;
+}
+function cardPipelineSnap(content){
+  const counts={}; STAGES.forEach(([k])=>counts[k]=0);
+  content.filter(c=>!c.parent_id).forEach(c=>counts[c.stage]=(counts[c.stage]||0)+1);
+  const max=Math.max(1,...Object.values(counts));
+  return `<section class="panel"><div class="card-head"><span class="label">Pipeline</span><span class="label">${content.filter(c=>!c.parent_id).length} items</span></div>
+    ${STAGES.map(([k,l])=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span style="width:74px;font-size:11.5px" class="soft">${l}</span><div class="bar grow"><span style="width:${(counts[k]/max)*100}%"></span></div><span class="label num">${counts[k]}</span></div>`).join("")}</section>`;
+}
+function cardChannel(day){
+  const ch=day.channel||{};
+  const stat=(k,lbl)=>`<div class="soft-card" style="text-align:center"><div class="num" style="font-size:17px;font-family:var(--display)">${ch[k]!=null?Number(ch[k]).toLocaleString():"—"}</div><div class="label">${lbl}</div></div>`;
+  return `<section class="panel"><div class="card-head"><span class="label">Channel pulse</span><button class="btn" data-act="editChannel" ${RO?"disabled":""}>edit</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${stat("twitch","Twitch")}${stat("twitch_subs","Subs")}${stat("youtube","YouTube")}${stat("tiktok","TikTok")}${stat("twitter","X")}${stat("discord","Discord")}</div></section>`;
+}
+function cardGoals(goals){
+  const sec=(title,items,scope)=>`<div class="label" style="margin-bottom:5px">${title}</div><div>${(items||[]).map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0"><button class="check ${g.done?'on':''}" data-act="goalToggle" data-scope="${scope}" data-id="${g.id}" ${RO?"disabled":""}></button><span class="grow" style="font-size:12.5px;${g.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(g.text)}</span><button class="label" data-act="goalDel" data-scope="${scope}" data-id="${g.id}" ${RO?"disabled":""} style="background:none;border:none">✕</button></div>`).join("")}</div><input class="inp" data-act="goalAdd" data-scope="${scope}" placeholder="+ add a goal" ${RO?"disabled":""} style="margin-top:6px;border:none;border-bottom:1.5px solid var(--line-2);border-radius:0;padding:6px 2px" />`;
+  return `<section class="panel"><div class="card-head"><span class="label">Goals 🌷</span></div>${sec("This week",goals.goals_week_items,"week")}<div style="height:14px"></div>${sec("This month",goals.goals_month_items,"month")}</section>`;
+}
+function cardSponsorsMini(sponsors){
+  const active=sponsors.filter(s=>s.stage!=="passed").slice(0,4);
+  return `<section class="panel"><div class="card-head"><span class="label">Sponsors 💌</span><button class="btn" data-act="tab" data-tab="income">pipeline</button></div>${active.length?active.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:13px">${esc(s.brand)}</span><span class="pill ${sponsorPill(s.stage)}">${s.stage}</span></div>`).join(""):`<div class="soft" style="font-size:12.5px">No pitches yet. You're a virtual busker — it's okay to ask. 💗</div>`}</section>`;
+}
+
+/* ===================== CONTENT PIPELINE ===================== */
+async function renderContent(){
+  const content=await DB.content(); state._content=content;
+  const parents=content.filter(c=>!c.parent_id);
+  const shown=parents.filter(c=>state.fmt==="all"||c.format===state.fmt);
+  const kids=id=>content.filter(c=>c.parent_id===id);
+  const selN=state.sel.size;
+  const bulk=selN?`<div class="panel" style="display:flex;gap:12px;align-items:center;margin-bottom:12px;padding:10px 14px"><span class="label">${selN} selected</span><button class="btn btn-pink" data-act="bulkPublish" ${RO?"disabled":""}>✅ mark live</button><button class="btn" data-act="bulkClear">clear</button></div>`:"";
+  const fmtSeg=`<div class="seg">${[["all","All"],...Object.entries(FORMATS)].map(([k,l])=>`<button data-act="fmt" data-f="${k}" class="${state.fmt===k?'on':''}">${l}</button>`).join("")}</div>`;
+  const cols=STAGES.map(([key,lbl])=>{
+    const col=shown.filter(c=>c.stage===key).sort((a,b)=>b.priority-a.priority);
+    return `<div class="kcol" data-act="dropStage" data-stage="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(c=>contentCard(c,kids(c.id))).join("")||`<div class="label" style="padding:6px;opacity:.6">drop here</div>`}</div>`;
+  }).join("");
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    ${pillarMeter(parents)}
+    <div class="panel">
+      <div class="card-head"><span class="label">Content pipeline 🎬 · ${shown.length}${state.fmt!=="all"?" "+FORMATS[state.fmt]:""} items</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fmtSeg}
+          <input class="inp" id="smartQ" placeholder="search…" style="width:140px" /><button class="btn" data-act="smart">🔍</button>${state.smartIds?`<button class="btn" data-act="smartClear">clear</button>`:""}
+          <input class="inp" id="newContent" placeholder="New ${state.fmt==='all'?'idea':FORMATS[state.fmt].toLowerCase()}…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addContent" ${RO?"disabled":""}>+ add</button>
+        </div></div>
+      ${bulk}
+      <div class="kanban">${cols}</div>
+      <div class="label" style="margin-top:10px">Drag cards across stages · click a card to open its brief · click the title to select for bulk · + sub to nest a to-do.</div>
+    </div>
+  </div>`;
+}
+function pillarMeter(parents){
+  const pillared=parents.filter(c=>c.pillar);
+  const total=pillared.length||1;
+  const rows=Object.keys(PILLARS).map(k=>{
+    const n=pillared.filter(c=>c.pillar===k).length; const pct=Math.round((n/total)*100);
+    const [lo,hi]=PILLAR_TARGETS[k]; const ok=pct>=lo&&pct<=hi;
+    return `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${PILLARS[k]} <span class="muted">· target ${lo}–${hi}%</span></span><span class="num ${ok?'mint':'soft'}" style="font-weight:700">${pct}% ${ok?'✓':''}</span></div>
+      <div class="meter ${ok?'ok':''}"><i style="left:${lo}%;width:${hi-lo}%"></i><b style="width:${Math.min(pct,100)}%"></b></div></div>`;
+  }).join("");
+  return `<div class="panel"><div class="card-head"><span class="label">Pillar mix · ${pillared.length} pillared items</span><span class="label">aim: experimental 10–15 · growth 20–40 · retention the rest</span></div>${rows}</div>`;
+}
+function contentCard(c,kids){
+  const hit=state.smartIds&&state.smartIds.includes(c.id), dim=state.smartIds&&!state.smartIds.includes(c.id), sel=state.sel.has(c.id);
+  const crit=c.criteria||{}; const critN=CRITERIA.filter(([k])=>crit[k]).length;
+  return `<div class="citem ${hit?'hit':''} ${dim?'dim':''}" draggable="true" data-act="dragContent" data-id="${c.id}" style="${sel?'outline:2px solid var(--lav)':''}">
+    <div style="display:flex;gap:6px;align-items:flex-start"><span class="grow" style="font-size:12.5px;line-height:1.35" data-act="selContent" data-id="${c.id}">${esc(c.title)}</span>${c.format?`<span class="pill pill-gray" style="flex:none">${fmtShort(c.format)}</span>`:""}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;align-items:center">
+      ${c.pillar?`<span class="pill ${pillarPill(c.pillar)}">${PILLARS[c.pillar]||c.pillar}</span>`:""}
+      ${c.platform?`<span class="pill pill-gray">${(CONFIG.platforms[c.platform]||c.platform).slice(0,2)}</span>`:""}
+      ${c.analyzer_score!=null?`<span class="pill ${c.analyzer_score>=80?'pill-mint':'pill-peach'}">▶ ${c.analyzer_score}</span>`:""}
+      ${critN?`<span class="pill pill-pink">${critN}/4 ✓</span>`:""}
+      ${c.thumbnail_status==="done"?`<span class="pill pill-mint">🖼️</span>`:c.thumbnail_status==="wip"?`<span class="pill pill-peach">🖼️…</span>`:""}
+    </div>
+    ${kids.length?`<div style="margin-top:7px;padding-left:8px;border-left:2px solid var(--line)">${kids.map(k=>`<div style="display:flex;gap:6px;align-items:center;padding:2px 0"><button class="check" style="width:13px;height:13px" data-act="delContent" data-id="${k.id}" ${RO?"disabled":""}></button><span class="soft" style="font-size:11px">${esc(k.title)}</span></div>`).join("")}</div>`:""}
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="label" data-act="openContent" data-id="${c.id}" style="background:none;border:none;color:var(--lav-deep)">brief ›</button><button class="label" data-act="addSub" data-id="${c.id}" ${RO?"disabled":""} style="background:none;border:none">+ sub</button></div>
+  </div>`;
+}
+async function openContent(id){
+  const c=(state._content||await DB.content()).find(x=>x.id===id); if(!c)return; const crit=c.criteria||{};
+  const sel=(id2,obj,cur)=>`<select class="inp" id="${id2}">${["",...Object.keys(obj)].map(p=>`<option value="${p}" ${cur===p?"selected":""}>${p?obj[p]:"—"}</option>`).join("")}</select>`;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:560px;width:100%;max-height:90vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">Content brief</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div class="label">Title</div><input class="inp" id="f_title" value="${esc(c.title)}" />
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div class="grow" style="min-width:120px"><div class="label">Format</div>${sel("f_format",FORMATS,c.format)}</div>
+      <div class="grow" style="min-width:120px"><div class="label">Platform</div>${sel("f_platform",CONFIG.platforms,c.platform)}</div>
+      <div class="grow" style="min-width:120px"><div class="label">Pillar</div>${sel("f_pillar",PILLARS,c.pillar)}</div>
+      <div style="width:80px"><div class="label">Score ▶</div><input class="inp" id="f_score" type="number" value="${c.analyzer_score??""}" /></div>
+    </div>
+    <div class="label" style="margin-top:10px">Hook</div><input class="inp" id="f_hook" value="${esc(c.hook||"")}" placeholder="the first line that stops the scroll" />
+    <div class="label" style="margin-top:10px">Script / notes</div><textarea class="inp" id="f_script" rows="3">${esc(c.script||"")}</textarea>
+    <div class="label" style="margin-top:10px">Hashtags · formula 1 small / 2 medium / 2 large</div><input class="inp" id="f_tags" value="${esc((c.hashtags||[]).join(" "))}" placeholder="#vtuber #cozystream …" />
+    <div class="label" style="margin-top:12px">4-criteria check — does it pass?</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">${CRITERIA.map(([k,l])=>`<button class="hbtn ${crit[k]?'done':''}" data-act="critToggle" data-k="${k}" style="display:flex;gap:6px;align-items:center;padding:6px 10px"><span class="check ${crit[k]?'on':''}"></span>${l}</button>`).join("")}</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><div class="grow"><div class="label">Thumbnail</div><select class="inp" id="f_thumb">${["none","wip","done"].map(s=>`<option value="${s}" ${c.thumbnail_status===s?"selected":""}>${s}</option>`).join("")}</select></div><div class="grow"><div class="label">Stage</div><select class="inp" id="f_stage">${STAGES.map(([k,l])=>`<option value="${k}" ${c.stage===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:16px"><button class="btn" data-act="delContentModal" data-id="${c.id}" style="color:var(--rose)">🗑 delete</button><button class="btn btn-pink" data-act="saveContent" data-id="${c.id}">💾 save brief</button></div>
+  </div></div>`;
+  modalCrit=JSON.parse(JSON.stringify(crit));
+}
+let modalCrit={};
+async function saveContent(id){
+  const tags=(document.getElementById("f_tags").value||"").split(/\s+/).filter(t=>t.trim()).map(t=>t.startsWith("#")?t:"#"+t);
+  await DB.updateContent(id,{ title:document.getElementById("f_title").value.trim()||"Untitled", format:document.getElementById("f_format").value||null, platform:document.getElementById("f_platform").value||null, pillar:document.getElementById("f_pillar").value||null, analyzer_score:document.getElementById("f_score").value!==""?parseInt(document.getElementById("f_score").value):null, hook:document.getElementById("f_hook").value, script:document.getElementById("f_script").value, hashtags:tags, thumbnail_status:document.getElementById("f_thumb").value, stage:document.getElementById("f_stage").value, criteria:modalCrit });
+  document.getElementById("modal").innerHTML=""; toast("Brief saved 🌸"); render();
+}
+/* ===================== HABITS (editable library) ===================== */
+async function renderHabits(){
+  const day=await DB.daily(TODAY); const energy=day.energy||"medium", streamDay=!!day.streamDay;
+  const counts=(day.habits&&day.habits.counts)||{};
+  const cats=[...new Set(state.lib.map(h=>h.cat))];
+  const eOpt=(v,e,l)=>`<button data-act="energy" data-v="${v}" ${RO?"disabled":""} class="${energy===v?'on':''}">${e} ${l}</button>`;
+  const groups=cats.map(cat=>{
+    const hs=state.lib.filter(h=>h.cat===cat);
+    return `<div class="panel" style="margin-bottom:12px"><div class="card-head"><span class="label">${catEmoji(cat)} ${cat}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">${hs.map(h=>{
+        const c=counts[h.id]||0,t=h.total||1,ok=c>=t,vis=habitVisible(h,energy,streamDay);
+        return `<div class="hbtn ${ok?'done':''}" style="display:flex;align-items:center;gap:8px;${vis?'':'opacity:.45'}">
+          <button class="check ${ok?'on':''}" data-act="habit" data-id="${h.id}" ${RO||!vis?"disabled":""} style="padding:0"></button>
+          <span class="grow" style="font-size:12px">${h.emoji?h.emoji+" ":""}${esc(h.label)}</span>
+          ${t>1?`<span class="label num">${c}/${t}</span>`:""}<span class="pill ${energyPill(h.energy)}">${energyShort(h.energy)}</span>
+          <button class="label" data-act="editHabit" data-id="${h.id}" ${RO?"disabled":""} style="background:none;border:none">✎</button></div>`;}).join("")}</div></div>`;
+  }).join("");
+  const visN=state.lib.filter(h=>habitVisible(h,energy,streamDay)).length;
+  const doneN=state.lib.filter(h=>habitVisible(h,energy,streamDay)&&(counts[h.id]||0)>=(h.total||1)).length;
+  return `<div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="card-head"><h2 style="font-size:18px">🌸 Sustainable habits</h2><div style="display:flex;gap:8px;align-items:center"><span class="pill pill-pink">${doneN}/${visN} today</span><button class="btn btn-pink" data-act="addHabit" ${RO?"disabled":""}>+ add habit</button></div></div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">Spoon theory, not hustle. Essential habits show on any energy; intensive ones only on full or stream days. <b>Missing a day pauses your streak — it doesn't reset it.</b> 💗 Tap ✎ to edit any habit, or add your own.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <div><div class="label" style="margin-bottom:4px">Energy 🥄</div><div class="seg">${eOpt("low","🌙","Low")}${eOpt("medium","🌤","Medium")}${eOpt("high","🌞","High")}</div></div>
+        <button class="hbtn ${streamDay?'done':''}" data-act="streamDay" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center"><span class="check ${streamDay?'on':''}"></span>🎙️ Stream day</button>
+      </div>
+    </div>${groups}</div>`;
+}
+function habitModal(h){
+  const cats=[...new Set([...state.lib.map(x=>x.cat),"Pre-stream","On-air","Post-stream","Content","Community","Health","Business","Batch days"])];
+  const isNew=!h;
+  h=h||{label:"",emoji:"",cat:"Content",energy:"normal",total:""};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%">
+    <div class="card-head"><h3 style="font-size:16px">${isNew?"New habit 🌸":"Edit habit"}</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="display:flex;gap:10px"><div style="width:70px"><div class="label">Emoji</div><input class="inp" id="h_emoji" value="${esc(h.emoji||"")}" placeholder="🌸" /></div><div class="grow"><div class="label">Habit</div><input class="inp" id="h_label" value="${esc(h.label||"")}" placeholder="e.g. Warm up my voice" /></div></div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <div class="grow"><div class="label">Category</div><input class="inp" id="h_cat" list="catlist" value="${esc(h.cat||"Content")}" /><datalist id="catlist">${cats.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+      <div class="grow"><div class="label">Energy cost</div><select class="inp" id="h_energy">${[["essential","🟢 Essential (always shows)"],["normal","🟦 Normal (medium+ days)"],["intensive","🌸 Intensive (full/stream days)"]].map(([v,l])=>`<option value="${v}" ${h.energy===v?"selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="label" style="margin-top:10px">Daily target — leave blank for a simple check-off</div><input class="inp" id="h_total" type="number" min="1" value="${h.total||""}" placeholder="e.g. 5" />
+    <div style="display:flex;justify-content:space-between;margin-top:16px">${isNew?"<span></span>":`<button class="btn" data-act="delHabit" data-id="${h.id}" style="color:var(--rose)">🗑 remove</button>`}<button class="btn btn-pink" data-act="saveHabit" data-id="${isNew?"":h.id}">💾 save</button></div>
+  </div></div>`;
+}
+async function saveHabit(id){
+  const label=document.getElementById("h_label").value.trim(); if(!label){toast("Give it a name 🌸");return;}
+  const totalRaw=document.getElementById("h_total").value; const total=totalRaw&&parseInt(totalRaw)>1?parseInt(totalRaw):undefined;
+  const rec={ id:id||("h"+uid().slice(0,8)), label, emoji:document.getElementById("h_emoji").value.trim()||undefined, cat:document.getElementById("h_cat").value.trim()||"Content", energy:document.getElementById("h_energy").value };
+  if(total)rec.total=total;
+  const lib=[...state.lib]; const i=lib.findIndex(x=>x.id===id);
+  if(i>=0)lib[i]=rec; else lib.push(rec);
+  await saveLib(lib); document.getElementById("modal").innerHTML=""; toast("Saved 🌸"); render();
+}
+async function delHabit(id){ const lib=state.lib.filter(x=>x.id!==id); await saveLib(lib); document.getElementById("modal").innerHTML=""; toast("Removed"); render(); }
+
+/* ===================== INCOME + SPONSORS ===================== */
+async function renderIncome(){
+  const [ledger,sponsors,savings,settings]=await Promise.all([DB.income(),DB.sponsors(),DB.savings(),DB.daily(SENTINEL)]);
+  const view=state.moneyView;
+  const inPeriod = view==="year" ? (e=>yearOf(e.month)===yearOf(monthKey())) : (e=>e.month===monthKey());
+  const rows=ledger.filter(inPeriod);
+  const ins=rows.filter(e=>(e.kind||"in")==="in"), outs=rows.filter(e=>e.kind==="out");
+  const totalIn=ins.reduce((a,e)=>a+Number(e.amount),0), totalOut=outs.reduce((a,e)=>a+Number(e.amount),0), net=totalIn-totalOut;
+  const byIn={}; ins.forEach(e=>byIn[e.source]=(byIn[e.source]||0)+Number(e.amount));
+  const byOut={}; outs.forEach(e=>{const k=e.category||e.source;byOut[k]=(byOut[k]||0)+Number(e.amount);});
+  const breakdown=(obj,total,lbl)=>`<div class="label" style="margin:2px 0 6px">${lbl}</div>`+(Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="width:96px;font-size:12px" class="soft">${esc(sourceLabel(s))}</span><div class="bar grow"><span style="width:${total?(v/total)*100:0}%"></span></div><span class="num label">$${v.toLocaleString()}</span></div>`).join("")||`<div class="soft" style="font-size:12px">none</div>`);
+  let chart="";
+  if(view==="year"){
+    const months=[]; for(let i=5;i>=0;i--)months.push(monthKeyAgo(i));
+    const mIn=mk=>ledger.filter(e=>e.month===mk&&(e.kind||"in")==="in").reduce((a,e)=>a+Number(e.amount),0);
+    const mOut=mk=>ledger.filter(e=>e.month===mk&&e.kind==="out").reduce((a,e)=>a+Number(e.amount),0);
+    const max=Math.max(1,...months.map(mk=>Math.max(mIn(mk),mOut(mk))));
+    chart=`<div style="display:flex;gap:14px;align-items:flex-end;height:120px;margin-top:14px">${months.map(mk=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end"><div style="display:flex;gap:3px;align-items:flex-end;height:100%"><span title="in $${mIn(mk)}" style="width:13px;background:linear-gradient(180deg,#7ed0b0,var(--mint));border-radius:4px 4px 0 0;height:${(mIn(mk)/max)*100}%"></span><span title="out $${mOut(mk)}" style="width:13px;background:linear-gradient(180deg,#f4a0a8,var(--rose));border-radius:4px 4px 0 0;height:${(mOut(mk)/max)*100}%"></span></div><span class="label">${monthLabel(mk)}</span></div>`).join("")}</div><div class="label" style="text-align:center;margin-top:8px"><span class="mint">▮ in</span> &nbsp;·&nbsp; <span style="color:var(--rose)">▮ out</span></div>`;
+  }
+  const recent=rows.slice().sort((a,b)=>b.month.localeCompare(a.month)).slice(0,14);
+  const ledgerList=recent.map(e=>{const isin=(e.kind||"in")==="in";return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span class="pill ${isin?'pill-mint':'pill-peach'}">${isin?'in':'out'}</span><span class="grow" style="font-size:12.5px">${esc(sourceLabel(e.source))}${e.note?` · <span class="soft">${esc(e.note)}</span>`:""}${view==='year'?` <span class="label">${monthLabel(e.month)}</span>`:""}</span><span class="num" style="font-weight:700;color:${isin?'var(--mint)':'var(--rose)'}">${isin?'+':'−'}$${Number(e.amount).toLocaleString()}</span><button class="label" data-act="delLedger" data-id="${e.id}" ${RO?"disabled":""} style="background:none;border:none">✕</button></div>`;}).join("")||`<div class="soft" style="font-size:12.5px">Nothing logged ${view==="year"?"this year":"this month"} yet.</div>`;
+  const monthIn=ledger.filter(e=>e.month===monthKey()&&(e.kind||"in")==="in").reduce((a,e)=>a+Number(e.amount),0);
+  const rate=settings.taxRate??CONFIG.taxRate; const aside=(settings.setAside&&settings.setAside[monthKey()])||0;
+  const suggested=Math.round(monthIn*rate); const remaining=Math.max(0,suggested-aside);
+  const totSaved=savings.reduce((a,g)=>a+Number(g.saved),0), totTarget=savings.reduce((a,g)=>a+Number(g.target),0);
+  const goalCards=savings.map(g=>{const pct=g.target?Math.min(100,Math.round((g.saved/g.target)*100)):0;return `<div class="soft-card"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px">${g.emoji?g.emoji+" ":""}${esc(g.name)}</span><button class="label" data-act="editGoal" data-id="${g.id}" ${RO?"disabled":""} style="background:none;border:none">✎</button></div><div class="num soft" style="font-size:12px;margin:4px 0">$${Number(g.saved).toLocaleString()}${g.target?` / $${Number(g.target).toLocaleString()}`:""} · ${pct}%</div><div class="bar"><span style="width:${pct}%"></span></div><button class="btn" data-act="allotGoal" data-id="${g.id}" ${RO?"disabled":""} style="margin-top:8px;width:100%">+ allot money</button></div>`;}).join("");
+  const pipeline=SPONSOR_STAGES.map(([key,lbl])=>{ const col=sponsors.filter(s=>s.stage===key);
+    return `<div class="kcol" data-act="dropSponsor" data-stage="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(s=>`<div class="citem" draggable="true" data-act="dragSponsor" data-id="${s.id}"><div style="font-size:12.5px">${esc(s.brand)}</div><div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">${s.deal_type?`<span class="pill pill-lav">${esc(s.deal_type)}</span>`:""}${s.value?`<span class="pill pill-mint">$${Number(s.value).toLocaleString()}</span>`:""}</div>${s.note?`<div class="soft" style="font-size:11px;margin-top:5px">${esc(s.note)}</div>`:""}</div>`).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;}).join("");
+  const viewSeg=`<div class="seg">${[["month","This month"],["year","This year"]].map(([k,l])=>`<button data-act="moneyView" data-v="${k}" class="${view===k?'on':''}">${l}</button>`).join("")}</div>`;
+  const kind=state.ledgerKind||"in";
+  return `<div style="display:flex;flex-direction:column;gap:16px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💰 Money ${view==="year"?"· this year":"· this month"}</h2>${viewSeg}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <div class="soft-card"><div class="label">Money in</div><div class="num mint" style="font-size:20px;font-family:var(--display)">+$${totalIn.toLocaleString()}</div></div>
+        <div class="soft-card"><div class="label">Money out</div><div class="num" style="font-size:20px;font-family:var(--display);color:var(--rose)">−$${totalOut.toLocaleString()}</div></div>
+        <div class="soft-card"><div class="label">Net</div><div class="num" style="font-size:20px;font-family:var(--display);color:${net>=0?'var(--mint)':'var(--rose)'}">${net>=0?'+':'−'}$${Math.abs(net).toLocaleString()}</div></div>
+      </div>${chart}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px"><div>${breakdown(byIn,totalIn,"Money in · by source")}</div><div>${breakdown(byOut,totalOut,"Money out · by category")}</div></div>
+    </div>
+    <div class="panel"><div class="card-head"><span class="label">Log money in / out</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="seg"><button data-act="ledgerKind" data-v="in" class="${kind!=='out'?'on':''}">＋ In</button><button data-act="ledgerKind" data-v="out" class="${kind==='out'?'on':''}">－ Out</button></div>
+        <select class="inp" id="ledSource" style="width:150px" ${RO?"disabled":""}>${(kind==="out"?EXPENSE_CATS:INCOME_SOURCES).map(s=>`<option value="${s}">${esc(sourceLabel(s))}</option>`).join("")}</select>
+        <input class="inp" id="ledAmount" type="number" placeholder="amount $" style="width:110px" ${RO?"disabled":""} />
+        <input class="inp" id="ledNote" placeholder="note (optional)" style="width:160px" ${RO?"disabled":""} />
+        <button class="btn btn-pink" data-act="addLedger" ${RO?"disabled":""}>+ log</button>
+      </div>
+      <div style="margin-top:12px">${ledgerList}</div>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🏦 Set aside for taxes + slow months</h2></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">VTubing is a job — future-you will thank you. Save a slice of every good month for taxes, sub refunds, and quiet months. (Not tax advice — talk to an accountant for your country.)</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">
+        <div class="soft-card"><div class="label">Set-aside rate</div><div style="display:flex;align-items:center;gap:4px;margin-top:4px"><input class="inp num" id="taxRate" type="number" min="0" max="90" value="${Math.round(rate*100)}" style="width:64px;padding:5px 8px" ${RO?"disabled":""} /><span class="soft">%</span></div></div>
+        <div class="soft-card"><div class="label">Suggested (income × rate)</div><div class="num" style="font-size:18px;font-family:var(--display);margin-top:4px">$${suggested.toLocaleString()}</div></div>
+        <div class="soft-card"><div class="label">Already set aside</div><div style="display:flex;align-items:center;gap:4px;margin-top:4px"><span class="soft">$</span><input class="inp num" id="setAside" type="number" min="0" value="${aside}" style="width:84px;padding:5px 8px" ${RO?"disabled":""} /></div></div>
+        <div class="soft-card"><div class="label">Still to save</div><div class="num ${remaining>0?'':'mint'}" style="font-size:18px;font-family:var(--display);margin-top:4px">$${remaining.toLocaleString()}</div></div>
+      </div>
+      <button class="btn btn-pink" data-act="saveSetAside" ${RO?"disabled":""} style="margin-top:10px">💾 save set-aside</button>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🐖 Savings goals</h2><div style="display:flex;gap:10px;align-items:center"><span class="label">saved $${totSaved.toLocaleString()}${totTarget?` / $${totTarget.toLocaleString()}`:""}</span><button class="btn btn-pink" data-act="addGoal" ${RO?"disabled":""}>+ goal</button></div></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Give every saved dollar a job — a sinking fund for the mic, the trip, the tax pot. Allot money toward each as good months come in. 🌸</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${goalCards||`<div class="soft" style="font-size:12.5px">No goals yet — add one to start saving toward it.</div>`}</div>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Sponsor pipeline</h2><div style="display:flex;gap:8px"><input class="inp" id="sponsorBrand" placeholder="Brand name…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addSponsor" ${RO?"disabled":""}>+ pitch</button></div></div>
+      <div class="kanban" style="grid-template-columns:repeat(5,minmax(150px,1fr))">${pipeline}</div>
+      <div class="label" style="margin-top:8px">Drag a brand across stages as the deal moves · build a tailored pitch in the 💌 Pitch tab.</div></div>
+  </div>`;
+}
+function goalModal(g){
+  const isNew=!g; g=g||{name:"",emoji:"",target:""};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">${isNew?"New savings goal 🐖":"Edit goal"}</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="display:flex;gap:10px"><div style="width:70px"><div class="label">Emoji</div><input class="inp" id="g_emoji" value="${esc(g.emoji||"")}" placeholder="🎙️" /></div><div class="grow"><div class="label">Name</div><input class="inp" id="g_name" value="${esc(g.name||"")}" placeholder="New mic" /></div></div>
+    <div class="label" style="margin-top:10px">Target $</div><input class="inp" id="g_target" type="number" value="${g.target||""}" placeholder="180" />
+    <div style="display:flex;justify-content:space-between;margin-top:16px">${isNew?"<span></span>":`<button class="btn" data-act="delGoal" data-id="${g.id}" style="color:var(--rose)">🗑 remove</button>`}<button class="btn btn-pink" data-act="saveGoal" data-id="${isNew?"":g.id}">💾 save</button></div>
+  </div></div>`;
+}
+async function saveGoal(id){
+  const name=document.getElementById("g_name").value.trim(); if(!name){toast("Name it 🌸");return;}
+  const rec={name,emoji:document.getElementById("g_emoji").value.trim()||null,target:parseFloat(document.getElementById("g_target").value)||0};
+  if(id)await DB.updateGoal(id,rec); else await DB.addGoal({...rec,saved:0});
+  document.getElementById("modal").innerHTML=""; toast("Saved 🐖"); render();
+}
+/* ===================== PITCH BUILDER ===================== */
+async function renderPitch(){
+  const day=await DB.daily(TODAY); state._ch=day.channel||{}; const c=CONFIG.creator;
+  const rate=Object.entries(CONFIG.rateCard).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span class="soft">${esc(k)}</span><span class="num">${v?("$"+Number(v).toLocaleString()):"let's talk"}</span></div>`).join("");
+  return `<div style="display:flex;flex-direction:column;gap:16px;max-width:860px;margin:0 auto">
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Pitch Builder</h2><span class="label">tailored to you · ${esc(c.handle)}</span></div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">Tell me about the brand once — I'll draft a cold email, DMs, and a rate snapshot in your voice, pulling your real channel stats. You're a virtual busker; entertainment has value. 💗</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div class="label">Brand</div><input class="inp" id="pBrand" placeholder="e.g. GamerSupps" /></div>
+        <div><div class="label">What they make</div><input class="inp" id="pProduct" placeholder="energy drink, indie game…" /></div>
+        <div><div class="label">Deal type</div><select class="inp" id="pType">${DEAL_TYPES.map(d=>`<option value="${d}">${d}</option>`).join("")}</select></div>
+        <div><div class="label">Contact name (optional)</div><input class="inp" id="pContact" placeholder="leave blank for 'team'" /></div>
+      </div>
+      <div class="label" style="margin-top:10px">Your honest angle — why this brand actually fits you</div>
+      <textarea class="inp" id="pAngle" rows="2" placeholder="I've used X for months / my cozy horror streams match your vibe…"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-pink" data-act="genPitch">✨ generate</button><button class="btn" data-act="savePitch">+ save to pipeline</button></div>
+    </div>
+    <div id="pitchOut"></div>
+    <div class="panel"><div class="card-head"><span class="label">Your rate card</span><span class="label">edit in CONFIG.rateCard</span></div>${rate}</div>
+  </div>`;
+}
+function pitchVal(id){const e=document.getElementById(id);return e?e.value.trim():"";}
+function genPitch(){
+  const c=CONFIG.creator, ch=state._ch||{};
+  const brand=pitchVal("pBrand")||"[brand]", product=pitchVal("pProduct")||"your product", type=pitchVal("pType"), contact=pitchVal("pContact"), angle=pitchVal("pAngle");
+  const stats=[["Twitch",ch.twitch],["YouTube",ch.youtube],["TikTok",ch.tiktok],["X",ch.twitter]].filter(x=>x[1]).map(x=>`${Number(x[1]).toLocaleString()} on ${x[0]}`).join(" · ")||"a small but genuinely engaged audience";
+  const hi=contact?`Hi ${contact},`:`Hi ${brand} team,`;
+  const rateLines=Object.entries(CONFIG.rateCard).map(([k,v])=>`• ${k} — ${v?("$"+Number(v).toLocaleString()):"let's chat"}`).join("\n");
+  const email=`Subject: ${c.name} ${c.emoji} × ${brand} — ${type}\n\n${hi}\n\nI'm ${c.name} (${c.handle}), a ${c.niche}. My community is ${stats} — cozy, engaged, and the kind of people who actually show up.\n\nI'd love to explore a ${type} with ${brand}. ${angle?angle+" ":""}Your ${product} fits naturally with how I create, and I keep my branding consistent and disclosure-clean across every platform.\n\nHow I usually work:\n${rateLines}\n\nMy full media kit + latest stats are a click away if useful. Either way — thank you for reading. I'd be genuinely glad to chat. 🌸\n\nWarmly,\n${c.name} ${c.emoji}\n${c.handle} · ${c.email||""}`;
+  const dm=`hi ${brand}! 🐙 i'm ${c.name}, a ${c.niche} (${stats}). i'd love to do a ${type} with you${angle?` — ${angle.toLowerCase()}`:` — your ${product} really fits my vibe`}. could i send over my media kit? no pressure either way 💗`;
+  const discord=`Hey ${brand} team! I'm ${c.name} (${c.handle}) — ${c.niche}, big fan of ${product}. Would you be open to a ${type}? Happy to share a media kit + rates whenever works. Thanks for considering! 🌸`;
+  document.getElementById("pitchOut").innerHTML=`<div class="panel">${pitchBlock("Cold email",email,"po1",10)}${pitchBlock("Twitter / IG DM",dm,"po2",4)}${pitchBlock("Discord / shorter email",discord,"po3",4)}</div>`;
+}
+function pitchBlock(title,text,id,rows){return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span class="label">${title}</span><button class="btn" data-act="copy" data-target="${id}">copy</button></div><textarea class="inp" id="${id}" rows="${rows}">${esc(text)}</textarea></div>`;}
+
+
+/* ===================== WEEKLY REVIEW ===================== */
+async function renderReview(){
+  const [wk,content]=await Promise.all([DB.daily(SENTINEL),DB.content()]);
+  const rv=wk.review||{}; const weekAgo=isoAgo(-7);
+  const shipped=content.filter(c=>c.stage==="published"&&c.published_at&&c.published_at>weekAgo);
+  const fields=[["wins","🏆 Wins this week"],["slipped","💭 What slipped (gently)"],["loops","🔁 Open loops"],["followups","💌 Follow up with"],["notes","🎬 Content notes"],["spoons","🥄 Spoons check — how was your energy?"]];
+  return `<div class="panel"><div class="card-head"><div><h2 style="font-size:18px">🌷 Weekly review</h2><div class="label" style="margin-top:2px">a gentle retro · seal the week to keep your streak</div></div><button class="btn btn-pink" data-act="saveReview" ${RO?"disabled":""}>✓ seal week</button></div>
+    <div class="soft-card" style="margin-bottom:14px"><div class="label">📦 Shipped this week (auto)</div>${shipped.length?`<div style="margin-top:6px">${shipped.map(c=>`<span class="pill pill-mint" style="margin:2px">${esc(c.title)}</span>`).join("")}</div>`:`<div class="soft" style="font-size:12.5px;margin-top:4px">Nothing marked live this week — and that's okay. Rest weeks count.</div>`}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${fields.map(([k,l])=>`<div><div class="label" style="margin-bottom:5px">${l}</div><textarea class="inp" data-rv="${k}" rows="3" ${RO?"disabled":""}>${esc(rv[k]||"")}</textarea></div>`).join("")}</div>
+    <div style="margin-top:12px"><div class="label" style="margin-bottom:5px">✨ Next week — top 3 that actually matter</div><input class="inp" data-rv="top3" value="${esc(rv.top3||"")}" ${RO?"disabled":""} placeholder="1) …  2) …  3) …" /></div></div>`;
+}
+
+/* ===================== ASK ===================== */
+function renderAsk(){
+  return `<div class="panel" style="max-width:720px;margin:0 auto"><h2 style="font-size:18px">🔮 Ask your planner</h2>
+    <p class="soft" style="font-size:12.5px;margin:6px 0 14px">Plain-words search across your content + brain-dump captures.</p>
+    <div style="display:flex;gap:8px"><input class="inp" id="askQ" placeholder="what horror ideas do I have?" /><button class="btn btn-pink" data-act="ask">ask</button></div>
+    <div id="askResults" style="margin-top:14px"></div>
+    <p class="soft" style="font-size:11.5px;margin-top:16px">Static build = keyword search. Semantic "ask my planner" lives in the Next.js version / a Supabase Edge Function.</p></div>`;
+}
+
+/* ===================== HELPERS ===================== */
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening";}
+function habitVisible(h,energy,streamDay){if(h.energy==="essential")return true;if(h.energy==="intensive")return energy==="high"||streamDay;return energy!=="low";}
+function energyShort(e){return e==="essential"?"🟢":e==="intensive"?"🌸":"🟦";}
+function energyPill(e){return e==="essential"?"pill-mint":e==="intensive"?"pill-pink":"pill-lav";}
+function catEmoji(c){return {"Pre-stream":"🌅","On-air":"🎙️","Post-stream":"🌙","Content":"📅","Community":"💬","Health":"💖","Business":"💼","Batch days":"🎨"}[c]||"🌸";}
+function stageShort(s){return {idea:"💡",scripting:"✍️",recording:"🎥",editing:"✂️",thumbnail:"🖼️",scheduled:"📅",published:"✅"}[s]||s;}
+function fmtShort(f){return {short:"SF",long:"LF",twitter:"X"}[f]||f;}
+function pillarPill(p){return {growth:"pill-pink",retention:"pill-lav",experimental:"pill-peach"}[p]||"pill-gray";}
+function sourceLabel(s){return {twitch:"Twitch",youtube:"YouTube",kofi:"Ko-fi",patreon:"Patreon",tips:"Tips",throne:"Throne",sponsor:"Sponsor",merch:"Merch",tiktok:"TikTok",fansly:"Fansly",other:"Other"}[s]||s;}
+function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pill-peach",signed:"pill-mint",passed:"pill-gray"}[s]||"pill-gray";}
+function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
+
+/* ===================== EVENTS ===================== */
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch"];
+document.addEventListener("click",async(e)=>{
+  const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
+  if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
+  if(act==="tab")return setTab(el.dataset.tab);
+  if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} return render(); }
+  if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
+  if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
+
+  if(act==="capture"){ const i=document.getElementById("capInput"); if(i.value.trim()){await DB.addCapture(i.value.trim());i.value="";toast("Captured 🐙");} }
+  if(act==="habit"){ await bumpHabit(id); render(); }
+  if(act==="energy"){ await DB.saveDaily(TODAY,n=>({...n,energy:el.dataset.v})); render(); }
+  if(act==="streamDay"){ await DB.saveDaily(TODAY,n=>({...n,streamDay:!n.streamDay})); render(); }
+  if(act==="goalToggle"){ await goalMut(el.dataset.scope,g=>g.map(x=>x.id===id?{...x,done:!x.done}:x)); render(); }
+  if(act==="goalDel"){ await goalMut(el.dataset.scope,g=>g.filter(x=>x.id!==id)); render(); }
+
+  if(act==="addContent"){ const i=document.getElementById("newContent"); if(i.value.trim()){await DB.addContent({title:i.value.trim(),stage:"idea",format:state.fmt==="all"?"short":state.fmt,priority:60});render();} }
+  if(act==="addSub"){ const t=prompt("Sub-task (e.g. record b-roll):"); if(t){const p=(state._content||[]).find(x=>x.id===id);await DB.addContent({title:t,stage:p?p.stage:"idea",parent_id:id,priority:40});render();} }
+  if(act==="delContent"){ await DB.delContent(id); render(); }
+  if(act==="selContent"){ state.sel.has(id)?state.sel.delete(id):state.sel.add(id); render(); }
+  if(act==="bulkPublish"){ for(const cid of state.sel) await DB.updateContent(cid,{stage:"published",published_at:new Date().toISOString()}); state.sel.clear(); toast("Shipped ✅ proud of you"); render(); }
+  if(act==="bulkClear"){ state.sel.clear(); render(); }
+  if(act==="smart")return smart();
+  if(act==="smartClear"){ state.smartIds=null; render(); }
+  if(act==="openContent")return openContent(id);
+  if(act==="critToggle"){ const k=el.dataset.k; modalCrit[k]=!modalCrit[k]; el.classList.toggle("done"); el.querySelector(".check").classList.toggle("on"); }
+  if(act==="saveContent")return saveContent(id);
+  if(act==="delContentModal"){ await DB.delContent(id); document.getElementById("modal").innerHTML=""; toast("Deleted"); render(); }
+
+  if(act==="addHabit")return habitModal(null);
+  if(act==="editHabit")return habitModal(state.lib.find(h=>h.id===id));
+  if(act==="saveHabit")return saveHabit(id);
+  if(act==="delHabit")return delHabit(id);
+
+  if(act==="moneyView"){ state.moneyView=el.dataset.v; return render(); }
+  if(act==="ledgerKind"){ state.ledgerKind=el.dataset.v; return render(); }
+  if(act==="addLedger"){ const kind=state.ledgerKind||"in", src=document.getElementById("ledSource").value, a=parseFloat(document.getElementById("ledAmount").value), note=document.getElementById("ledNote").value.trim(); if(a){await DB.addIncome({kind,source:src,category:kind==="out"?src:null,amount:a,note});render();} }
+  if(act==="delLedger"){ await DB.delIncome(id); render(); }
+  if(act==="addGoal")return goalModal(null);
+  if(act==="editGoal"){ const list=await DB.savings(); return goalModal(list.find(g=>g.id===id)); }
+  if(act==="saveGoal")return saveGoal(id);
+  if(act==="delGoal"){ await DB.delGoal(id); document.getElementById("modal").innerHTML=""; toast("Removed"); render(); }
+  if(act==="allotGoal"){ const amt=parseFloat(prompt("Allot how much to this goal? $")); if(amt){const list=await DB.savings();const g=list.find(x=>x.id===id);await DB.updateGoal(id,{saved:Number(g.saved)+amt});toast("Allotted 🐖");render();} }
+  if(act==="saveSetAside"){ const rate=(parseFloat(document.getElementById("taxRate").value)||0)/100, saved=parseFloat(document.getElementById("setAside").value)||0; await DB.saveDaily(SENTINEL,n=>({...n,taxRate:rate,setAside:{...(n.setAside||{}),[monthKey()]:saved}})); toast("Saved 🏦"); render(); }
+  if(act==="addSponsor"){ const b=document.getElementById("sponsorBrand").value.trim(); if(b){await DB.addSponsor({brand:b,stage:"draft"});render();} }
+  if(act==="genPitch")return genPitch();
+  if(act==="copy"){ const t=document.getElementById(el.dataset.target); if(t){navigator.clipboard&&navigator.clipboard.writeText(t.value);toast("Copied 💗");} return; }
+  if(act==="savePitch"){ const b=pitchVal("pBrand"); if(!b){toast("Add a brand name first 🌸");return;} await DB.addSponsor({brand:b,deal_type:pitchVal("pType"),stage:"draft",note:pitchVal("pAngle")||null}); toast("Saved to pipeline 💌"); return; }
+  if(act==="editChannel")return editChannel();
+  if(act==="saveChannel")return saveChannel();
+  if(act==="saveReview")return saveReview();
+  if(act==="ask")return ask();
+});
+document.addEventListener("keydown",async(e)=>{
+  if(e.key!=="Enter")return; const t=e.target;
+  if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
+  if(t.id==="newContent")document.querySelector('[data-act="addContent"]').click();
+  if(t.id==="ledAmount"||t.id==="ledNote")document.querySelector('[data-act="addLedger"]').click();
+  if(t.id==="sponsorBrand")document.querySelector('[data-act="addSponsor"]').click();
+  if(t.id==="smartQ")smart();
+  if(t.id==="askQ")ask();
+  if(t.dataset&&t.dataset.act==="goalAdd"&&t.value.trim()){const sc=t.dataset.scope,tx=t.value.trim();t.value="";await goalMut(sc,g=>[...g,{id:uid(),text:tx,done:false}]);render();}
+});
+let dragId=null,dragType=null;
+document.addEventListener("dragstart",e=>{const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}});
+document.addEventListener("drop",async e=>{
+  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');
+  if(cs&&dragType==="content"&&dragId){e.preventDefault();const stage=cs.dataset.stage;const patch={stage};if(stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(dragId,patch);dragId=null;render();}
+  else if(ss&&dragType==="sponsor"&&dragId){e.preventDefault();await DB.updateSponsor(dragId,{stage:ss.dataset.stage});dragId=null;render();}
+});
+
+/* feature impls */
+async function bumpHabit(hid){ const h=state.lib.find(x=>x.id===hid); const t=(h&&h.total)||1; await DB.saveDaily(TODAY,n=>{const habits=n.habits||{counts:{}};const counts={...(habits.counts||{})};const cur=counts[hid]||0;counts[hid]=cur>=t?0:cur+1;return{...n,habits:{counts}};}); }
+async function goalMut(scope,fn){ const key=scope==="week"?"goals_week_items":"goals_month_items"; await DB.saveDaily(SENTINEL,n=>({...n,[key]:fn(n[key]||[])})); }
+function smart(){ const q=(document.getElementById("smartQ").value||"").toLowerCase().trim(); if(!q){state.smartIds=null;return render();} state.smartIds=(state._content||[]).filter(c=>(c.title+" "+(c.hook||"")+" "+(c.hashtags||[]).join(" ")).toLowerCase().includes(q)).map(c=>c.id); render(); }
+async function editChannel(){ const day=await DB.daily(TODAY); const ch=day.channel||{};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">Channel pulse</h3><button class="btn" data-act="closeModal">✕</button></div>${CHANNEL_STATS.map(([k,l])=>`<div class="label" style="margin-top:8px">${l}</div><input class="inp num" id="ch_${k}" type="number" value="${ch[k]??""}" />`).join("")}<button class="btn btn-pink" data-act="saveChannel" style="margin-top:14px">💾 save</button></div></div>`; }
+async function saveChannel(){ const ch={}; CHANNEL_STATS.forEach(([k])=>{const v=document.getElementById("ch_"+k).value;if(v!=="")ch[k]=parseInt(v);}); await DB.saveDaily(TODAY,n=>({...n,channel:ch})); document.getElementById("modal").innerHTML=""; toast("Updated 🌸"); render(); }
+async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]").forEach(el=>data[el.dataset.rv]=el.value); await DB.saveDaily(SENTINEL,n=>({...n,review:data})); toast("Week sealed 🌷 proud of you"); }
+async function ask(){ const q=(document.getElementById("askQ").value||"").toLowerCase().trim(); const box=document.getElementById("askResults"); if(!q){box.innerHTML="";return;}
+  const [content,caps]=await Promise.all([DB.content(),DB.captures()]);
+  const hits=[...content.filter(c=>(c.title+" "+(c.hook||"")+" "+(c.script||"")).toLowerCase().includes(q)).map(c=>({t:"🎬 "+stageShort(c.stage),x:c.title})),...caps.filter(c=>(c.raw_text||"").toLowerCase().includes(q)).map(c=>({t:"🐙 capture",x:c.raw_text}))];
+  box.innerHTML=hits.length?hits.map(h=>`<div class="citem" style="margin-bottom:8px;cursor:default"><div class="label">${h.t}</div><div style="font-size:13px;margin-top:3px">${esc(h.x)}</div></div>`).join(""):`<div class="soft" style="font-size:13px">No matches — try fewer words. 🌸</div>`; }
+
+/* boot */
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); }
+setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
+render();
+</script>
+</body>
+</html>
