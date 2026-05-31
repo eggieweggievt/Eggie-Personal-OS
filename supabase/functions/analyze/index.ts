@@ -143,17 +143,42 @@ Deno.serve(async (req) => {
       return json({ answer });
     }
 
+    if (mode === "thumbnail") {
+      const img = (body.input?.image || "").toString();
+      const m = img.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!m) return json({ error: "No image provided." }, 400);
+      const key = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!key) return json({ error: "ANTHROPIC_API_KEY secret is not set" }, 400);
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: MODEL, max_tokens: 900, system: BRAND,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } },
+            { type: "text", text: `Check this YouTube thumbnail for click potential. Title it'll sit next to: "${(body.input?.title || "").toString().slice(0,200)}". Return ONLY JSON: { "score": number, "verdict": string, "strengths": string[], "improvements": string[] }. Judge it like vidIQ's thumbnail checker: does it read at small / mobile size; contrast + a clear focal point; any text legible AND short (≤4 words); is the face/expression clear and emotive; does it pair with the title without just repeating it. Warm, specific, 2-4 items each.` },
+          ] }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return json({ error: data?.error?.message || "vision error" }, 500);
+      const text = (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+      return json(parseJSON(text) || { verdict: text });
+    }
+
     if (mode === "optimize") {
       const i = body.input || {};
       const footer = (i.footer || "").toString().slice(0, 1500);
       const live = i.kind === "livestream";
       const prompt = live
-        ? `Optimize a YOUTUBE LIVESTREAM. Return ONLY JSON:
-{ "titles": string[], "description": string, "tags": string[], "goingLivePost": string, "tips": string[] }
-- titles: 4 stream titles in her format → [aesthetic emoji] + [hook/meme] + [GAME] + cue. Use curiosity/challenge framing ("If I die I restart", "first playthrough", "24h grind"). Always name the game.
-- description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her usual schedule (4 days/wk, 4–6pm EDT), then paste the FOOTER block verbatim near the end.
-- tags: 12-15 tags including the game, "vtuber", "vtuber live", "livestream", her niches (ARPG/MMO/Soulslike).
-- goingLivePost: a short, playful X/Discord "going live" post — NO bare link (links kill reach; tell her to drop the link in a reply/comment), pair-with-an-image friendly.
+        ? `Optimize a MULTISTREAM (she goes live on YouTube + Twitch + Twitter/X at once — all for the SAME stream). Return ONLY JSON:
+{ "titles": string[], "description": string, "hashtags": string[], "tags": string[], "twitchTitle": string, "twitterTitle": string, "tips": string[] }
+- titles: 4 YOUTUBE stream titles in her format → [aesthetic emoji] + [hook/meme] + [GAME] + cue. Curiosity/challenge framing ("If I die I restart", "first playthrough", "24h grind"). Always name the game.
+- description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her schedule (4 days/wk, 4–6pm EDT), then paste the FOOTER block verbatim near the end.
+- hashtags: 2-3 YouTube hashtags (the game + #vtuber).
+- tags: 12-15 YouTube tags — the game, "vtuber", "vtuber live", "livestream", her niches (ARPG/MMO/Soulslike).
+- twitchTitle: ONE Twitch title → [emoji] [hook/meme] [GAME] [optional !command]; punchy, curiosity/challenge.
+- twitterTitle: ONE short X/Twitter broadcast title for the multistream — keyword-rich + a hook, NO hashtags, NO link.
 - tips: 2 short reminders, e.g. "start the YouTube stream only once gameplay begins — YT hates mid-stream category switches" and "put a hot-take or question in the title to prime chat before they click".
 Stream game / focus: ${(i.topic || i.title || "").toString().slice(0, 800)}
 FOOTER (paste verbatim into the description):

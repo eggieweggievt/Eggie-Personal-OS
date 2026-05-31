@@ -760,7 +760,43 @@ function renderOptimize(){
     <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}"></textarea>
     <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
     <div id="optOut" style="margin-top:14px"></div>
+    ${live?"":`<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
+      <div class="label">🖼️ Thumbnail check</div>
+      <p class="soft" style="font-size:12px;margin:4px 0 8px">Upload your thumbnail — see it at real feed sizes and get a click-potential read.</p>
+      <input type="file" id="thumbFile" accept="image/*" class="inp" />
+      <div id="thumbPrev" style="margin-top:10px"></div>
+      <button class="btn btn-pink" data-act="checkThumb" style="margin-top:8px">🖼️ check thumbnail</button>
+      <div id="thumbOut" style="margin-top:12px"></div>
+    </div>`}
   </div>`;
+}
+function loadThumb(file){
+  const reader=new FileReader();
+  reader.onload=()=>{ const img=new Image(); img.onload=()=>{
+    const max=640, sc=Math.min(1,max/img.width), c=document.createElement("canvas");
+    c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    state._thumb=c.toDataURL("image/jpeg",0.82);
+    const p=document.getElementById("thumbPrev");
+    if(p)p.innerHTML=`<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">${[[120,"mobile feed"],[320,"desktop"],[480,"large"]].map(([w,l])=>`<div style="text-align:center"><img src="${state._thumb}" style="width:${w}px;max-width:100%;border-radius:8px;border:1px solid var(--line)" /><div class="label" style="margin-top:3px">${w}px · ${l}</div></div>`).join("")}</div>`;
+  }; img.src=reader.result; };
+  reader.readAsDataURL(file);
+}
+async function checkThumb(){
+  const out=document.getElementById("thumbOut"); if(!out)return;
+  if(DEMO||!SB){ out.innerHTML=`<div class="soft" style="font-size:12px">Deploy the analyze function + demo off to check thumbnails 🌸</div>`; return; }
+  if(!state._thumb){ toast("Pick a thumbnail image first 🌸"); return; }
+  out.innerHTML=`<div class="label">looking at it… 🐙</div>`;
+  try{
+    const r=await aiCall("thumbnail",{image:state._thumb,title:document.getElementById("oTitle").value});
+    if(r.error){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+    out.innerHTML=`<div class="soft-card">
+      ${r.score!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:24px;font-family:var(--display)">${r.score}</span><span class="label">/ 100 click potential</span></div>`:""}
+      ${r.verdict?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.verdict)}</p>`:""}
+      ${(r.strengths&&r.strengths.length)?`<div class="label" style="margin-top:8px">working 💚</div>${r.strengths.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
+      ${(r.improvements&&r.improvements.length)?`<div class="label" style="margin-top:8px">try 🌸</div>${r.improvements.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
+    </div>`;
+  }catch(e){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(e.message||e)}</div>`; }
 }
 async function runOptimize(){
   const out=document.getElementById("optOut"); if(!out)return;
@@ -775,11 +811,12 @@ async function runOptimize(){
     out.innerHTML=`<div class="soft-card">
       ${r.titleScore!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.titleScore}</span><span class="label">/ 100 title potential</span></div>`:""}
       ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
-      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${state.optMode==="livestream"?"stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
-      ${r.description?block("Description",r.description):""}
-      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">tags <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
-      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">hashtags · 1S/2M/2L <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
-      ${r.goingLivePost?block("Going-live post",r.goingLivePost):""}
+      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${state.optMode==="livestream"?"YouTube stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
+      ${r.description?block(state.optMode==="livestream"?"YouTube description":"Description",r.description):""}
+      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube tags":"tags"} <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
+      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube hashtags":"hashtags · 1S/2M/2L"} <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
+      ${r.twitchTitle?block("Twitch title",r.twitchTitle):""}
+      ${r.twitterTitle?block("Twitter / X title",r.twitterTitle):""}
       ${(r.tips&&r.tips.length)?`<div class="label" style="margin-top:10px">stream reminders 🌸</div>${r.tips.map(t=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(t)}</div>`).join("")}`:""}
     </div>`;
   }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
@@ -800,7 +837,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -869,10 +906,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
   if(act==="optMode"){ state.optMode=el.dataset.v; return render(); }
   if(act==="runOptimize")return runOptimize();
+  if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
   if(act==="saveReview")return saveReview();
   if(act==="ask")return ask();
 });
+document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]); });
 document.addEventListener("keydown",async(e)=>{
   if(e.key!=="Enter")return; const t=e.target;
   if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
