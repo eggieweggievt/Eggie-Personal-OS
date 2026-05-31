@@ -234,6 +234,13 @@ const DB = {
 /* editable settings live on the sentinel daily_logs row */
 async function loadLib(){ const s=await DB.daily(SENTINEL); const lib=s.habitsLib; return (lib&&lib.length)?lib:CONFIG.defaultHabits.map(h=>({...h})); }
 async function saveLib(list){ await DB.saveDaily(SENTINEL,n=>({...n,habitsLib:list})); }
+/* AI brain — calls the Supabase "analyze" Edge Function (see EDGE-FUNCTION-SETUP.md) */
+async function aiCall(mode,input,vidiq){
+  if(DEMO || !SB) return { _needsBackend:true };
+  const { data, error } = await SB.functions.invoke("analyze",{ body:{ mode, input, userId:UID, vidiq } });
+  if(error){ let msg=error.message||"function error"; try{const c=await error.context?.json?.(); if(c&&c.error)msg=c.error;}catch{} throw new Error(msg); }
+  return data;
+}
 
 /* ===================== STATE + ROUTER ===================== */
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["habits","🌸 Habits"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
@@ -397,9 +404,30 @@ async function openContent(id){
     <div class="label" style="margin-top:12px">4-criteria check — does it pass?</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">${CRITERIA.map(([k,l])=>`<button class="hbtn ${crit[k]?'done':''}" data-act="critToggle" data-k="${k}" style="display:flex;gap:6px;align-items:center;padding:6px 10px"><span class="check ${crit[k]?'on':''}"></span>${l}</button>`).join("")}</div>
     <div style="display:flex;gap:8px;margin-top:8px"><div class="grow"><div class="label">Thumbnail</div><select class="inp" id="f_thumb">${["none","wip","done"].map(s=>`<option value="${s}" ${c.thumbnail_status===s?"selected":""}>${s}</option>`).join("")}</select></div><div class="grow"><div class="label">Stage</div><select class="inp" id="f_stage">${STAGES.map(([k,l])=>`<option value="${k}" ${c.stage===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
-    <div style="display:flex;justify-content:space-between;margin-top:16px"><button class="btn" data-act="delContentModal" data-id="${c.id}" style="color:var(--rose)">🗑 delete</button><button class="btn btn-pink" data-act="saveContent" data-id="${c.id}">💾 save brief</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px"><button class="btn" data-act="delContentModal" data-id="${c.id}" style="color:var(--rose)">🗑 delete</button><div style="display:flex;gap:8px"><button class="btn" data-act="aiAnalyze">✨ analyze</button><button class="btn btn-pink" data-act="saveContent" data-id="${c.id}">💾 save brief</button></div></div>
+    <div id="aiOut" style="margin-top:12px"></div>
   </div></div>`;
   modalCrit=JSON.parse(JSON.stringify(crit));
+}
+async function aiAnalyze(){
+  const out=document.getElementById("aiOut"); if(!out)return;
+  if(DEMO||!SB){ out.innerHTML=`<div class="soft-card"><div class="soft" style="font-size:12.5px">✨ AI analysis turns on once you deploy the <b>analyze</b> Edge Function and switch demo off. See <b>EDGE-FUNCTION-SETUP.md</b> — about 5 minutes. 🐙</div></div>`; return; }
+  out.innerHTML=`<div class="label">analyzing your idea… 🐙</div>`;
+  try{
+    const input={ title:document.getElementById("f_title").value, format:document.getElementById("f_format").value, platform:document.getElementById("f_platform").value, pillar:document.getElementById("f_pillar").value, hook:document.getElementById("f_hook").value, script:document.getElementById("f_script").value };
+    const r=await aiCall("analyze",input);
+    if(r.error){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+    const crit=r.criteria||{}; const cpills=CRITERIA.map(([k,l])=>`<span class="pill ${crit[k]?'pill-mint':'pill-gray'}">${crit[k]?'✓':'·'} ${l}</span>`).join(" ");
+    out.innerHTML=`<div class="soft-card">
+      ${r.score!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.score}</span><span class="label">/ 100 potential</span></div>`:""}
+      <div style="margin:7px 0;display:flex;gap:5px;flex-wrap:wrap">${cpills}</div>
+      ${r.verdict?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.verdict)}</p>`:""}
+      ${r.fix?`<p style="font-size:12.5px;margin:6px 0"><b class="pink">Highest-leverage fix:</b> ${esc(r.fix)}</p>`:""}
+      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">stronger titles — tap to use</div>${r.titles.map(t=>`<button class="hbtn" data-act="useTitle" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
+      ${(r.hooks&&r.hooks.length)?`<div class="label" style="margin-top:8px">hook options</div>${r.hooks.map(h=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(h)}</div>`).join("")}`:""}
+      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:8px">hashtags · 1 small / 2 medium / 2 large</div><div style="font-size:12px;margin-top:2px">${r.hashtags.map(esc).join(" ")}</div>`:""}
+    </div>`;
+  }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the analyzer: ${esc(e.message||e)}. Check the function is deployed + ANTHROPIC_API_KEY is set.</div>`; }
 }
 let modalCrit={};
 async function saveContent(id){
@@ -594,11 +622,10 @@ async function renderReview(){
 
 /* ===================== ASK ===================== */
 function renderAsk(){
-  return `<div class="panel" style="max-width:720px;margin:0 auto"><h2 style="font-size:18px">🔮 Ask your planner</h2>
-    <p class="soft" style="font-size:12.5px;margin:6px 0 14px">Plain-words search across your content + brain-dump captures.</p>
-    <div style="display:flex;gap:8px"><input class="inp" id="askQ" placeholder="what horror ideas do I have?" /><button class="btn btn-pink" data-act="ask">ask</button></div>
-    <div id="askResults" style="margin-top:14px"></div>
-    <p class="soft" style="font-size:11.5px;margin-top:16px">Static build = keyword search. Semantic "ask my planner" lives in the Next.js version / a Supabase Edge Function.</p></div>`;
+  return `<div class="panel" style="max-width:720px;margin:0 auto"><h2 style="font-size:18px">🔮 Ask your OS</h2>
+    <p class="soft" style="font-size:12.5px;margin:6px 0 14px">Ask about your content or your VTuber brand — "what should I film this week?", "is my pillar mix healthy?", "give me 3 retention short ideas" — answered in your voice, learning from your own planner.${DEMO?` <b>(Deploy the analyze function + switch demo off for AI answers — right now this does a keyword search.)</b>`:""}</p>
+    <div style="display:flex;gap:8px"><input class="inp" id="askQ" placeholder="what should I film this week?" /><button class="btn btn-pink" data-act="ask">ask</button></div>
+    <div id="askResults" style="margin-top:14px"></div></div>`;
 }
 
 /* ===================== HELPERS ===================== */
@@ -616,7 +643,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -644,6 +671,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="critToggle"){ const k=el.dataset.k; modalCrit[k]=!modalCrit[k]; el.classList.toggle("done"); el.querySelector(".check").classList.toggle("on"); }
   if(act==="saveContent")return saveContent(id);
   if(act==="delContentModal"){ await DB.delContent(id); document.getElementById("modal").innerHTML=""; toast("Deleted"); render(); }
+  if(act==="aiAnalyze")return aiAnalyze();
+  if(act==="useTitle"){ const f=document.getElementById("f_title"); if(f){f.value=el.dataset.t;toast("Title set ✨ — save the brief to keep it");} return; }
 
   if(act==="addHabit")return habitModal(null);
   if(act==="editHabit")return habitModal(state.lib.find(h=>h.id===id));
@@ -695,10 +724,21 @@ async function editChannel(){ const day=await DB.daily(TODAY); const ch=day.chan
   document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">Channel pulse</h3><button class="btn" data-act="closeModal">✕</button></div>${CHANNEL_STATS.map(([k,l])=>`<div class="label" style="margin-top:8px">${l}</div><input class="inp num" id="ch_${k}" type="number" value="${ch[k]??""}" />`).join("")}<button class="btn btn-pink" data-act="saveChannel" style="margin-top:14px">💾 save</button></div></div>`; }
 async function saveChannel(){ const ch={}; CHANNEL_STATS.forEach(([k])=>{const v=document.getElementById("ch_"+k).value;if(v!=="")ch[k]=parseInt(v);}); await DB.saveDaily(TODAY,n=>({...n,channel:ch})); document.getElementById("modal").innerHTML=""; toast("Updated 🌸"); render(); }
 async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]").forEach(el=>data[el.dataset.rv]=el.value); await DB.saveDaily(SENTINEL,n=>({...n,review:data})); toast("Week sealed 🌷 proud of you"); }
-async function ask(){ const q=(document.getElementById("askQ").value||"").toLowerCase().trim(); const box=document.getElementById("askResults"); if(!q){box.innerHTML="";return;}
-  const [content,caps]=await Promise.all([DB.content(),DB.captures()]);
+async function ask(){
+  const raw=(document.getElementById("askQ").value||"").trim(); const box=document.getElementById("askResults"); if(!raw){box.innerHTML="";return;}
+  if(!DEMO && SB){
+    box.innerHTML=`<div class="label">thinking… 🐙</div>`;
+    try{ const r=await aiCall("ask",{question:raw}); if(r&&r.error)throw new Error(r.error); box.innerHTML=`<div class="soft-card" style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc((r&&r.answer)||"(no answer)")}</div>`; }
+    catch(e){ box.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the assistant: ${esc(e.message||e)}. Showing a keyword search instead.</div>`; await keywordAsk(raw,box); }
+    return;
+  }
+  box.innerHTML=""; await keywordAsk(raw,box);
+}
+async function keywordAsk(raw,box){
+  const q=raw.toLowerCase(); const [content,caps]=await Promise.all([DB.content(),DB.captures()]);
   const hits=[...content.filter(c=>(c.title+" "+(c.hook||"")+" "+(c.script||"")).toLowerCase().includes(q)).map(c=>({t:"🎬 "+stageShort(c.stage),x:c.title})),...caps.filter(c=>(c.raw_text||"").toLowerCase().includes(q)).map(c=>({t:"🐙 capture",x:c.raw_text}))];
-  box.innerHTML=hits.length?hits.map(h=>`<div class="citem" style="margin-bottom:8px;cursor:default"><div class="label">${h.t}</div><div style="font-size:13px;margin-top:3px">${esc(h.x)}</div></div>`).join(""):`<div class="soft" style="font-size:13px">No matches — try fewer words. 🌸</div>`; }
+  box.insertAdjacentHTML("beforeend",hits.length?hits.map(h=>`<div class="citem" style="margin:8px 0 0;cursor:default"><div class="label">${h.t}</div><div style="font-size:13px;margin-top:3px">${esc(h.x)}</div></div>`).join(""):`<div class="soft" style="font-size:13px;margin-top:8px">No matches — try fewer words. 🌸</div>`);
+}
 
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); }
