@@ -145,21 +145,35 @@ Deno.serve(async (req) => {
 
     if (mode === "optimize") {
       const i = body.input || {};
-      const raw = await claude(
-        BRAND,
-        `Optimize this video for ${i.platform || "YouTube"} (${i.format || "long-form"}). Return ONLY JSON:
-{ "titleScore": number, "titleWhy": string, "titles": string[], "tags": string[], "hashtags": string[] }
-- titleScore: 0-100 estimated click potential; titleWhy: 1-2 sentences.
-- titles: 4 stronger options (curiosity/specificity; put searchable words where they help).
+      const footer = (i.footer || "").toString().slice(0, 1500);
+      const live = i.kind === "livestream";
+      const prompt = live
+        ? `Optimize a YOUTUBE LIVESTREAM. Return ONLY JSON:
+{ "titles": string[], "description": string, "tags": string[], "goingLivePost": string, "tips": string[] }
+- titles: 4 stream titles in her format → [aesthetic emoji] + [hook/meme] + [GAME] + cue. Use curiosity/challenge framing ("If I die I restart", "first playthrough", "24h grind"). Always name the game.
+- description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her usual schedule (4 days/wk, 4–6pm EDT), then paste the FOOTER block verbatim near the end.
+- tags: 12-15 tags including the game, "vtuber", "vtuber live", "livestream", her niches (ARPG/MMO/Soulslike).
+- goingLivePost: a short, playful X/Discord "going live" post — NO bare link (links kill reach; tell her to drop the link in a reply/comment), pair-with-an-image friendly.
+- tips: 2 short reminders, e.g. "start the YouTube stream only once gameplay begins — YT hates mid-stream category switches" and "put a hot-take or question in the title to prime chat before they click".
+Stream game / focus: ${(i.topic || i.title || "").toString().slice(0, 800)}
+FOOTER (paste verbatim into the description):
+${footer}
+Her recent titles:
+${history}`
+        : `Optimize this ${i.format || "long-form"} video for ${i.platform || "YouTube"}. Return ONLY JSON:
+{ "titleScore": number, "titleWhy": string, "titles": string[], "tags": string[], "hashtags": string[], "description": string }
+- titleScore 0-100; titleWhy 1-2 sentences (use the TITLE ENGINE rubric).
+- titles: 4 stronger options using her proven templates.
 - tags: 12-15 YouTube SEO tags / keywords, most important first.
 - hashtags: 5 following 1 small / 2 medium / 2 large, right for the platform.
-
+- description: a YouTube description — a 1-2 line hook, a short summary, a "⏱ Timestamps:" placeholder line, then paste the FOOTER block verbatim near the end.
 Title: ${i.title || "(none)"}
 Topic / notes: ${(i.topic || "").toString().slice(0, 1200)}
+FOOTER (paste verbatim near the end of the description):
+${footer}
 Her recent content:
-${history}${vidiq}`,
-        1800,
-      );
+${history}${vidiq}`;
+      const raw = await claude(BRAND, prompt, 2000);
       return json(parseJSON(raw) || { titleWhy: raw, titles: [], tags: [], hashtags: [] });
     }
 

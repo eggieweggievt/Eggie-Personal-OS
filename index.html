@@ -124,6 +124,8 @@ const CONFIG = {
   youtubeChannelId: "UCafRwkDb29wF0MPuZa4zzPA", // EggieWeggie VT — for auto channel-pull
   discordInvite: "suckegg",                      // discord.gg/suckegg — for member count
   taxRate: 0.25,  // suggested % of income to set aside for taxes/savings
+  // Pasted verbatim into generated video/stream descriptions — edit freely.
+  descFooter: `🔗 Everywhere: https://eggieweggie.ca\n▸ Twitch: https://twitch.tv/eggieweggievt\n▸ Discord: https://discord.gg/suckegg\n▸ TikTok / IG / X: @eggieweggievt\n▸ Support: https://ko-fi.com/eggieweggievt · https://throne.com/eggieweggievt\n\n💜 Sponsors — code SUCKEGG for 10% off:\n▸ GamerSupps: https://gamersupps.gg\n▸ Stoneforged PCs: https://stoneforged.tech/SUCKEGG\n▸ Xepher Arcade: https://shop.xepherarcade.com/?cc=SUCKEGG`,
   // Your rate card — used by the Pitch Builder. Edit freely; 0 = "let's talk".
   rateCard: { "Sponsored short": 150, "Sponsored stream": 250, "Dedicated long-form video": 400, "Affiliate / code": 0 },
   creator: { name:"Eggie", emoji:"🐙", handle:"@EggieWeggieVT", niche:"VTuber learning out loud", kofi:"https://ko-fi.com/eggieweggie", email:"you@example.com" },
@@ -272,7 +274,7 @@ async function aiCall(mode,input,vidiq){
 
 /* ===================== STATE + ROUTER ===================== */
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
-const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false };
+const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video" };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 
 async function render(){
@@ -745,15 +747,17 @@ function renderAsk(){
 
 /* ===================== VIDEO OPTIMIZATION ===================== */
 function renderOptimize(){
+  const live=state.optMode==="livestream";
+  const seg=`<div class="seg">${[["video","📹 Video"],["livestream","🔴 Livestream"]].map(([k,l])=>`<button data-act="optMode" data-v="${k}" class="${state.optMode===k?'on':''}">${l}</button>`).join("")}</div>`;
   return `<div class="panel" style="max-width:760px;margin:0 auto">
-    <div class="card-head"><h2 style="font-size:18px">🎯 Video optimization</h2><span class="label">title score · tags · hashtags</span></div>
-    <p class="soft" style="font-size:12.5px;margin:0 0 12px">Drop in a title + what the video's about. I'll score the title, suggest stronger ones, and generate YouTube tags + hashtags (1S/2M/2L) — in your voice, learning from your channel.${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
-    <div class="label">Title / working title</div><input class="inp" id="oTitle" placeholder="e.g. I tried VTubing on a $0 budget" />
-    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+    <div class="card-head"><h2 style="font-size:18px">🎯 ${live?"Livestream":"Video"} optimization</h2>${seg}</div>
+    <p class="soft" style="font-size:12.5px;margin:0 0 12px">${live?"Set up a YouTube stream — get stream titles (your format + the game), a ready-to-paste description with your links, tags, and a going-live post.":"Title score, stronger titles, tags, 1S/2M/2L hashtags, and a full description — in your voice, learning from your channel."}${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
+    <div class="label">${live?"Game / stream focus":"Title / working title"}</div><input class="inp" id="oTitle" placeholder="${live?"e.g. Elden Ring DLC — first deathless attempt":"e.g. I tried VTubing on a $0 budget"}" />
+    ${live?"":`<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
       <div class="grow" style="min-width:140px"><div class="label">Format</div><select class="inp" id="oFormat"><option value="long">Long form</option><option value="short">Short form</option><option value="twitter">Twitter post</option></select></div>
       <div class="grow" style="min-width:140px"><div class="label">Platform</div><select class="inp" id="oPlatform">${Object.entries(CONFIG.platforms).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
-    </div>
-    <div class="label" style="margin-top:10px">What's it about? (topic, hook, key points)</div><textarea class="inp" id="oTopic" rows="3" placeholder="the angle, what happens, who it's for…"></textarea>
+    </div>`}
+    <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}"></textarea>
     <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
     <div id="optOut" style="margin-top:14px"></div>
   </div>`;
@@ -763,15 +767,20 @@ async function runOptimize(){
   if(DEMO||!SB){ out.innerHTML=`<div class="soft-card"><div class="soft" style="font-size:12.5px">✨ Runs once the analyze function is deployed and demo is off. See EDGE-FUNCTION-SETUP.md. 🐙</div></div>`; return; }
   out.innerHTML=`<div class="label">optimizing… 🐙</div>`;
   try{
-    const input={ title:document.getElementById("oTitle").value, format:document.getElementById("oFormat").value, platform:document.getElementById("oPlatform").value, topic:document.getElementById("oTopic").value };
+    const fmtEl=document.getElementById("oFormat"), platEl=document.getElementById("oPlatform");
+    const input={ kind:state.optMode, title:document.getElementById("oTitle").value, format:fmtEl?fmtEl.value:"long", platform:platEl?platEl.value:"youtube", topic:document.getElementById("oTopic").value, footer:CONFIG.descFooter };
     const r=await aiCall("optimize",input);
     if(r.error){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+    const block=(label,text)=>`<div class="label" style="margin-top:10px">${label} <button class="btn" data-act="copyText" data-t="${esc(text)}" style="padding:2px 8px;margin-left:6px">copy</button></div><div class="soft" style="font-size:12px;white-space:pre-wrap;margin-top:4px;border:1px solid var(--line);border-radius:10px;padding:10px">${esc(text)}</div>`;
     out.innerHTML=`<div class="soft-card">
       ${r.titleScore!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.titleScore}</span><span class="label">/ 100 title potential</span></div>`:""}
       ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
-      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">stronger titles — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
-      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">YouTube tags <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
+      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${state.optMode==="livestream"?"stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
+      ${r.description?block("Description",r.description):""}
+      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">tags <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
       ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">hashtags · 1S/2M/2L <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
+      ${r.goingLivePost?block("Going-live post",r.goingLivePost):""}
+      ${(r.tips&&r.tips.length)?`<div class="label" style="margin-top:10px">stream reminders 🌸</div>${r.tips.map(t=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(t)}</div>`).join("")}`:""}
     </div>`;
   }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
 }
@@ -858,6 +867,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="editChannel")return editChannel();
   if(act==="saveChannel")return saveChannel();
   if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
+  if(act==="optMode"){ state.optMode=el.dataset.v; return render(); }
   if(act==="runOptimize")return runOptimize();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
   if(act==="saveReview")return saveReview();
