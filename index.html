@@ -121,6 +121,8 @@ const CONFIG = {
   anonKey: "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2", // Supabase publishable (public) key
   userId: "eggie",
   readOnly: false,
+  youtubeChannelId: "UCafRwkDb29wF0MPuZa4zzPA", // EggieWeggie VT — for auto channel-pull
+  discordInvite: "suckegg",                      // discord.gg/suckegg — for member count
   taxRate: 0.25,  // suggested % of income to set aside for taxes/savings
   // Your rate card — used by the Pitch Builder. Edit freely; 0 = "let's talk".
   rateCard: { "Sponsored short": 150, "Sponsored stream": 250, "Dedicated long-form video": 400, "Affiliate / code": 0 },
@@ -269,7 +271,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["habits","🌸 Habits"],["health","💗 Health"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 
@@ -284,6 +286,7 @@ async function render(){
     if(state.tab==="home") view.innerHTML=await renderHome();
     else if(state.tab==="content") view.innerHTML=await renderContent();
     else if(state.tab==="habits") view.innerHTML=await renderHabits();
+    else if(state.tab==="optimize") view.innerHTML=renderOptimize();
     else if(state.tab==="health") view.innerHTML=await renderHealth();
     else if(state.tab==="income") view.innerHTML=await renderIncome();
     else if(state.tab==="pitch") view.innerHTML=await renderPitch();
@@ -363,7 +366,7 @@ function cardPipelineSnap(content){
 function cardChannel(day){
   const ch=day.channel||{};
   const stat=(k,lbl)=>`<div class="soft-card" style="text-align:center"><div class="num" style="font-size:17px;font-family:var(--display)">${ch[k]!=null?Number(ch[k]).toLocaleString():"—"}</div><div class="label">${lbl}</div></div>`;
-  return `<section class="panel"><div class="card-head"><span class="label">Channel pulse</span><button class="btn" data-act="editChannel" ${RO?"disabled":""}>edit</button></div>
+  return `<section class="panel"><div class="card-head"><span class="label">Channel pulse</span><div style="display:flex;gap:6px"><button class="btn" data-act="autoChannel" ${RO?"disabled":""} title="Auto-pull YouTube + Discord">↻ auto</button><button class="btn" data-act="editChannel" ${RO?"disabled":""}>edit</button></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${stat("twitch","Twitch")}${stat("twitch_subs","Subs")}${stat("youtube","YouTube")}${stat("tiktok","TikTok")}${stat("twitter","X")}${stat("discord","Discord")}</div></section>`;
 }
 function cardGoals(goals){
@@ -740,6 +743,39 @@ function renderAsk(){
     <div id="askResults" style="margin-top:14px"></div></div>`;
 }
 
+/* ===================== VIDEO OPTIMIZATION ===================== */
+function renderOptimize(){
+  return `<div class="panel" style="max-width:760px;margin:0 auto">
+    <div class="card-head"><h2 style="font-size:18px">🎯 Video optimization</h2><span class="label">title score · tags · hashtags</span></div>
+    <p class="soft" style="font-size:12.5px;margin:0 0 12px">Drop in a title + what the video's about. I'll score the title, suggest stronger ones, and generate YouTube tags + hashtags (1S/2M/2L) — in your voice, learning from your channel.${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
+    <div class="label">Title / working title</div><input class="inp" id="oTitle" placeholder="e.g. I tried VTubing on a $0 budget" />
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div class="grow" style="min-width:140px"><div class="label">Format</div><select class="inp" id="oFormat"><option value="long">Long form</option><option value="short">Short form</option><option value="twitter">Twitter post</option></select></div>
+      <div class="grow" style="min-width:140px"><div class="label">Platform</div><select class="inp" id="oPlatform">${Object.entries(CONFIG.platforms).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
+    </div>
+    <div class="label" style="margin-top:10px">What's it about? (topic, hook, key points)</div><textarea class="inp" id="oTopic" rows="3" placeholder="the angle, what happens, who it's for…"></textarea>
+    <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
+    <div id="optOut" style="margin-top:14px"></div>
+  </div>`;
+}
+async function runOptimize(){
+  const out=document.getElementById("optOut"); if(!out)return;
+  if(DEMO||!SB){ out.innerHTML=`<div class="soft-card"><div class="soft" style="font-size:12.5px">✨ Runs once the analyze function is deployed and demo is off. See EDGE-FUNCTION-SETUP.md. 🐙</div></div>`; return; }
+  out.innerHTML=`<div class="label">optimizing… 🐙</div>`;
+  try{
+    const input={ title:document.getElementById("oTitle").value, format:document.getElementById("oFormat").value, platform:document.getElementById("oPlatform").value, topic:document.getElementById("oTopic").value };
+    const r=await aiCall("optimize",input);
+    if(r.error){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+    out.innerHTML=`<div class="soft-card">
+      ${r.titleScore!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.titleScore}</span><span class="label">/ 100 title potential</span></div>`:""}
+      ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
+      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">stronger titles — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
+      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">YouTube tags <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
+      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">hashtags · 1S/2M/2L <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
+    </div>`;
+  }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
+}
+
 /* ===================== HELPERS ===================== */
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening";}
@@ -755,7 +791,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -821,6 +857,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="delMed")return delMed(id);
   if(act==="editChannel")return editChannel();
   if(act==="saveChannel")return saveChannel();
+  if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
+  if(act==="runOptimize")return runOptimize();
+  if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
   if(act==="saveReview")return saveReview();
   if(act==="ask")return ask();
 });

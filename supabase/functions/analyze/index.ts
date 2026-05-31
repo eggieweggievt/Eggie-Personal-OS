@@ -87,6 +87,40 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const mode = body.mode || "analyze";
     const userId = body.userId || "eggie";
+
+    // --- channelStats: auto-pull free social numbers (YouTube subs + Discord) ---
+    // Writes them into today's daily_logs.channel so a weekly cron can refresh
+    // with no page open. Manual-only platforms (Twitch/TikTok/X/IG) are preserved.
+    if (mode === "channelStats") {
+      const out: Record<string, number> = {};
+      const cid = body.channelId || Deno.env.get("YOUTUBE_CHANNEL_ID");
+      const yk = Deno.env.get("YOUTUBE_API_KEY");
+      if (cid && yk) {
+        try {
+          const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${encodeURIComponent(cid)}&key=${yk}`).then((x) => x.json());
+          const s = r?.items?.[0]?.statistics;
+          if (s) { out.youtube = Number(s.subscriberCount); out.views = Number(s.viewCount); }
+        } catch { /* ignore */ }
+      }
+      const inv = body.discordInvite || Deno.env.get("DISCORD_INVITE");
+      if (inv) {
+        try {
+          const d = await fetch(`https://discord.com/api/v10/invites/${encodeURIComponent(inv)}?with_counts=true`).then((x) => x.json());
+          if (d && d.approximate_member_count != null) out.discord = Number(d.approximate_member_count);
+        } catch { /* ignore */ }
+      }
+      if (!Object.keys(out).length) return json({ error: "Nothing to pull — set YOUTUBE_API_KEY (+ channel id) and/or a Discord invite." }, 400);
+      try {
+        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const today = new Date().toLocaleDateString("en-CA");
+        const { data } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", today).maybeSingle();
+        let notes: any = {}; try { notes = data?.notes ? JSON.parse(data.notes) : {}; } catch { notes = {}; }
+        notes.channel = { ...(notes.channel || {}), ...out };
+        await sb.from("daily_logs").upsert({ user_id: userId, log_date: today, notes: JSON.stringify(notes), updated_at: new Date().toISOString() }, { onConflict: "user_id,log_date" });
+      } catch { /* return numbers even if persist fails */ }
+      return json({ channel: out });
+    }
+
     const history = await historyFor(userId);
     const vidiq = body.vidiq ? `\n\nLive VidIQ data the user attached:\n${JSON.stringify(body.vidiq).slice(0, 3500)}` : "";
 
@@ -99,6 +133,26 @@ Deno.serve(async (req) => {
         1400,
       );
       return json({ answer });
+    }
+
+    if (mode === "optimize") {
+      const i = body.input || {};
+      const raw = await claude(
+        BRAND,
+        `Optimize this video for ${i.platform || "YouTube"} (${i.format || "long-form"}). Return ONLY JSON:
+{ "titleScore": number, "titleWhy": string, "titles": string[], "tags": string[], "hashtags": string[] }
+- titleScore: 0-100 estimated click potential; titleWhy: 1-2 sentences.
+- titles: 4 stronger options (curiosity/specificity; put searchable words where they help).
+- tags: 12-15 YouTube SEO tags / keywords, most important first.
+- hashtags: 5 following 1 small / 2 medium / 2 large, right for the platform.
+
+Title: ${i.title || "(none)"}
+Topic / notes: ${(i.topic || "").toString().slice(0, 1200)}
+Her recent content:
+${history}${vidiq}`,
+        1800,
+      );
+      return json(parseJSON(raw) || { titleWhy: raw, titles: [], tags: [], hashtags: [] });
     }
 
     // mode === "analyze"

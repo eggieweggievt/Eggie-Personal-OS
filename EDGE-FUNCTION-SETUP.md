@@ -36,6 +36,31 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-xxxxxxxx
 That's the only required secret. (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to the
 function automatically.) Optional: `supabase secrets set ANTHROPIC_MODEL=claude-sonnet-4-6` to pin a model.
 
+### Optional — auto-pull your channel numbers
+
+To make the **↻ auto** button on Channel Pulse fill your YouTube subs + Discord members:
+
+```bash
+supabase secrets set YOUTUBE_API_KEY=AIza...          # free: console.cloud.google.com → enable "YouTube Data API v3" → create an API key
+supabase secrets set YOUTUBE_CHANNEL_ID=UCafRwkDb29wF0MPuZa4zzPA   # your EggieWeggie VT channel
+supabase secrets set DISCORD_INVITE=suckegg           # the code from discord.gg/suckegg
+```
+
+(Twitch / TikTok / X / Instagram don't offer free auto-counts, so those stay manual.)
+
+### Optional — refresh weekly on a schedule
+
+In your Supabase dashboard → **Integrations → Cron → Create job**:
+- **Schedule:** `0 9 * * 1` (every Monday 9am UTC)
+- **Type:** Supabase Edge Function → `analyze`
+- **HTTP body:** `{ "mode": "channelStats" }`
+
+The function writes the numbers into that day's log itself, so your Channel Pulse stays fresh with
+no page open. (It uses the `YOUTUBE_CHANNEL_ID` + `DISCORD_INVITE` secrets above.)
+
+> Whenever you change `supabase/functions/analyze/index.ts`, redeploy:
+> `supabase functions deploy analyze --no-verify-jwt`
+
 ## 4. Deploy the function
 
 ```bash
