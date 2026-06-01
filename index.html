@@ -143,6 +143,16 @@
   .joy-pick{min-height:26px;font-family:var(--display);font-size:16px;color:var(--lav-deep);margin-top:6px;text-align:center;}
   .joy-pick.pop{animation:joypop .5s ease;}
   @keyframes joypop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.13)}100%{transform:scale(1);opacity:1}}
+  /* ---- collapsible accordion (low cognitive load) ---- */
+  details.acc{border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow-sm);margin-bottom:12px;overflow:hidden;}
+  details.acc>summary{list-style:none;cursor:pointer;padding:13px 16px;font-family:var(--display);font-size:15px;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  details.acc>summary::-webkit-details-marker{display:none;}
+  details.acc>summary::after{content:"▸";color:var(--muted);transition:transform .2s;}
+  details.acc[open]>summary::after{transform:rotate(90deg);}
+  details.acc>.acc-body{padding:2px 16px 16px;}
+  /* health counter stepper */
+  .hcount{display:flex;align-items:center;gap:8px;}
+  .hcount>span{min-width:30px;text-align:center;font-size:18px;font-family:var(--display);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -256,7 +266,115 @@ const DBT_SKILLS = [
   ]}
 ];
 const DEFAULT_JOY = ["Replay a comfort game (no content goal)","Watch an episode of something cozy","Draw something silly for no one","Nap without guilt 🌙","Snacky desk picnic","Reread a favourite fic or comic","Long shower + good playlist","Animal / pet time","Doodle Eggie in a tiny hat","Step outside for 5 quiet minutes"];
-const PERMISSION_SLIPS = ["Rest is productive. 🐙","You're allowed to enjoy things that aren't work.","Joy isn't a reward you have to earn.","A slow day is still a valid day.","You don't have to finish the list to deserve a break.","Playing counts as taking care of yourself.","Your worth isn't your output. 💗","Low-spoon days are for being, not doing."];
+const PERMISSION_SLIPS = ["Rest is productive. 🐙","You're allowed to enjoy things that aren't work.","Joy isn't a reward you have to earn.","A slow day is still a valid day.","You don't have to finish the list to deserve a break.","Playing counts as taking care of yourself.","Your worth isn't your output. 💗","Low-spoon days are for being, not doing.","You're allowed to do things badly and still be proud.","Caring for your body is real work too."];
+/* ---- care: more skill decks (same shape as DBT_SKILLS → rendered by dbtCard) ---- */
+const EMOTION_FIRSTAID = [
+  { emoji:"🏷️", title:"Name it to tame it", tint:"#ece2fb", sub:"Labelling a feeling calms the alarm part of the brain", items:[
+    ["Say it plainly","\"I'm noticing anxiety. I'm noticing a tight chest.\" Naming gives your thinking brain something to hold."],
+    ["Feelings aren't facts","A feeling can be huge and still not be the truth about you or the situation."],
+    ["Rate it 0–10","Putting a number on it makes it finite — and numbers come back down."]
+  ]},
+  { emoji:"🌧️", title:"RAIN", tint:"#ddf4ec", sub:"A gentle way to be with a hard feeling", items:[
+    ["Recognise","Notice what's actually here right now."],
+    ["Allow","Let it be there for a moment without fixing it."],
+    ["Investigate","Where do I feel it in my body? What does it need?"],
+    ["Nurture","Offer yourself the kindness you'd give a friend. 🐙"]
+  ]},
+  { emoji:"🌊", title:"Surf the urge", tint:"#fde4ef", sub:"Urges rise, peak, and fall like waves", items:[
+    ["It's a wave, not a command","An urge will crest and pass whether or not you act on it."],
+    ["Ride ~10 minutes","Most urges soften within minutes if you don't feed them."],
+    ["Anchor while you wait","Slow breathing, cold water, a texture in your hand."]
+  ]},
+  { emoji:"🪟", title:"Window of tolerance", tint:"#fdeadb", sub:"Your calm-and-capable zone — narrower on hard days", items:[
+    ["Too high? (panic, rage, buzzing)","Ground DOWN: long exhales, cold water, weight/pressure, name 5 things you can see."],
+    ["Too low? (numb, frozen, shutdown)","Gently turn UP: stand, stretch, music, sip something cold, step outside."],
+    ["Be kind about it","Stress, masking and pain shrink the window. Rest widens it again."]
+  ]}
+];
+const EXEC_HELPERS = [
+  { emoji:"🪶", title:"Start tiny", tint:"#ece2fb", sub:"Initiation is the hard part — shrink it", items:[
+    ["The 2-minute version","Don't \"edit the video\" — just \"open the project file.\" Starting IS the win."],
+    ["Lower the bar","A messy done beats a perfect someday. You can always polish later."],
+    ["5-minute start","Timer for 5 min, full permission to stop after. Momentum usually carries you."]
+  ]},
+  { emoji:"👯", title:"Body doubling", tint:"#ddf4ec", sub:"Another presence makes starting easier", items:[
+    ["Co-work","A friend on call, a stream, or a focus-with-me video — just shared presence."],
+    ["Narrate it","Say the next step out loud; it offloads your working memory."],
+    ["Use the timer","The ⏱️ focus timer in the corner is a built-in body double."]
+  ]},
+  { emoji:"🍬", title:"Dopamine menu", tint:"#fde4ef", sub:"Plan your fun instead of doom-scrolling into it", items:[
+    ["Starters","Quick hits to begin: a song, a snack, a stretch, a tidy corner."],
+    ["Mains","Longer joys: a game, a craft, a walk — pair one with a dull task."],
+    ["Pair it","Dull task + a dopamine thing = your brain gets paid to start."]
+  ]},
+  { emoji:"⏰", title:"Transitions & inertia", tint:"#fdeadb", sub:"Stopping and switching is hard too", items:[
+    ["Warn yourself","Set an alarm ~10 min before you need to switch tasks."],
+    ["Bridge step","A tiny in-between (fill your water, stand up) eases the gear-change."],
+    ["Leave a breadcrumb","Note where you stopped so future-you can slip back in easily."]
+  ]},
+  { emoji:"🧠", title:"Externalise it", tint:"#ece2fb", sub:"Get it out of your head so it stops looping", items:[
+    ["Brain dump","Use the 🧠 brain-dump or a sticky — out of your head, onto the screen."],
+    ["One list, not five","The Planner is the single home. Trust it so you can stop holding it all."],
+    ["Make it visible","If it matters, it needs to be seen — timers, lists, sticky notes."]
+  ]}
+];
+const INTERPERSONAL = [
+  { emoji:"💬", title:"DEARMAN — ask for something", tint:"#ece2fb", sub:"Getting a need met, clearly and kindly", items:[
+    ["Describe · Express","State the facts, then how you feel about them."],
+    ["Assert · Reinforce","Ask clearly for what you want; note why it's worth it for them too."],
+    ["Mindful · Appear confident · Negotiate","Stay on point, steady tone, willing to meet partway."]
+  ]},
+  { emoji:"🤝", title:"GIVE — keep the relationship", tint:"#ddf4ec", sub:"For conversations you want to protect", items:[
+    ["Gentle","No attacks or threats — a soft start."],
+    ["Interested · Validate","Listen; show their feelings make sense."],
+    ["Easy manner","A little warmth or lightness lowers the stakes."]
+  ]},
+  { emoji:"🪷", title:"FAST — keep your self-respect", tint:"#fde4ef", sub:"Saying no without shrinking", items:[
+    ["Fair · no over-Apologies","Fair to you and them; don't apologise for having needs."],
+    ["Stick to values","You're allowed to hold your line."],
+    ["Truthful","No exaggeration — clear and honest."]
+  ]},
+  { emoji:"💔", title:"When rejection stings (RSD)", tint:"#fdeadb", sub:"That rejection spike is real — and survivable", items:[
+    ["Name it","\"This is an RSD wave.\" Naming loosens its grip."],
+    ["Delay the reaction","Don't send the text yet. Let the wave crest first."],
+    ["Check the story","Is this a fact, or a fear? Ask before you believe it."],
+    ["You're not too much","Needing connection isn't a flaw. 🐙"]
+  ]}
+];
+const SENSORY = [
+  { emoji:"🌀", title:"Overstimulated?", tint:"#ece2fb", sub:"Too much input — dial it down", items:[
+    ["Cut inputs","Dim the lights, headphones or ear plugs, fewer tabs, leave the loud room."],
+    ["Deep pressure","Weighted blanket, a tight hug, press your palms together."],
+    ["One sense at a time","Give your system a single, gentle thing to focus on."]
+  ]},
+  { emoji:"🫥", title:"Understimulated / foggy?", tint:"#ddf4ec", sub:"Not enough input — gently turn it up", items:[
+    ["Add input","Music, movement, cold water, a strong (nice) smell or flavour."],
+    ["Stim freely","Rock, flap, fidget, chew — stimming is regulation, not a problem."],
+    ["Change the scene","A different room or a few minutes outside can reset things."]
+  ]},
+  { emoji:"🐚", title:"Low-demand mode", tint:"#fde4ef", sub:"For when even small asks feel like too much", items:[
+    ["Drop to essentials","Water, meds, a snack, rest. That's a complete day."],
+    ["Remove choices","Pick the easy option on purpose — decisions cost spoons."],
+    ["No shame","A low-demand day is care, not falling behind."]
+  ]}
+];
+const CREATIVE_REFRAMES = [
+  { emoji:"🎨", title:"Done beats perfect", tint:"#fde4ef", sub:"Perfectionism is often avoidance in disguise", items:[
+    ["Ship at 80%","Finished-and-shared teaches you more than perfect-and-hidden."],
+    ["Future-you can edit","Make the rough thing exist first. Polishing is a separate, easier task."],
+    ["Lower the stakes","Call it a draft or an experiment, not a deliverable."]
+  ]},
+  { emoji:"🌱", title:"Momentum > discipline", tint:"#ddf4ec", sub:"Tiny, kind, repeatable", items:[
+    ["Ride your interest","Work on the part that's sparking now — order doesn't matter."],
+    ["5 honest minutes","A little daily touch keeps a project alive better than rare marathons."],
+    ["Finish-line ritual","Invent a small reward for shipping, so completing feels good."]
+  ]},
+  { emoji:"🙅", title:"Beat the freeze (PDA-aware)", tint:"#ece2fb", sub:"When \"have to\" makes you stall", items:[
+    ["Make it your idea","\"Could be fun to try…\" lands softer than \"I must.\""],
+    ["Give yourself an out","Permission to stop reduces the pressure that triggers the freeze."],
+    ["Shrink it again","Too big to start = still too big. Cut it in half, then half again."]
+  ]}
+];
 
 /* ---- demo store ---- */
 const demo = {
@@ -703,6 +821,7 @@ async function renderPlanner(){
 }
 
 /* ===================== CARE (self-care · DBT · mindfulness) ===================== */
+function flipDeck(list){ return `<div class="dbt-grid">${list.map(dbtCard).join("")}</div>`; }
 function dbtCard(s){
   return `<div class="flip" data-act="careCard"><div class="flip-inner">
     <div class="flip-face flip-front" style="background:${s.tint}">
@@ -722,7 +841,7 @@ async function renderCare(){
   const sent=await DB.daily(SENTINEL); const day=await DB.daily(TODAY);
   const joy=(sent.joyJar&&sent.joyJar.length)?sent.joyJar:DEFAULT_JOY.slice();
   state.joy=joy;
-  const care=day.care||{};
+  const care=day.care||{}; const cf=sent.creativeFocus||{};
   const slip=PERMISSION_SLIPS[new Date().getDate()%PERMISSION_SLIPS.length];
   const jarBubs=[["#ec7faf",42,70,0],["#a98fe0",62,84,.6],["#f3a978",54,100,1.2],["#5cc6a3",74,64,1.8],["#db5e98",48,52,2.4]]
     .map(([c,x,y,d])=>`<circle class="jar-bub" cx="${x}" cy="${y}" r="6.5" fill="${c}" opacity=".85" style="animation-delay:${d}s"/>`).join("");
@@ -741,9 +860,22 @@ async function renderCare(){
       <p class="soft" style="font-size:11.5px;margin:10px auto 0;max-width:340px">4 in · 2 hold · 6 out. A longer out-breath gently tells your body you're safe.</p>
     </div>
 
+    <div style="margin-bottom:4px"><span class="label">🧰 skills & tools — tap a header to open, tap a card to flip</span></div>
+    <details class="acc" open><summary>🧰 DBT skills</summary><div class="acc-body">${flipDeck(DBT_SKILLS)}</div></details>
+    <details class="acc"><summary>🆘 Emotion first-aid</summary><div class="acc-body">${flipDeck(EMOTION_FIRSTAID)}</div></details>
+    <details class="acc"><summary>🚀 Executive-function helpers</summary><div class="acc-body">${flipDeck(EXEC_HELPERS)}</div></details>
+    <details class="acc"><summary>🗣️ Hard conversations & rejection</summary><div class="acc-body">${flipDeck(INTERPERSONAL)}</div></details>
+    <details class="acc"><summary>🎧 Sensory & overwhelm</summary><div class="acc-body">${flipDeck(SENSORY)}</div></details>
+
     <div class="panel" style="margin-bottom:14px">
-      <div class="card-head"><span class="label">🧰 DBT skill cards</span><span class="soft" style="font-size:11.5px">tap a card to flip it</span></div>
-      <div class="dbt-grid">${DBT_SKILLS.map(dbtCard).join("")}</div>
+      <div class="card-head"><span class="label">🎨 creative goals — gently</span></div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 10px">Not a deadline machine — just the one thing you're playing with and the next tiny step. Done beats perfect, and joy counts as a reason. 💗</p>
+      <div class="label" style="margin-bottom:4px">What I'm playing with</div>
+      <input class="inp" id="cfProject" value="${esc(cf.project||"")}" placeholder="e.g. the cozy boss-fight edit" ${RO?"disabled":""}/>
+      <div class="label" style="margin:10px 0 4px">My next tiny step (the 2-minute version)</div>
+      <input class="inp" id="cfStep" value="${esc(cf.step||"")}" placeholder="e.g. just open the project file" ${RO?"disabled":""}/>
+      <button class="btn btn-pink" data-act="saveCreative" style="margin-top:10px" ${RO?"disabled":""}>💾 save</button>
+      <details class="acc" style="margin-top:12px"><summary>🌱 stuck or spiralling? open a reframe</summary><div class="acc-body">${flipDeck(CREATIVE_REFRAMES)}</div></details>
     </div>
 
     <div class="panel" style="margin-bottom:14px">
@@ -892,6 +1024,7 @@ function pitchBlock(title,text,id,rows){return `<div style="margin-bottom:14px">
 /* ===================== HEALTH ===================== */
 const JOINTS=["jaw","shoulders","wrists","fingers","hips","knees","ankles","spine"];
 function hscale(label,f,cur,hint){ let b=""; for(let i=0;i<=5;i++)b+=`<button data-act="healthSet" data-f="${f}" data-v="${i}" class="${(cur??-1)===i?'on':''}">${i}</button>`; return `<div style="margin:10px 0"><div class="label" style="margin-bottom:4px">${label}${hint?` <span class="muted">· ${hint}</span>`:""}</div><div class="scale">${b}</div></div>`; }
+function hcounter(label,f,cur,hint){ return `<div><div class="label" style="margin-bottom:4px">${label}${hint?` <span class="muted">· ${hint}</span>`:""}</div><div class="hcount"><button class="btn" data-act="healthCounter" data-f="${f}" data-d="-1" ${RO?"disabled":""} style="width:34px;padding:6px 0">−</button><span class="num">${Number(cur)||0}</span><button class="btn" data-act="healthCounter" data-f="${f}" data-d="1" ${RO?"disabled":""} style="width:34px;padding:6px 0">+</button></div></div>`; }
 async function renderHealth(){
   const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(30)]);
   const h=day.health||{}; const meds=await loadMeds(); const joints=h.joints||[];
@@ -919,6 +1052,41 @@ async function renderHealth(){
         <div><div class="label" style="margin-bottom:4px">Sleep quality</div><div class="scale">${[1,2,3,4,5].map(i=>`<button data-act="healthSet" data-f="sleepQ" data-v="${i}" class="${h.sleepQ===i?'on':''}">${i}</button>`).join("")}</div></div>
       </div>
     </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🫀 POTS care today</h2><span class="label">hydrate · salt · compress</span></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Little things that help blood volume and standing. Tap as you go — no targets to fail, just a gentle count. 💧</p>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+        ${hcounter("💧 Water","water",h.water,"cups · many aim ~8–12")}
+        ${hcounter("🧂 Salt / electrolytes","salt",h.salt,"servings")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="chiptog ${h.compression?'on':''}" data-act="healthToggle" data-f="compression"><span class="check ${h.compression?'on':''}"></span>🧦 Wore compression</button>
+        <button class="chiptog ${h.legsup?'on':''}" data-act="healthToggle" data-f="legsup"><span class="check ${h.legsup?'on':''}"></span>🦵 Legs-up / reclined break</button>
+      </div>
+      ${hscale("Lightheaded on standing","lighthead",h.lighthead,"0 fine → 5 nearly fainted")}
+      ${hscale("Heart racing / palpitations","palp",h.palp)}
+      <details class="acc" style="margin-top:12px"><summary>🆘 feeling faint? quick counter-moves</summary><div class="acc-body" style="font-size:12.5px;line-height:1.65">
+        <b>Before you stand:</b> pump your calves, clench legs + glutes + tummy for a few seconds, then rise slowly.<br>
+        <b>If the room swims:</b> cross your legs and squeeze hard, or squat / sit down, or tense your whole body and grip your hands together.<br>
+        <b>Buy time:</b> get low before you fall — sitting on the floor is a smart win, not a defeat. 🐙
+        <div class="soft" style="margin-top:8px">General comfort tips, not medical advice — your care team's plan always comes first.</div>
+      </div></details>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🦴 Joints & pacing</h2><span class="label">EDS care</span></div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+        ${hcounter("🩹 Joint slips / subluxations","slips",h.slips,"just a tally — no judgment")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="chiptog ${h.bracing?'on':''}" data-act="healthToggle" data-f="bracing"><span class="check ${h.bracing?'on':''}"></span>🩹 Braced / supported a joint</button>
+        <button class="chiptog ${h.movement?'on':''}" data-act="healthToggle" data-f="movement"><span class="check ${h.movement?'on':''}"></span>🧘 Gentle movement / PT</button>
+        <button class="chiptog ${h.paced?'on':''}" data-act="healthToggle" data-f="paced"><span class="check ${h.paced?'on':''}"></span>🐢 Paced myself today</button>
+      </div>
+      <details class="acc" style="margin-top:14px"><summary>🐢 pacing — the 3 P's</summary><div class="acc-body" style="font-size:12.5px;line-height:1.65">
+        <b>Plan</b> — spread heavy tasks across days; put rest <i>before</i> the crash, not after.<br>
+        <b>Prioritise</b> — pick the few things that truly matter; the rest can wait or go to Someday.<br>
+        <b>Pace</b> — break tasks up, rest in the middle, and stop while you've still got a spoon left.<br>
+        <span class="pink">Mind the boom-bust trap:</span> a good day tempts you to do everything, then you pay for it for days. Staying inside your energy envelope keeps more good days in the month. 🥄
+      </div></details>
+    </div>
     <div class="panel"><div class="card-head"><h2 style="font-size:18px">💊 Meds today</h2><button class="btn" data-act="editMeds">edit list</button></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${medRows}</div></div>
     <div class="panel"><div class="card-head"><h2 style="font-size:18px">🌶️ Flare + notes</h2></div>
@@ -928,7 +1096,7 @@ async function renderHealth(){
       <button class="btn btn-pink" data-act="saveHealthNotes" style="margin-top:10px">💾 save notes + sleep</button>
     </div>
     <div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Last 14 days</h2><span class="label">your patterns</span></div>
-      ${[["Pain","pain",5,0],["Fatigue","fatigue",5,0],["Mood","mood",6,3],["Anxiety","anxiety",5,0],["Sleep (hrs)","sleepH",12,0]].map(([l,f,mx,sh])=>`<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><span style="width:88px;font-size:12px" class="soft">${l}</span>${spark(f,mx,sh)}</div>`).join("")}
+      ${[["Pain","pain",5,0],["Fatigue","fatigue",5,0],["Lightheaded","lighthead",5,0],["Mood","mood",6,3],["Anxiety","anxiety",5,0],["Water (cups)","water",12,0],["Sleep (hrs)","sleepH",12,0]].map(([l,f,mx,sh])=>`<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><span style="width:88px;font-size:12px" class="soft">${l}</span>${spark(f,mx,sh)}</div>`).join("")}
       ${flares.length?`<div class="label" style="margin-top:12px">recent flares</div>${flares.map(r=>`<div style="font-size:12px;margin-top:3px" class="soft">🌶️ ${r.date}${r.notes.health.triggers?` · ${esc(r.notes.health.triggers)}`:""}</div>`).join("")}`:""}
       <p class="soft" style="font-size:11.5px;margin-top:12px">Gaps are fine — a missing bar just means a rest day from tracking. 💗</p>
     </div>
@@ -1203,7 +1371,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel","healthCounter","healthToggle","saveCreative"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1305,6 +1473,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); settingsModal(); render(); return; }
   if(act==="exitFocus"){ localStorage.setItem("eggie-focus","0"); applySettings(); render(); return; }
   if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),[f]:v}})); render(); }
+  if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const hh={...(n.health||{})};hh[f]=Math.max(0,(Number(hh[f])||0)+d);return {...n,health:hh};}); render(); }
+  if(act==="healthToggle"){ const f=el.dataset.f; await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),[f]:!((n.health||{})[f])}})); render(); }
+  if(act==="saveCreative"){ const project=document.getElementById("cfProject").value.trim(), step=document.getElementById("cfStep").value.trim(); await DB.saveDaily(SENTINEL,n=>({...n,creativeFocus:{project,step}})); toast("Saved 🎨 one tiny step at a time"); render(); return; }
   if(act==="healthJoint"){ const j=el.dataset.j; await DB.saveDaily(TODAY,n=>{const cur=(n.health&&n.health.joints)||[];const joints=cur.includes(j)?cur.filter(x=>x!==j):[...cur,j];return {...n,health:{...(n.health||{}),joints}};}); render(); }
   if(act==="medToggle"){ await DB.saveDaily(TODAY,n=>{const meds={...((n.health&&n.health.meds)||{})};meds[id]=!meds[id];return {...n,health:{...(n.health||{}),meds}};}); render(); }
   if(act==="healthFlare"){ await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),flare:!((n.health||{}).flare)}})); render(); }
