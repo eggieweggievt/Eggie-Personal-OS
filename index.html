@@ -123,6 +123,26 @@
   .ft-ring.running svg{animation:ftpulse 2.6s ease-in-out infinite;}
   @keyframes ftpulse{0%,100%{filter:drop-shadow(0 0 0 rgba(236,127,175,0))}50%{filter:drop-shadow(0 0 7px rgba(236,127,175,.55))}}
   .ft-time{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:25px;color:var(--ink);}
+  /* ---- planner ---- */
+  .focus-one{box-shadow:var(--shadow);}
+  /* ---- care: breathing bubble ---- */
+  .breath-wrap{position:relative;height:240px;display:grid;place-items:center;}
+  .breath-bubble{width:110px;height:110px;border-radius:999px;background:radial-gradient(circle at 35% 30%,#fcdcef,var(--pink) 58%,var(--lav));box-shadow:0 0 42px rgba(169,143,224,.5);transform:scale(1);will-change:transform;}
+  .breath-label{position:absolute;font-family:var(--display);font-size:17px;color:#fff;text-shadow:0 1px 7px rgba(141,111,209,.65);pointer-events:none;}
+  /* ---- care: DBT flip cards ---- */
+  .dbt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+  .flip{perspective:1100px;min-height:208px;cursor:pointer;}
+  .flip-inner{position:relative;width:100%;min-height:208px;transition:transform .6s;transform-style:preserve-3d;}
+  .flip.open .flip-inner{transform:rotateY(180deg);}
+  .flip-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:16px;border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;}
+  .flip-back{background:#fff;transform:rotateY(180deg);overflow:auto;}
+  /* ---- care: joy jar ---- */
+  .jar-stage{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .jar-bub{animation:jarfloat 4.5s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+  @keyframes jarfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  .joy-pick{min-height:26px;font-family:var(--display);font-size:16px;color:var(--lav-deep);margin-top:6px;text-align:center;}
+  .joy-pick.pop{animation:joypop .5s ease;}
+  @keyframes joypop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.13)}100%{transform:scale(1);opacity:1}}
 </style>
 </head>
 <body>
@@ -212,6 +232,32 @@ const SPONSOR_STAGES = [["draft","Draft"],["sent","Sent"],["responded","Responde
 const CRITERIA = [["relevant","Relevant"],["nonobvious","Non-obvious"],["absorbable","Absorbable"],["actionable","Actionable"]];
 const CHANNEL_STATS = [["twitch","Twitch followers"],["twitch_subs","Twitch subs"],["youtube","YouTube subs"],["tiktok","TikTok"],["twitter","X"],["discord","Discord"]];
 
+/* ---- planner: buckets + spoon levels (Content = the job; no separate Work bucket) ---- */
+const TASK_BUCKETS = [["personal","💜","Personal"],["content","🎬","Content"],["hobbies","🎨","Hobbies"],["health","💊","Health & appts"],["someday","🌙","Someday / maybe"]];
+const TASK_SPOONS = [["low","🌙","Low spoons"],["some","🌤","Some spoons"],["full","🌞","Full spoons"]];
+/* ---- care: DBT skills (summarized from public DBT skill lists — not clinical advice) ---- */
+const DBT_SKILLS = [
+  { id:"dt", emoji:"🌊", title:"Distress Tolerance", tint:"#ece2fb", sub:"Getting through a hard moment without making it worse", items:[
+    ["TIPP","Reset your body fast: cool <b>T</b>emperature (cold water on your face), a minute of <b>I</b>ntense movement, <b>P</b>aced breathing (out longer than in), <b>P</b>aired muscle relaxation."],
+    ["STOP","<b>S</b>top · <b>T</b>ake a step back · <b>O</b>bserve what's actually happening · <b>P</b>roceed gently."],
+    ["ACCEPTS","Distract kindly: <b>A</b>ctivities, <b>C</b>ontributing, <b>C</b>omparisons, <b>E</b>motions (opposite), <b>P</b>ushing away, <b>T</b>houghts, <b>S</b>ensations."],
+    ["Self-soothe (5 senses)","One kind thing per sense — a soft blanket, a warm drink, a comfort playlist, a nice smell, something pretty to look at."]
+  ]},
+  { id:"er", emoji:"🌷", title:"Emotion Regulation", tint:"#fde4ef", sub:"Caring for the soil your feelings grow in", items:[
+    ["PLEASE","Treat <b>PL</b> physical illness, balanced <b>E</b>ating, <b>A</b>void mood-altering stuff, <b>S</b>leep, gentle <b>E</b>xercise. Your body sets your baseline."],
+    ["Accumulate positives","Do one small thing you enjoy on purpose, today. Joy is allowed without being earned."],
+    ["Build mastery","One tiny thing that makes you feel capable. Done beats perfect."],
+    ["Opposite action","If a feeling says hide, peek out a little. Act opposite to the urge, gently."]
+  ]},
+  { id:"mf", emoji:"🫧", title:"Mindfulness", tint:"#ddf4ec", sub:"Coming back to right now", items:[
+    ["One thing in the moment","Do just the thing you're doing. One task, one breath, one octopus at a time."],
+    ["Observe & describe","Name what you notice without judging it: \"I notice tightness. I notice a thought.\""],
+    ["Use the bubble","A longer out-breath than in-breath tells your nervous system you're safe. The bubble up top paces it for you."]
+  ]}
+];
+const DEFAULT_JOY = ["Replay a comfort game (no content goal)","Watch an episode of something cozy","Draw something silly for no one","Nap without guilt 🌙","Snacky desk picnic","Reread a favourite fic or comic","Long shower + good playlist","Animal / pet time","Doodle Eggie in a tiny hat","Step outside for 5 quiet minutes"];
+const PERMISSION_SLIPS = ["Rest is productive. 🐙","You're allowed to enjoy things that aren't work.","Joy isn't a reward you have to earn.","A slow day is still a valid day.","You don't have to finish the list to deserve a break.","Playing counts as taking care of yourself.","Your worth isn't your output. 💗","Low-spoon days are for being, not doing."];
+
 /* ---- demo store ---- */
 const demo = {
   content: [
@@ -261,6 +307,15 @@ demo.daily[SENTINEL] = {
   goals_week_items:[ {id:"g1",text:"Ship 3 shorts",done:false},{id:"g2",text:"Send 2 sponsor pitches",done:true},{id:"g3",text:"Debut anniversary post",done:false} ],
   goals_month_items:[ {id:"g4",text:"Hit Twitch Affiliate goals",done:false},{id:"g5",text:"Launch a Ko-fi membership tier",done:false} ],
   review:{}, taxRate:0.25, setAside:{}, habitsLib:null,
+  tasks:[
+    { id:"t1", text:"Reply to the keyboard sponsor email", bucket:"content", spoon:"some", done:false, sub:[{id:"s1",text:"re-read their offer",done:true},{id:"s2",text:"draft a yes / maybe",done:false}] },
+    { id:"t2", text:"Refill meds", bucket:"health", spoon:"low", done:false, sub:[] },
+    { id:"t3", text:"Finish the cozy boss edit", bucket:"content", spoon:"full", done:false, sub:[] },
+    { id:"t4", text:"Tidy the desk corner", bucket:"personal", spoon:"low", done:true, sub:[] },
+    { id:"t5", text:"Replay a comfort game — just for fun", bucket:"hobbies", spoon:"low", done:false, sub:[] },
+    { id:"t6", text:"Try watercolours again, sometime", bucket:"someday", spoon:"some", done:false, sub:[] },
+  ],
+  joyJar: DEFAULT_JOY.slice(),
 };
 
 /* ===================== DATA LAYER ===================== */
@@ -312,8 +367,8 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
-const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video" };
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
+const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 
 async function render(){
@@ -328,6 +383,8 @@ async function render(){
   try{
     if(state.tab==="home") view.innerHTML=await renderHome();
     else if(state.tab==="content") view.innerHTML=await renderContent();
+    else if(state.tab==="planner") view.innerHTML=await renderPlanner();
+    else if(state.tab==="care") view.innerHTML=await renderCare();
     else if(state.tab==="habits") view.innerHTML=await renderHabits();
     else if(state.tab==="optimize") view.innerHTML=renderOptimize();
     else if(state.tab==="health") view.innerHTML=await renderHealth();
@@ -583,6 +640,136 @@ async function saveHabit(id){
   await saveLib(lib); document.getElementById("modal").innerHTML=""; toast("Saved 🌸"); render();
 }
 async function delHabit(id){ const lib=state.lib.filter(x=>x.id!==id); await saveLib(lib); document.getElementById("modal").innerHTML=""; toast("Removed"); render(); }
+
+/* ===================== PLANNER ===================== */
+function bucketLabel(k){ const b=TASK_BUCKETS.find(x=>x[0]===k); return b?b[1]+" "+b[2]:k; }
+function spoonShort(s){ return {low:"🌙",some:"🌤",full:"🌞"}[s]||"·"; }
+function spoonLabel(s){ const b=TASK_SPOONS.find(x=>x[0]===s); return b?b[1]+" "+b[2]:"any spoons"; }
+function spoonPill(s){ return {low:"pill-lav",some:"pill-peach",full:"pill-mint"}[s]||"pill-gray"; }
+function taskRow(t){
+  const subs=t.sub||[];
+  return `<div class="hbtn ${t.done?'done':''}" style="display:block;margin-bottom:7px">
+    <div style="display:flex;align-items:center;gap:9px">
+      <button class="check ${t.done?'on':''}" data-act="taskDone" data-id="${t.id}" ${RO?"disabled":""} style="padding:0"></button>
+      <span class="grow" style="font-size:13px;${t.done?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span>
+      <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
+      <button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="Focus on just this one">◎</button>
+      <button class="ft-ic" data-act="addSubtask" data-id="${t.id}" title="Break into a step" ${RO?"disabled":""}>＋</button>
+      <button class="ft-ic" data-act="delTask" data-id="${t.id}" title="Remove" ${RO?"disabled":""} style="color:var(--rose)">🗑</button>
+    </div>
+    ${subs.length?`<div style="margin:6px 0 2px 27px;display:flex;flex-direction:column;gap:5px">${subs.map(s=>`<div style="display:flex;align-items:center;gap:8px"><button class="check ${s.done?'on':''}" data-act="subDone" data-id="${t.id}" data-sid="${s.id}" ${RO?"disabled":""} style="padding:0;width:15px;height:15px"></button><span style="font-size:12px;${s.done?'text-decoration:line-through;opacity:.55':''}">${esc(s.text)}</span><button class="ft-ic" data-act="delSub" data-id="${t.id}" data-sid="${s.id}" ${RO?"disabled":""} style="color:var(--rose);font-size:12px;padding:0 3px">×</button></div>`).join("")}</div>`:""}
+  </div>`;
+}
+async function renderPlanner(){
+  const sent=await DB.daily(SENTINEL); const tasks=sent.tasks||[];
+  /* focus-one-thing mode */
+  if(state.focusTask){
+    const t=tasks.find(x=>x.id===state.focusTask);
+    if(t) return `<div class="panel focus-one" style="max-width:520px;margin:6vh auto;text-align:center">
+      <div class="label">just this one thing 🐙</div>
+      <div style="font-size:22px;font-family:var(--display);margin:18px 0 8px;${t.done?'text-decoration:line-through;opacity:.5':''}">${esc(t.text)}</div>
+      <div class="soft" style="font-size:12.5px;margin-bottom:22px">${bucketLabel(t.bucket)} · ${spoonLabel(t.spoon)}</div>
+      <button class="btn btn-pink" data-act="taskDone" data-id="${t.id}" ${RO?"disabled":""} style="font-size:14px;padding:10px 24px">${t.done?'↩ not yet':'✓ done — nice'}</button>
+      <div style="margin-top:20px"><button class="btn" data-act="focusClear">← back to all tasks</button></div>
+    </div>`;
+    state.focusTask=null;
+  }
+  const sf=state.taskSpoon||"all";
+  const match=t=> sf==="all" || t.spoon===sf || (sf==="low" && !t.spoon);
+  const groups=TASK_BUCKETS.map(([key,emoji,label])=>{
+    const list=tasks.filter(t=>t.bucket===key && match(t));
+    if(!list.length && key!=="someday") return "";
+    const doneN=list.filter(t=>t.done).length;
+    const body=list.length?list.map(taskRow).join(""):`<div class="soft" style="font-size:12px;padding:4px 2px">${key==="someday"?"a no-pressure parking lot — nothing in here is ever overdue 🌙":"nothing here right now 🌸"}</div>`;
+    return `<div class="panel" style="margin-bottom:12px"><div class="card-head"><span class="label">${emoji} ${label}</span>${list.length?`<span class="pill pill-gray">${doneN}/${list.length}</span>`:""}</div>${body}</div>`;
+  }).join("");
+  const buckOpts=TASK_BUCKETS.map(([k,e,l])=>`<option value="${k}" ${(state.addBucket||"personal")===k?"selected":""}>${e} ${l}</option>`).join("");
+  const spoonOpts=TASK_SPOONS.map(([k,e,l])=>`<option value="${k}">${e} ${l}</option>`).join("");
+  const fbtn=(v,l)=>`<button data-act="taskSpoonFilter" data-v="${v}" class="${sf===v?'on':''}">${l}</button>`;
+  return `<div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="card-head"><h2 style="font-size:18px">🗒️ Planner</h2></div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">One calm list — nothing turns red, nothing nags. Break big things into a small step with ＋, and on a low-spoon day filter to just the gentle stuff. Tap ◎ to focus on a single task. 💗</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="grow" style="min-width:200px"><div class="label" style="margin-bottom:4px">New task</div><input class="inp" id="newTask" placeholder="e.g. reply to that email 🐙" ${RO?"disabled":""}/></div>
+        <div><div class="label" style="margin-bottom:4px">Bucket</div><select class="inp" id="taskBucket" style="width:auto">${buckOpts}</select></div>
+        <div><div class="label" style="margin-bottom:4px">Spoons</div><select class="inp" id="taskSpoonSel" style="width:auto">${spoonOpts}</select></div>
+        <button class="btn btn-pink" data-act="addTask" ${RO?"disabled":""}>+ add</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <span class="label">Show</span><div class="seg">${fbtn("all","Everything")}${fbtn("low","🌙 Low-spoon")}${fbtn("some","🌤 Some")}${fbtn("full","🌞 Full")}</div>
+      </div>
+    </div>${groups}</div>`;
+}
+
+/* ===================== CARE (self-care · DBT · mindfulness) ===================== */
+function dbtCard(s){
+  return `<div class="flip" data-act="careCard"><div class="flip-inner">
+    <div class="flip-face flip-front" style="background:${s.tint}">
+      <div style="font-size:30px">${s.emoji}</div>
+      <div style="font-family:var(--display);font-size:16px;margin-top:6px">${s.title}</div>
+      <div class="soft" style="font-size:11.5px;margin-top:6px">${s.sub}</div>
+      <div class="label" style="margin-top:auto;padding-top:10px">tap to open →</div>
+    </div>
+    <div class="flip-face flip-back">
+      <div class="label">${s.emoji} ${s.title}</div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:8px">${s.items.map(([h,b])=>`<div><div style="font-size:12.5px;font-weight:700;color:var(--pink-deep)">${h}</div><div style="font-size:12px;line-height:1.5">${b}</div></div>`).join("")}</div>
+      <div class="label" style="margin-top:8px">← tap to flip back</div>
+    </div>
+  </div></div>`;
+}
+async function renderCare(){
+  const sent=await DB.daily(SENTINEL); const day=await DB.daily(TODAY);
+  const joy=(sent.joyJar&&sent.joyJar.length)?sent.joyJar:DEFAULT_JOY.slice();
+  state.joy=joy;
+  const care=day.care||{};
+  const slip=PERMISSION_SLIPS[new Date().getDate()%PERMISSION_SLIPS.length];
+  const jarBubs=[["#ec7faf",42,70,0],["#a98fe0",62,84,.6],["#f3a978",54,100,1.2],["#5cc6a3",74,64,1.8],["#db5e98",48,52,2.4]]
+    .map(([c,x,y,d])=>`<circle class="jar-bub" cx="${x}" cy="${y}" r="6.5" fill="${c}" opacity=".85" style="animation-delay:${d}s"/>`).join("");
+  return `<div>
+    <div class="panel" style="margin-bottom:14px;text-align:center;background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
+      <div class="label">today's permission slip 🐙</div>
+      <div id="slipText" style="font-family:var(--display);font-size:19px;margin:12px 0 14px;color:var(--pink-deep)">${esc(slip)}</div>
+      <button class="chiptog ${care.joy?'on':''}" data-act="careJoy" ${RO?"disabled":""}>${care.joy?'💗 you did something for you today':'I did something just for me today'}</button>
+      <div><button class="btn" data-act="slipNext" style="margin-top:10px">↻ another reminder</button></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px;text-align:center">
+      <div class="card-head" style="justify-content:center"><span class="label">🫧 breathing bubble</span></div>
+      <div class="breath-wrap"><div id="breathBubble" class="breath-bubble"></div><div id="breathLabel" class="breath-label">tap start</div></div>
+      <button class="btn btn-pink" id="breathBtn" data-act="breathToggle" style="margin-top:8px">▶ start</button>
+      <p class="soft" style="font-size:11.5px;margin:10px auto 0;max-width:340px">4 in · 2 hold · 6 out. A longer out-breath gently tells your body you're safe.</p>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px">
+      <div class="card-head"><span class="label">🧰 DBT skill cards</span><span class="soft" style="font-size:11.5px">tap a card to flip it</span></div>
+      <div class="dbt-grid">${DBT_SKILLS.map(dbtCard).join("")}</div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px">
+      <div class="card-head"><span class="label">🫙 joy jar</span><button class="btn btn-pink" data-act="joyPull">🎲 pull one</button></div>
+      <div class="jar-stage">
+        <svg viewBox="0 0 120 132" width="118" height="130" aria-hidden="true">
+          <rect x="38" y="6" width="44" height="11" rx="3.5" fill="#cdb4f0"/>
+          <rect x="44" y="14" width="32" height="8" rx="2" fill="#dcc8f5"/>
+          <path d="M30 24 h60 a6 6 0 0 1 6 6 v80 a12 12 0 0 1 -12 12 h-48 a12 12 0 0 1 -12 -12 v-80 a6 6 0 0 1 6 -6 z" fill="rgba(255,255,255,.6)" stroke="#e7c7e6" stroke-width="2"/>
+          ${jarBubs}
+        </svg>
+        <div id="joyPick" class="joy-pick"></div>
+      </div>
+      <p class="soft" style="font-size:12px;margin:6px 0 0">Stuck on what to do for fun? Pull one — or add your own little joys.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${joy.map((j,i)=>`<span class="note" style="cursor:default">${esc(j)} <button class="ft-ic" data-act="joyDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose);font-size:12px;padding:0 2px">×</button></span>`).join("")}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="joyInput" placeholder="add a little joy…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="joyAdd" ${RO?"disabled":""}>+ add</button></div>
+    </div>
+
+    <div class="panel">
+      <div class="card-head"><span class="label">🌈 gentle check-in</span></div>
+      <div class="soft" style="font-size:12.5px;margin-bottom:8px">How's the weather inside today? There's no wrong answer.</div>
+      <div class="scale">${["🌧️","🌥️","⛅","🌤️","🌞"].map((e,i)=>`<button data-act="careMood" data-v="${i+1}" class="${care.mood===i+1?'on':''}" ${RO?"disabled":""} style="font-size:18px">${e}</button>`).join("")}</div>
+      <button class="chiptog ${care.skill?'on':''}" data-act="careSkill" style="margin-top:12px" ${RO?"disabled":""}>${care.skill?'🧰 used a skill today — proud of you':'I used a DBT skill today'}</button>
+    </div>
+  </div>`;
+}
 
 /* ===================== INCOME + SPONSORS ===================== */
 async function renderIncome(){
@@ -1016,7 +1203,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1051,6 +1238,28 @@ document.addEventListener("click",async(e)=>{
   if(act==="editHabit")return habitModal(state.lib.find(h=>h.id===id));
   if(act==="saveHabit")return saveHabit(id);
   if(act==="delHabit")return delHabit(id);
+
+  /* planner */
+  if(act==="addTask"){ const i=document.getElementById("newTask"); const tx=(i.value||"").trim(); if(tx){ const bucket=document.getElementById("taskBucket").value, spoon=document.getElementById("taskSpoonSel").value; state.addBucket=bucket; await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:tx,bucket,spoon,done:false,sub:[],created_at:new Date().toISOString()}]); render(); } return; }
+  if(act==="taskDone"){ await taskMut(t=>t.map(x=>x.id===id?{...x,done:!x.done}:x)); render(); return; }
+  if(act==="delTask"){ await taskMut(t=>t.filter(x=>x.id!==id)); render(); return; }
+  if(act==="focusTask"){ state.focusTask=id; render(); return; }
+  if(act==="focusClear"){ state.focusTask=null; render(); return; }
+  if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
+  if(act==="addSubtask"){ const tx=prompt("Break it into a small step:"); if(tx&&tx.trim()){ await taskMut(t=>t.map(x=>x.id===id?{...x,sub:[...(x.sub||[]),{id:"s"+uid().slice(0,6),text:tx.trim(),done:false}]}:x)); render(); } return; }
+  if(act==="subDone"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:x)); render(); return; }
+  if(act==="delSub"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).filter(s=>s.id!==sid)}:x)); render(); return; }
+
+  /* care */
+  if(act==="careCard"){ el.classList.toggle("open"); return; }
+  if(act==="breathToggle")return toggleBreath();
+  if(act==="slipNext"){ const t=document.getElementById("slipText"); if(t)t.textContent=PERMISSION_SLIPS[Math.floor(Math.random()*PERMISSION_SLIPS.length)]; return; }
+  if(act==="careJoy"){ await careMut(c=>({...c,joy:!c.joy})); render(); return; }
+  if(act==="careMood"){ await careMut(c=>({...c,mood:parseInt(el.dataset.v)})); render(); return; }
+  if(act==="careSkill"){ await careMut(c=>({...c,skill:!c.skill})); render(); return; }
+  if(act==="joyPull"){ const box=document.getElementById("joyPick"); if(box){ const list=state.joy||[]; box.textContent=list.length?("🐙 "+list[Math.floor(Math.random()*list.length)]):"add some joys first 🌸"; box.classList.remove("pop"); void box.offsetWidth; box.classList.add("pop"); } return; }
+  if(act==="joyAdd"){ const i=document.getElementById("joyInput"); const tx=(i.value||"").trim(); if(tx){ await joyMut(j=>[...j,tx]); render(); } return; }
+  if(act==="joyDel"){ const idx=parseInt(el.dataset.idx); await joyMut(j=>j.filter((_,k)=>k!==idx)); render(); return; }
 
   if(act==="moneyView"){ state.moneyView=el.dataset.v; return render(); }
   if(act==="ledgerKind"){ state.ledgerKind=el.dataset.v; return render(); }
@@ -1127,6 +1336,8 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="newContent")document.querySelector('[data-act="addContent"]').click();
   if(t.id==="ledAmount"||t.id==="ledNote")document.querySelector('[data-act="addLedger"]').click();
   if(t.id==="sponsorBrand")document.querySelector('[data-act="addSponsor"]').click();
+  if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
+  if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
   if(t.id==="smartQ")smart();
   if(t.id==="askQ")ask();
   if(t.dataset&&t.dataset.act==="goalAdd"&&t.value.trim()){const sc=t.dataset.scope,tx=t.value.trim();t.value="";await goalMut(sc,g=>[...g,{id:uid(),text:tx,done:false}]);render();}
@@ -1142,6 +1353,19 @@ document.addEventListener("drop",async e=>{
 /* feature impls */
 async function bumpHabit(hid){ const h=state.lib.find(x=>x.id===hid); const t=(h&&h.total)||1; await DB.saveDaily(TODAY,n=>{const habits=n.habits||{counts:{}};const counts={...(habits.counts||{})};const cur=counts[hid]||0;counts[hid]=cur>=t?0:cur+1;return{...n,habits:{counts}};}); }
 async function goalMut(scope,fn){ const key=scope==="week"?"goals_week_items":"goals_month_items"; await DB.saveDaily(SENTINEL,n=>({...n,[key]:fn(n[key]||[])})); }
+async function taskMut(fn){ await DB.saveDaily(SENTINEL,n=>({...n,tasks:fn(n.tasks||[])})); }
+async function careMut(fn){ await DB.saveDaily(TODAY,n=>({...n,care:fn(n.care||{})})); }
+async function joyMut(fn){ await DB.saveDaily(SENTINEL,n=>({...n,joyJar:fn((n.joyJar&&n.joyJar.length)?n.joyJar:DEFAULT_JOY.slice())})); }
+/* breathing bubble — JS-paced so the label always matches the bubble (reduce-motion just snaps) */
+let breathTimer=null;
+function toggleBreath(){
+  const bub=document.getElementById("breathBubble"), lab=document.getElementById("breathLabel"), btn=document.getElementById("breathBtn");
+  if(!bub||!lab)return;
+  if(breathTimer){ clearTimeout(breathTimer); breathTimer=null; bub.style.transition="transform 1.2s ease"; bub.style.transform="scale(1)"; lab.textContent="tap start"; if(btn)btn.textContent="▶ start"; return; }
+  if(btn)btn.textContent="⏸ stop";
+  const phases=[["Breathe in…",4000,1.7],["Hold",2000,1.7],["Breathe out…",6000,1.0]]; let i=0;
+  (function step(){ const b=document.getElementById("breathBubble"), l=document.getElementById("breathLabel"); if(!b||!l){breathTimer=null;return;} const [label,dur,to]=phases[i]; l.textContent=label; b.style.transition=`transform ${dur}ms ease-in-out`; b.style.transform=`scale(${to})`; i=(i+1)%phases.length; breathTimer=setTimeout(step,dur); })();
+}
 function smart(){ const q=(document.getElementById("smartQ").value||"").toLowerCase().trim(); if(!q){state.smartIds=null;return render();} state.smartIds=(state._content||[]).filter(c=>(c.title+" "+(c.hook||"")+" "+(c.hashtags||[]).join(" ")).toLowerCase().includes(q)).map(c=>c.id); render(); }
 async function editChannel(){ const day=await DB.daily(TODAY); const ch=day.channel||{};
   document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">Channel pulse</h3><button class="btn" data-act="closeModal">✕</button></div>${CHANNEL_STATS.map(([k,l])=>`<div class="label" style="margin-top:8px">${l}</div><input class="inp num" id="ch_${k}" type="number" value="${ch[k]??""}" />`).join("")}<button class="btn btn-pink" data-act="saveChannel" style="margin-top:14px">💾 save</button></div></div>`; }
