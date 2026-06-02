@@ -690,22 +690,28 @@ async function render(){
   const _sent = await DB.daily(SENTINEL);
   state.lib = (_sent.habitsLib && _sent.habitsLib.length) ? _sent.habitsLib : CONFIG.defaultHabits.map(h=>({...h}));
   mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || [];
-  const view=document.getElementById("view"); view.innerHTML=`<div class="label">loading…</div>`;
+  const view=document.getElementById("view");
+  const tabChanged=state._animTab!==state.tab;
+  const sy=window.scrollY;                                  // remember scroll so in-place updates don't jump
+  if(!view.innerHTML) view.innerHTML=`<div class="label">loading…</div>`;  // only on the very first paint
   try{
-    if(state.tab==="home") view.innerHTML=await renderHome();
-    else if(state.tab==="content") view.innerHTML=await renderContent();
-    else if(state.tab==="planner") view.innerHTML=await renderPlanner();
-    else if(state.tab==="calendar") view.innerHTML=await renderCalendar();
-    else if(state.tab==="care") view.innerHTML=await renderCare();
-    else if(state.tab==="habits") view.innerHTML=await renderHabits();
-    else if(state.tab==="optimize") view.innerHTML=renderOptimize();
-    else if(state.tab==="health") view.innerHTML=await renderHealth();
-    else if(state.tab==="income") view.innerHTML=await renderIncome();
-    else if(state.tab==="pitch") view.innerHTML=await renderPitch();
-    else if(state.tab==="review") view.innerHTML=await renderReview();
-    else if(state.tab==="ask") view.innerHTML=renderAsk();
+    let html;
+    if(state.tab==="home") html=await renderHome();
+    else if(state.tab==="content") html=await renderContent();
+    else if(state.tab==="planner") html=await renderPlanner();
+    else if(state.tab==="calendar") html=await renderCalendar();
+    else if(state.tab==="care") html=await renderCare();
+    else if(state.tab==="habits") html=await renderHabits();
+    else if(state.tab==="optimize") html=renderOptimize();
+    else if(state.tab==="health") html=await renderHealth();
+    else if(state.tab==="income") html=await renderIncome();
+    else if(state.tab==="pitch") html=await renderPitch();
+    else if(state.tab==="review") html=await renderReview();
+    else if(state.tab==="ask") html=renderAsk();
+    view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
     postRender(); renderStickies();
-    if(state._animTab!==state.tab){ animateView(); state._animTab=state.tab; }
+    if(tabChanged){ animateView(); state._animTab=state.tab; }
+    else { window.scrollTo(0,sy); }                         // keep your place on toggles / edits
   }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
