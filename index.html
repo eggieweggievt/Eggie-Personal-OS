@@ -109,6 +109,8 @@
   .cal-ev:hover{box-shadow:0 2px 8px rgba(150,110,150,.28);}
   .cal-ev:active{cursor:grabbing;}
   .cal-ev.dragging{opacity:.45;transform:scale(.95);}
+  .cal-stream{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(236,127,175,.16);color:var(--pink-deep);border-left:3px solid var(--pink);cursor:pointer;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
+  .cal-stream:hover{background:rgba(236,127,175,.28);}
   .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
   /* ---- accessibility ---- */
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
@@ -450,6 +452,7 @@ demo.daily[SENTINEL] = {
   goals_week_items:[ {id:"g1",text:"Ship 3 shorts",done:false},{id:"g2",text:"Send 2 sponsor pitches",done:true},{id:"g3",text:"Debut anniversary post",done:false} ],
   goals_month_items:[ {id:"g4",text:"Hit Twitch Affiliate goals",done:false},{id:"g5",text:"Launch a Ko-fi membership tier",done:false} ],
   review:{}, taxRate:0.25, setAside:{}, habitsLib:null,
+  schedule:[ {id:"sd1",day:"Tue",time:"4–6pm EDT",title:"Variety / gacha"},{id:"sd2",day:"Wed",time:"4–6pm EDT",title:"Variety"},{id:"sd3",day:"Thu",time:"4–6pm EDT",title:"Reacts"},{id:"sd4",day:"Sat",time:"2–5pm EDT",title:"Cozy long stream"} ],
   tasks:[
     { id:"t1", text:"Reply to the keyboard sponsor email", bucket:"content", spoon:"some", done:false, sub:[{id:"s1",text:"re-read their offer",done:true},{id:"s2",text:"draft a yes / maybe",done:false}] },
     { id:"t2", text:"Refill meds", bucket:"health", spoon:"low", done:false, sub:[] },
@@ -535,6 +538,7 @@ function fmt12(timeStr){ if(!timeStr)return ""; const [h,m]=timeStr.split(":").m
 async function renderCalendar(){
   const sent=await DB.daily(SENTINEL);
   const events=sent.calendarEvents||[];
+  const schedule=sent.schedule||[];
   if(!state.calRef){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); }
   const ref=state.calRef, y=ref.getFullYear(), m=ref.getMonth();
   const startDow=new Date(y,m,1).getDay();
@@ -546,16 +550,18 @@ async function renderCalendar(){
     const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
     const ds=d.toLocaleDateString("en-CA");
     const inMonth=d.getMonth()===m, isToday=ds===TODAY;
+    const dayShort=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+    const streamChips=schedule.filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join("");
     const chips=events.filter(ev=>ev.date===ds).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99")).map(ev=>{
       const et=toET(ev.date,ev.time,ev.tz);
       const tlabel=et?`<b>${et.etTime}${et.dayDiff?" (+1d)":""}</b> `:"";
       const tip=esc((et?et.etTime+" ET — ":"")+ev.title+(ev.note?" — "+ev.note:""));
       return `<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${tlabel}${esc(ev.title)}${ev.note?" 📝":""}</div>`;
     }).join("");
-    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${chips}</div>`;
+    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${chips}</div>`;
   }
   return `<div class="panel" style="max-width:900px;margin:0 auto">
-    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag an event to move it 🐙</div></div>
+    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag an event to move it · 🔴 = your stream days 🐙</div></div>
       <div style="display:flex;gap:6px"><button class="btn" data-act="calPrev" title="previous month">‹</button><button class="btn" data-act="calToday">today</button><button class="btn" data-act="calNext" title="next month">›</button></div></div>
     <div class="cal-grid" style="margin-bottom:6px">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join("")}</div>
     <div class="cal-grid">${cells}</div>
