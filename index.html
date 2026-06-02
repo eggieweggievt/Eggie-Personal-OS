@@ -86,6 +86,30 @@
   .meter>i{position:absolute;top:0;bottom:0;background:rgba(141,111,209,.18);} /* target band */
   .meter>b{position:absolute;top:0;bottom:0;left:0;border-radius:999px;background:linear-gradient(90deg,var(--pink),var(--lav));}
   .meter.ok>b{background:linear-gradient(90deg,#7ed0b0,var(--mint));}
+  /* ---- gentle page transition (auto-off in calm / reduce-motion via the rules below) ---- */
+  #view.view-enter{ animation:viewIn .4s cubic-bezier(.22,.61,.36,1) both; }
+  #view.view-enter > *{ animation:panelIn .44s cubic-bezier(.22,.61,.36,1) both; }
+  #view.view-enter > *:nth-child(2){ animation-delay:.06s; }
+  #view.view-enter > *:nth-child(3){ animation-delay:.12s; }
+  #view.view-enter > *:nth-child(4){ animation-delay:.18s; }
+  #view.view-enter > *:nth-child(n+5){ animation-delay:.22s; }
+  @keyframes viewIn{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
+  @keyframes panelIn{ from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:none;} }
+  /* ---- calendar ---- */
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-dow{font-size:11px;text-align:center;color:var(--lav-deep);font-weight:600;padding:2px 0;}
+  .cal-cell{min-height:94px;border:1px solid var(--line);border-radius:12px;padding:5px 6px;background:rgba(255,255,255,.5);display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:background .15s,border-color .15s,transform .12s;}
+  .cal-cell:hover{border-color:var(--lav);}
+  .cal-cell.other{opacity:.4;}
+  .cal-cell.today{border-color:var(--pink);box-shadow:inset 0 0 0 2px rgba(236,127,175,.25);}
+  .cal-cell.drag-over{background:rgba(169,143,224,.18);border-color:var(--lav-deep);transform:scale(1.03);}
+  .cal-daynum{font-size:11.5px;color:#8a7d92;align-self:flex-end;line-height:1;}
+  .cal-cell.today .cal-daynum{color:var(--pink-deep);font-weight:700;}
+  .cal-ev{font-size:11px;line-height:1.3;padding:3px 7px;border-radius:8px;color:#5a3b52;cursor:grab;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .12s,opacity .12s,box-shadow .12s;}
+  .cal-ev:hover{box-shadow:0 2px 8px rgba(150,110,150,.28);}
+  .cal-ev:active{cursor:grabbing;}
+  .cal-ev.dragging{opacity:.45;transform:scale(.95);}
+  .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
   /* ---- accessibility ---- */
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
   body.calm *{animation:none!important;transition:none!important;}
@@ -489,9 +513,85 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["ask","🔮 Ask"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
+/* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
+function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); }
+
+/* ===================== CALENDAR ===================== */
+const CAL_COLORS=["#f6b8d4","#c9b8f0","#a9e0cb","#f6cba9","#b8d4f0"];
+let CAL_COLOR=CAL_COLORS[0];
+async function renderCalendar(){
+  const sent=await DB.daily(SENTINEL);
+  const events=sent.calendarEvents||[];
+  if(!state.calRef){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); }
+  const ref=state.calRef, y=ref.getFullYear(), m=ref.getMonth();
+  const startDow=new Date(y,m,1).getDay();
+  const gridStart=new Date(y,m,1-startDow);
+  const monthName=ref.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const dows=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  let cells="";
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    const ds=d.toLocaleDateString("en-CA");
+    const inMonth=d.getMonth()===m, isToday=ds===TODAY;
+    const chips=events.filter(ev=>ev.date===ds).map(ev=>`<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${esc(ev.title)}">${esc(ev.title)}</div>`).join("");
+    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${chips}</div>`;
+  }
+  return `<div class="panel" style="max-width:900px;margin:0 auto">
+    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag an event to move it 🐙</div></div>
+      <div style="display:flex;gap:6px"><button class="btn" data-act="calPrev" title="previous month">‹</button><button class="btn" data-act="calToday">today</button><button class="btn" data-act="calNext" title="next month">›</button></div></div>
+    <div class="cal-grid" style="margin-bottom:6px">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join("")}</div>
+    <div class="cal-grid">${cells}</div>
+    <p class="soft" style="font-size:11.5px;margin-top:12px">Nothing here is set in stone — drag things around whenever your week shifts. 💗</p>
+  </div>`;
+}
+async function calEventModal(date,eid){
+  const sent=await DB.daily(SENTINEL);
+  const events=sent.calendarEvents||[];
+  const ev=eid?events.find(e=>e.id===eid):null;
+  CAL_COLOR=ev?(ev.color||CAL_COLORS[0]):CAL_COLORS[0];
+  const theDate=ev?ev.date:date;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">${ev?"✏️ Edit event":"➕ New event"}</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <input type="hidden" id="calEid" value="${ev?ev.id:""}" />
+    <div class="label" style="margin-bottom:4px">What's happening?</div>
+    <input class="inp" id="calTitle" value="${ev?esc(ev.title):""}" placeholder="e.g. Collab stream 🎀" />
+    <div class="label" style="margin:10px 0 4px">Date</div>
+    <input class="inp" id="calDate" type="date" value="${theDate}" />
+    <div class="label" style="margin:10px 0 4px">Colour</div>
+    <div id="calColors" style="display:flex;gap:8px">${CAL_COLORS.map(c=>`<button class="cal-swatch" data-color="${c}" style="background:${c};border:2px solid ${c===CAL_COLOR?"#5a3b52":"transparent"}"></button>`).join("")}</div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-pink" data-act="saveCalEvent" style="flex:1">💾 save</button>
+      ${ev?`<button class="btn" data-act="delCalEvent" data-eid="${ev.id}" style="color:var(--rose)">delete</button>`:""}
+    </div></div></div>`;
+  document.querySelectorAll("#calColors .cal-swatch").forEach(b=>b.addEventListener("click",()=>{
+    CAL_COLOR=b.dataset.color;
+    document.querySelectorAll("#calColors .cal-swatch").forEach(x=>x.style.borderColor="transparent");
+    b.style.borderColor="#5a3b52";
+  }));
+}
+/* drag-to-move wiring — re-attached each render via postRender when the calendar is open */
+function wireCalDnD(){
+  let dragEid=null;
+  document.querySelectorAll(".cal-ev").forEach(ev=>{
+    ev.addEventListener("dragstart",e=>{ dragEid=ev.dataset.eid; ev.classList.add("dragging"); if(e.dataTransfer){e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",dragEid);}catch{}} });
+    ev.addEventListener("dragend",()=>{ ev.classList.remove("dragging"); document.querySelectorAll(".cal-cell.drag-over").forEach(c=>c.classList.remove("drag-over")); });
+  });
+  document.querySelectorAll(".cal-cell").forEach(cell=>{
+    cell.addEventListener("dragover",e=>{ e.preventDefault(); if(e.dataTransfer)e.dataTransfer.dropEffect="move"; cell.classList.add("drag-over"); });
+    cell.addEventListener("dragleave",()=>cell.classList.remove("drag-over"));
+    cell.addEventListener("drop",async e=>{
+      e.preventDefault(); cell.classList.remove("drag-over");
+      const eid=dragEid||(e.dataTransfer&&e.dataTransfer.getData("text/plain"));
+      const date=cell.dataset.date;
+      if(!eid||!date)return;
+      if(RO){ toast("Read-only mode 🌸"); return; }
+      await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); const t=evs.find(x=>x.id===eid); if(t)t.date=date; return {...n,calendarEvents:evs}; });
+      render();
+    });
+  });
+}
 
 async function render(){
   document.getElementById("nav").innerHTML = TABS.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("");
@@ -506,6 +606,7 @@ async function render(){
     if(state.tab==="home") view.innerHTML=await renderHome();
     else if(state.tab==="content") view.innerHTML=await renderContent();
     else if(state.tab==="planner") view.innerHTML=await renderPlanner();
+    else if(state.tab==="calendar") view.innerHTML=await renderCalendar();
     else if(state.tab==="care") view.innerHTML=await renderCare();
     else if(state.tab==="habits") view.innerHTML=await renderHabits();
     else if(state.tab==="optimize") view.innerHTML=renderOptimize();
@@ -515,6 +616,7 @@ async function render(){
     else if(state.tab==="review") view.innerHTML=await renderReview();
     else if(state.tab==="ask") view.innerHTML=renderAsk();
     postRender(); renderStickies();
+    if(state._animTab!==state.tab){ animateView(); state._animTab=state.tab; }
   }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
@@ -1407,7 +1509,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel","healthCounter","healthToggle","saveCreative"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1415,6 +1517,18 @@ document.addEventListener("click",async(e)=>{
   if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} return render(); }
   if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
   if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
+  if(act==="calPrev"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()-1,1); return render(); }
+  if(act==="calNext"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()+1,1); return render(); }
+  if(act==="calToday"){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); return render(); }
+  if(act==="calAdd"){ return calEventModal(el.dataset.date); }
+  if(act==="calEvent"){ return calEventModal(null,el.dataset.eid); }
+  if(act==="saveCalEvent"){
+    const title=document.getElementById("calTitle").value.trim(), date=document.getElementById("calDate").value, eid=document.getElementById("calEid").value;
+    if(!title){ toast("Give it a name 🌸"); return; }
+    await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); if(eid){ const t=evs.find(x=>x.id===eid); if(t){t.title=title;t.date=date;t.color=CAL_COLOR;} } else { evs.push({id:uid(),title,date,color:CAL_COLOR}); } return {...n,calendarEvents:evs}; });
+    document.getElementById("modal").innerHTML=""; toast("Saved 💗"); return render();
+  }
+  if(act==="delCalEvent"){ const eid=el.dataset.eid; await DB.saveDaily(SENTINEL,n=>({...n,calendarEvents:(n.calendarEvents||[]).filter(x=>x.id!==eid)})); document.getElementById("modal").innerHTML=""; toast("Removed"); return render(); }
 
   if(act==="capture"){ const i=document.getElementById("capInput"); if(i.value.trim()){await DB.addCapture(i.value.trim());i.value="";toast("Captured 🐙");} }
   if(act==="habit"){ await bumpHabit(id); render(); }
@@ -1595,7 +1709,7 @@ async function keywordAsk(raw,box){
 }
 
 /* boot */
-function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); }
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } }
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
 render();
