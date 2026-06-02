@@ -537,7 +537,7 @@ const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒�
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
-function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); }
+function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
 
 /* ===================== CALENDAR ===================== */
 const CAL_COLORS=["#f6b8d4","#c9b8f0","#a9e0cb","#f6cba9","#b8d4f0"];
@@ -696,6 +696,7 @@ async function render(){
   mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || [];
   const view=document.getElementById("view");
   const tabChanged=state._animTab!==state.tab;
+  if(!tabChanged) view.classList.remove("view-enter");      // no entrance animation on in-place updates (toggles/edits)
   const sy=window.scrollY;                                  // remember scroll so in-place updates don't jump
   if(!view.innerHTML) view.innerHTML=`<div class="label">loading…</div>`;  // only on the very first paint
   try{
