@@ -481,27 +481,31 @@ for(let i=1;i<=12;i++){ const lo=i%2===0; demo.daily[dayAgo(-i)]={ energy:lo?"lo
   care:{ joy:i%2===1, mood:lo?2:4, skill:i%3===0 } }; }
 
 /* ===================== DATA LAYER ===================== */
+/* In-memory read cache so re-rendering after a save is instant (no Supabase round-trip = no "reload" flicker).
+   Writes update or invalidate the relevant cache; DB.bust() clears everything (used after server-side writes). */
 const DB = {
-  async content(){ if(DEMO)return demo.content; const {data}=await SB.from("content_items").select("*").eq("user_id",UID).order("priority",{ascending:false}).limit(100000); return data||[]; },
-  async addContent(c){ const row={user_id:UID,title:c.title,format:c.format||null,platform:c.platform||null,stage:c.stage||"idea",pillar:c.pillar||null,priority:c.priority??50,parent_id:c.parent_id||null,criteria:c.criteria||{},hashtags:c.hashtags||[]}; if(DEMO){const r={...row,id:uid(),updated_at:new Date().toISOString()};demo.content.unshift(r);return r;} const {data}=await SB.from("content_items").insert(row).select().single(); return data; },
-  async updateContent(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.content.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("content_items").update(patch).eq("id",id).eq("user_id",UID); },
-  async delContent(id){ if(DEMO){demo.content=demo.content.filter(x=>x.id!==id&&x.parent_id!==id);return;} await SB.from("content_items").delete().eq("id",id).eq("user_id",UID); },
-  async income(){ if(DEMO)return demo.income; const {data}=await SB.from("income_entries").select("*").eq("user_id",UID).order("month",{ascending:false}).limit(100000); return data||[]; },
-  async addIncome(e){ const row={user_id:UID,kind:e.kind||"in",source:e.source,category:e.category||null,amount:e.amount,month:e.month||monthKey(),note:e.note||null}; if(DEMO){demo.income.unshift({...row,id:uid()});return;} await SB.from("income_entries").insert(row); },
-  async delIncome(id){ if(DEMO){demo.income=demo.income.filter(x=>x.id!==id);return;} await SB.from("income_entries").delete().eq("id",id).eq("user_id",UID); },
-  async savings(){ if(DEMO)return demo.savings; const {data}=await SB.from("savings_goals").select("*").eq("user_id",UID).order("created_at",{ascending:true}).limit(100000); return data||[]; },
-  async addGoal(g){ const row={user_id:UID,name:g.name,emoji:g.emoji||null,target:g.target||0,saved:g.saved||0}; if(DEMO){demo.savings.push({...row,id:uid()});return;} await SB.from("savings_goals").insert(row); },
-  async updateGoal(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.savings.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("savings_goals").update(patch).eq("id",id).eq("user_id",UID); },
-  async delGoal(id){ if(DEMO){demo.savings=demo.savings.filter(x=>x.id!==id);return;} await SB.from("savings_goals").delete().eq("id",id).eq("user_id",UID); },
-  async sponsors(){ if(DEMO)return demo.sponsors; const {data}=await SB.from("sponsors").select("*").eq("user_id",UID).order("updated_at",{ascending:false}).limit(100000); return data||[]; },
-  async addSponsor(s){ const row={user_id:UID,brand:s.brand,deal_type:s.deal_type||null,stage:s.stage||"draft",value:s.value||null,note:s.note||null}; if(DEMO){demo.sponsors.unshift({...row,id:uid(),updated_at:new Date().toISOString()});return;} await SB.from("sponsors").insert(row); },
-  async updateSponsor(id,patch){ patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.sponsors.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("sponsors").update(patch).eq("id",id).eq("user_id",UID); },
-  async daily(date){ if(DEMO)return demo.daily[date]||{}; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(!data||!data.notes)return{}; try{return JSON.parse(data.notes);}catch{return{};} },
-  async saveDaily(date,merge){ const cur=await DB.daily(date); const next=merge({...cur}); if(DEMO){demo.daily[date]=next;return next;} await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); return next; },
-  async dailyRange(days){ if(DEMO){ return Object.entries(demo.daily).filter(([d])=>d!==SENTINEL).map(([date,notes])=>({date,notes})); } const since=dayAgo(-days); const {data}=await SB.from("daily_logs").select("log_date,notes").eq("user_id",UID).gte("log_date",since).order("log_date",{ascending:false}).limit(100000); return (data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {date:r.log_date,notes:n};}); },
-  async captures(){ if(DEMO)return demo.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return data||[]; },
-  async addCapture(text){ if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
-  async delCapture(id){ if(DEMO){demo.captures=demo.captures.filter(c=>c.id!==id);return;} await SB.from("raw_captures").delete().eq("id",id).eq("user_id",UID); },
+  _c:{ daily:{}, range:{} },
+  bust(){ this._c={ daily:{}, range:{} }; },
+  async content(){ if(DEMO)return demo.content; if(this._c.content)return this._c.content; const {data}=await SB.from("content_items").select("*").eq("user_id",UID).order("priority",{ascending:false}).limit(100000); return this._c.content=(data||[]); },
+  async addContent(c){ this._c.content=null; const row={user_id:UID,title:c.title,format:c.format||null,platform:c.platform||null,stage:c.stage||"idea",pillar:c.pillar||null,priority:c.priority??50,parent_id:c.parent_id||null,criteria:c.criteria||{},hashtags:c.hashtags||[]}; if(DEMO){const r={...row,id:uid(),updated_at:new Date().toISOString()};demo.content.unshift(r);return r;} const {data}=await SB.from("content_items").insert(row).select().single(); return data; },
+  async updateContent(id,patch){ this._c.content=null; patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.content.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("content_items").update(patch).eq("id",id).eq("user_id",UID); },
+  async delContent(id){ this._c.content=null; if(DEMO){demo.content=demo.content.filter(x=>x.id!==id&&x.parent_id!==id);return;} await SB.from("content_items").delete().eq("id",id).eq("user_id",UID); },
+  async income(){ if(DEMO)return demo.income; if(this._c.income)return this._c.income; const {data}=await SB.from("income_entries").select("*").eq("user_id",UID).order("month",{ascending:false}).limit(100000); return this._c.income=(data||[]); },
+  async addIncome(e){ this._c.income=null; const row={user_id:UID,kind:e.kind||"in",source:e.source,category:e.category||null,amount:e.amount,month:e.month||monthKey(),note:e.note||null}; if(DEMO){demo.income.unshift({...row,id:uid()});return;} await SB.from("income_entries").insert(row); },
+  async delIncome(id){ this._c.income=null; if(DEMO){demo.income=demo.income.filter(x=>x.id!==id);return;} await SB.from("income_entries").delete().eq("id",id).eq("user_id",UID); },
+  async savings(){ if(DEMO)return demo.savings; if(this._c.savings)return this._c.savings; const {data}=await SB.from("savings_goals").select("*").eq("user_id",UID).order("created_at",{ascending:true}).limit(100000); return this._c.savings=(data||[]); },
+  async addGoal(g){ this._c.savings=null; const row={user_id:UID,name:g.name,emoji:g.emoji||null,target:g.target||0,saved:g.saved||0}; if(DEMO){demo.savings.push({...row,id:uid()});return;} await SB.from("savings_goals").insert(row); },
+  async updateGoal(id,patch){ this._c.savings=null; patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.savings.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("savings_goals").update(patch).eq("id",id).eq("user_id",UID); },
+  async delGoal(id){ this._c.savings=null; if(DEMO){demo.savings=demo.savings.filter(x=>x.id!==id);return;} await SB.from("savings_goals").delete().eq("id",id).eq("user_id",UID); },
+  async sponsors(){ if(DEMO)return demo.sponsors; if(this._c.sponsors)return this._c.sponsors; const {data}=await SB.from("sponsors").select("*").eq("user_id",UID).order("updated_at",{ascending:false}).limit(100000); return this._c.sponsors=(data||[]); },
+  async addSponsor(s){ this._c.sponsors=null; const row={user_id:UID,brand:s.brand,deal_type:s.deal_type||null,stage:s.stage||"draft",value:s.value||null,note:s.note||null}; if(DEMO){demo.sponsors.unshift({...row,id:uid(),updated_at:new Date().toISOString()});return;} await SB.from("sponsors").insert(row); },
+  async updateSponsor(id,patch){ this._c.sponsors=null; patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.sponsors.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("sponsors").update(patch).eq("id",id).eq("user_id",UID); },
+  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.daily[date]=n; },
+  async saveDaily(date,merge){ const cur=await DB.daily(date); const next=merge({...cur}); if(DEMO){demo.daily[date]=next;return next;} await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); this._c.daily[date]=next; if(date!==SENTINEL){ Object.keys(this._c.range).forEach(k=>{ const arr=this._c.range[k]; if(!arr)return; const i=arr.findIndex(r=>r.date===date); if(i>=0)arr[i]={date,notes:next}; else arr.push({date,notes:next}); }); } return next; },
+  async dailyRange(days){ if(DEMO){ return Object.entries(demo.daily).filter(([d])=>d!==SENTINEL).map(([date,notes])=>({date,notes})); } if(this._c.range[days])return this._c.range[days]; const since=dayAgo(-days); const {data}=await SB.from("daily_logs").select("log_date,notes").eq("user_id",UID).gte("log_date",since).order("log_date",{ascending:false}).limit(100000); return this._c.range[days]=(data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {date:r.log_date,notes:n};}); },
+  async captures(){ if(DEMO)return demo.captures; if(this._c.captures)return this._c.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return this._c.captures=(data||[]); },
+  async addCapture(text){ this._c.captures=null; if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
+  async delCapture(id){ this._c.captures=null; if(DEMO){demo.captures=demo.captures.filter(c=>c.id!==id);return;} await SB.from("raw_captures").delete().eq("id",id).eq("user_id",UID); },
 };
 /* editable settings live on the sentinel daily_logs row */
 async function loadLib(){ const s=await DB.daily(SENTINEL); const lib=s.habitsLib; return (lib&&lib.length)?lib:CONFIG.defaultHabits.map(h=>({...h})); }
@@ -1644,7 +1648,7 @@ document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
   if(act==="tab")return setTab(el.dataset.tab);
-  if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} return render(); }
+  if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} DB.bust(); return render(); }
   if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
   if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
   if(act==="calPrev"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()-1,1); return render(); }
@@ -1771,7 +1775,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="delMed")return delMed(id);
   if(act==="editChannel")return editChannel();
   if(act==="saveChannel")return saveChannel();
-  if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite,twitchHandle:CONFIG.twitchHandle}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
+  if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite,twitchHandle:CONFIG.twitchHandle}); DB.bust(); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
   if(act==="optMode"){ state.optMode=el.dataset.v; return render(); }
   if(act==="pullSnapshot"){
     const out=document.getElementById("snapOut"); if(!out)return;
