@@ -138,6 +138,50 @@ Deno.serve(async (req) => {
       return json({ channel: out });
     }
 
+    // --- channelSnapshot: stats + recent uploads for the Optimize tab (display only, no persist) ---
+    if (mode === "channelSnapshot") {
+      const yk = Deno.env.get("YOUTUBE_API_KEY");
+      if (!yk) return json({ error: "Set YOUTUBE_API_KEY in the function secrets to pull your snapshot." }, 400);
+      const handle = (body.handle || "").toString().replace(/^@/, "").trim();
+      const cid = body.channelId || Deno.env.get("YOUTUBE_CHANNEL_ID");
+      try {
+        const part = "statistics,contentDetails,snippet";
+        const chUrl = handle
+          ? `https://www.googleapis.com/youtube/v3/channels?part=${part}&forHandle=${encodeURIComponent(handle)}&key=${yk}`
+          : `https://www.googleapis.com/youtube/v3/channels?part=${part}&id=${encodeURIComponent(cid)}&key=${yk}`;
+        const chRes = await fetch(chUrl).then((x) => x.json());
+        const item = chRes?.items?.[0];
+        if (!item) return json({ error: "Channel not found — check the handle or channel ID." }, 404);
+        const s = item.statistics || {};
+        const snapshot: any = {
+          title: item.snippet?.title || "",
+          subscribers: Number(s.subscriberCount) || 0,
+          views: Number(s.viewCount) || 0,
+          videos: Number(s.videoCount) || 0,
+          recent: [],
+        };
+        const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+        if (uploads) {
+          const pl = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=5&playlistId=${encodeURIComponent(uploads)}&key=${yk}`).then((x) => x.json());
+          const items = (pl?.items || []).filter((it: any) => it?.snippet?.resourceId?.videoId);
+          const ids = items.map((it: any) => it.snippet.resourceId.videoId);
+          const stats: Record<string, number> = {};
+          if (ids.length) {
+            const vs = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ids.join(",")}&key=${yk}`).then((x) => x.json());
+            (vs?.items || []).forEach((v: any) => { stats[v.id] = Number(v.statistics?.viewCount) || 0; });
+          }
+          snapshot.recent = items.slice(0, 5).map((it: any) => ({
+            id: it.snippet.resourceId.videoId,
+            title: it.snippet.title || "",
+            views: stats[it.snippet.resourceId.videoId] ?? null,
+          }));
+        }
+        return json({ snapshot });
+      } catch (e) {
+        return json({ error: "Couldn't pull snapshot: " + ((e as Error)?.message || e) }, 500);
+      }
+    }
+
     const history = await historyFor(userId);
     const vidiq = body.vidiq ? `\n\nLive VidIQ data the user attached:\n${JSON.stringify(body.vidiq).slice(0, 3500)}` : "";
 

@@ -209,6 +209,7 @@ const CONFIG = {
   userId: "eggie",
   readOnly: false,
   youtubeChannelId: "UCafRwkDb29wF0MPuZa4zzPA", // EggieWeggie VT — for auto channel-pull
+  youtubeHandle: "eggieweggievt",                // @handle — for the Optimize channel snapshot
   discordInvite: "suckegg",                      // discord.gg/suckegg — for member count
   twitchHandle: "eggieweggievt",                 // for Twitch follower auto-pull (via DecAPI, no key)
   taxRate: 0.25,  // suggested % of income to set aside for taxes/savings
@@ -522,6 +523,15 @@ function animateView(){ const v=document.getElementById("view"); if(!v)return; v
 /* ===================== CALENDAR ===================== */
 const CAL_COLORS=["#f6b8d4","#c9b8f0","#a9e0cb","#f6cba9","#b8d4f0"];
 let CAL_COLOR=CAL_COLORS[0];
+/* everything on the calendar is shown in Eastern. Pick the zone a time is happening in and it converts to ET for you. */
+const CAL_TZ_TARGET="America/New_York";
+const CAL_TZS=[["America/New_York","ET · Eastern (your time)"],["America/Los_Angeles","PT · Pacific"],["America/Denver","MT · Mountain"],["America/Chicago","CT · Central"],["UTC","UTC"],["Europe/London","UK"],["Europe/Amsterdam","CET · Europe"],["Asia/Tokyo","JP · Japan"]];
+const CAL_TZ_SHORT={"America/New_York":"ET","America/Los_Angeles":"PT","America/Denver":"MT","America/Chicago":"CT","UTC":"UTC","Europe/London":"UK","Europe/Amsterdam":"CET","Asia/Tokyo":"JP"};
+function tzOffsetMs(tz,utcMs){ const p=new Intl.DateTimeFormat("en-US",{timeZone:tz,hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}).formatToParts(new Date(utcMs)).reduce((a,x)=>(a[x.type]=x.value,a),{}); const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second); return asUTC-utcMs; }
+function wallToUtc(dateStr,timeStr,tz){ const [Y,M,D]=dateStr.split("-").map(Number); const [h,m]=(timeStr||"00:00").split(":").map(Number); const guess=Date.UTC(Y,M-1,D,h,m); let off=tzOffsetMs(tz,guess); off=tzOffsetMs(tz,guess-off); return guess-off; }
+/* convert an event's wall-clock time in its source zone into Eastern; returns {etTime, etDate, dayDiff} or null */
+function toET(dateStr,timeStr,tz){ if(!timeStr)return null; const utc=wallToUtc(dateStr,timeStr,tz||CAL_TZ_TARGET); const p=new Intl.DateTimeFormat("en-US",{timeZone:CAL_TZ_TARGET,hour:"numeric",minute:"2-digit",hour12:true,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(utc)).reduce((a,x)=>(a[x.type]=x.value,a),{}); const etDate=`${p.year}-${p.month}-${p.day}`; return { etTime:`${p.hour}:${p.minute} ${p.dayPeriod}`, etDate, dayDiff: etDate!==dateStr }; }
+function fmt12(timeStr){ if(!timeStr)return ""; const [h,m]=timeStr.split(":").map(Number); const ap=h<12?"AM":"PM"; const hh=h%12||12; return `${hh}:${String(m).padStart(2,"0")} ${ap}`; }
 async function renderCalendar(){
   const sent=await DB.daily(SENTINEL);
   const events=sent.calendarEvents||[];
@@ -536,7 +546,12 @@ async function renderCalendar(){
     const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
     const ds=d.toLocaleDateString("en-CA");
     const inMonth=d.getMonth()===m, isToday=ds===TODAY;
-    const chips=events.filter(ev=>ev.date===ds).map(ev=>`<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${esc(ev.title)}">${esc(ev.title)}</div>`).join("");
+    const chips=events.filter(ev=>ev.date===ds).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99")).map(ev=>{
+      const et=toET(ev.date,ev.time,ev.tz);
+      const tlabel=et?`<b>${et.etTime}${et.dayDiff?" (+1d)":""}</b> `:"";
+      const tip=esc((et?et.etTime+" ET — ":"")+ev.title+(ev.note?" — "+ev.note:""));
+      return `<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${tlabel}${esc(ev.title)}${ev.note?" 📝":""}</div>`;
+    }).join("");
     cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${chips}</div>`;
   }
   return `<div class="panel" style="max-width:900px;margin:0 auto">
@@ -553,13 +568,21 @@ async function calEventModal(date,eid){
   const ev=eid?events.find(e=>e.id===eid):null;
   CAL_COLOR=ev?(ev.color||CAL_COLORS[0]):CAL_COLORS[0];
   const theDate=ev?ev.date:date;
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">${ev?"✏️ Edit event":"➕ New event"}</h3><button class="btn" data-act="closeModal">✕</button></div>
+  const curTz=ev?(ev.tz||CAL_TZ_TARGET):CAL_TZ_TARGET;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">${ev?"✏️ Edit event":"➕ New event"}</h3><button class="btn" data-act="closeModal">✕</button></div>
     <input type="hidden" id="calEid" value="${ev?ev.id:""}" />
     <div class="label" style="margin-bottom:4px">What's happening?</div>
     <input class="inp" id="calTitle" value="${ev?esc(ev.title):""}" placeholder="e.g. Collab stream 🎀" />
     <div class="label" style="margin:10px 0 4px">Date</div>
     <input class="inp" id="calDate" type="date" value="${theDate}" />
-    <div class="label" style="margin:10px 0 4px">Colour</div>
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:110px"><div class="label" style="margin-bottom:4px">Time</div><input class="inp" id="calTime" type="time" value="${ev&&ev.time?ev.time:""}" /></div>
+      <div style="flex:2;min-width:150px"><div class="label" style="margin-bottom:4px">Happening in</div><select class="inp" id="calTz">${CAL_TZS.map(([v,l])=>`<option value="${v}" ${v===curTz?"selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div id="calConv" class="soft-card" style="margin-top:10px;font-size:12.5px;display:none"></div>
+    <div class="label" style="margin:12px 0 4px">Note</div>
+    <textarea class="inp" id="calNote" rows="2" placeholder="anything to remember… 🌸">${ev&&ev.note?esc(ev.note):""}</textarea>
+    <div class="label" style="margin:12px 0 4px">Colour</div>
     <div id="calColors" style="display:flex;gap:8px">${CAL_COLORS.map(c=>`<button class="cal-swatch" data-color="${c}" style="background:${c};border:2px solid ${c===CAL_COLOR?"#5a3b52":"transparent"}"></button>`).join("")}</div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-pink" data-act="saveCalEvent" style="flex:1">💾 save</button>
@@ -570,6 +593,17 @@ async function calEventModal(date,eid){
     document.querySelectorAll("#calColors .cal-swatch").forEach(x=>x.style.borderColor="transparent");
     b.style.borderColor="#5a3b52";
   }));
+  const conv=document.getElementById("calConv");
+  function refreshConv(){
+    const t=document.getElementById("calTime").value, tz=document.getElementById("calTz").value, dt=document.getElementById("calDate").value;
+    if(!t){ conv.style.display="none"; return; }
+    const et=toET(dt,t,tz);
+    if(tz===CAL_TZ_TARGET){ conv.style.display="block"; conv.innerHTML=`🕒 <b>${et.etTime} ET</b> — already in your time zone 💗`; return; }
+    conv.style.display="block";
+    conv.innerHTML=`🕒 ${fmt12(t)} ${CAL_TZ_SHORT[tz]||""} → <b>${et.etTime} ET</b>${et.dayDiff?` <span class="muted">(${et.etDate})</span>`:""}`;
+  }
+  ["calTime","calTz","calDate"].forEach(idn=>document.getElementById(idn).addEventListener("input",refreshConv));
+  refreshConv();
 }
 /* drag-to-move wiring — re-attached each render via postRender when the calendar is open */
 function wireCalDnD(){
@@ -1287,10 +1321,31 @@ function renderAsk(){
 }
 
 /* ===================== VIDEO OPTIMIZATION ===================== */
+const DEMO_SNAP={title:"EggieWeggie VT",subscribers:8421,views:512300,videos:212,recent:[
+  {title:"I tried VTubing on a $0 budget!! #vtuber #shorts",views:14200},
+  {title:"reacting to my FIRST ever stream 🐙",views:9800},
+  {title:"how spoon theory changed my routine | storytime",views:21500},
+  {title:"cozy late-night art stream highlights",views:6300},
+  {title:"GENSHIN but I only use claymores?! #shorts",views:4700},
+]};
+function snapHTML(s){
+  const n=v=>v==null?"—":Number(v).toLocaleString();
+  return `<div class="soft-card" style="margin-bottom:10px"><div style="display:flex;gap:28px;flex-wrap:wrap">
+    ${[["SUBSCRIBERS",s.subscribers],["TOTAL VIEWS",s.views],["VIDEOS",s.videos]].map(([l,v])=>`<div><div class="label">${l}</div><div style="font-family:var(--display);font-size:22px">${n(v)}</div></div>`).join("")}
+  </div></div>
+  ${(s.recent&&s.recent.length)?s.recent.map(v=>`<div style="display:flex;gap:12px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(v.title)}</span><span class="label" style="white-space:nowrap">${n(v.views)} views</span></div>`).join(""):`<div class="soft" style="font-size:12px">No recent videos found.</div>`}`;
+}
 function renderOptimize(){
   const live=state.optMode==="livestream";
   const seg=`<div class="seg">${[["video","📹 Video"],["livestream","🔴 Livestream"]].map(([k,l])=>`<button data-act="optMode" data-v="${k}" class="${state.optMode===k?'on':''}">${l}</button>`).join("")}</div>`;
-  return `<div class="panel" style="max-width:760px;margin:0 auto">
+  const handle=(CONFIG.youtubeHandle||(CONFIG.creator&&CONFIG.creator.handle||"").replace(/^@/,"")||"eggieweggievt");
+  return `<div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
+    <div class="panel">
+      <div class="card-head"><h2 style="font-size:18px">📡 Channel snapshot</h2><button class="btn btn-pink" data-act="pullSnapshot">Pull @${esc(handle)}</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Your latest subscribers, total views, and recent uploads — pulled live from YouTube.${DEMO?` <b>(demo numbers — deploy the analyze function + set YOUTUBE_API_KEY for real ones)</b>`:""}</p>
+      <div id="snapOut">${DEMO?snapHTML(DEMO_SNAP):`<div class="soft" style="font-size:12px">Tap “Pull @${esc(handle)}” to load your snapshot 🐙</div>`}</div>
+    </div>
+    <div class="panel">
     <div class="card-head"><h2 style="font-size:18px">🎯 ${live?"Livestream":"Video"} optimization</h2>${seg}</div>
     <p class="soft" style="font-size:12.5px;margin:0 0 12px">${live?"Set up a YouTube stream — get stream titles (your format + the game), a ready-to-paste description with your links, tags, and a going-live post.":"Title score, stronger titles, tags, 1S/2M/2L hashtags, and a full description — in your voice, learning from your channel."}${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
     <div class="label">${live?"Game / stream focus":"Title / working title"}</div><input class="inp" id="oTitle" placeholder="${live?"e.g. Elden Ring DLC — first deathless attempt":"e.g. I tried VTubing on a $0 budget"}" />
@@ -1308,6 +1363,7 @@ function renderOptimize(){
       <div id="thumbPrev" style="margin-top:10px"></div>
       <button class="btn btn-pink" data-act="checkThumb" style="margin-top:8px">🖼️ check thumbnail</button>
       <div id="thumbOut" style="margin-top:12px"></div>
+    </div>
     </div>
   </div>`;
 }
@@ -1524,8 +1580,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="calEvent"){ return calEventModal(null,el.dataset.eid); }
   if(act==="saveCalEvent"){
     const title=document.getElementById("calTitle").value.trim(), date=document.getElementById("calDate").value, eid=document.getElementById("calEid").value;
+    const time=document.getElementById("calTime").value, tz=document.getElementById("calTz").value, note=document.getElementById("calNote").value.trim();
     if(!title){ toast("Give it a name 🌸"); return; }
-    await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); if(eid){ const t=evs.find(x=>x.id===eid); if(t){t.title=title;t.date=date;t.color=CAL_COLOR;} } else { evs.push({id:uid(),title,date,color:CAL_COLOR}); } return {...n,calendarEvents:evs}; });
+    await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); if(eid){ const t=evs.find(x=>x.id===eid); if(t){t.title=title;t.date=date;t.color=CAL_COLOR;t.time=time;t.tz=tz;t.note=note;} } else { evs.push({id:uid(),title,date,color:CAL_COLOR,time,tz,note}); } return {...n,calendarEvents:evs}; });
     document.getElementById("modal").innerHTML=""; toast("Saved 💗"); return render();
   }
   if(act==="delCalEvent"){ const eid=el.dataset.eid; await DB.saveDaily(SENTINEL,n=>({...n,calendarEvents:(n.calendarEvents||[]).filter(x=>x.id!==eid)})); document.getElementById("modal").innerHTML=""; toast("Removed"); return render(); }
@@ -1638,6 +1695,14 @@ document.addEventListener("click",async(e)=>{
   if(act==="saveChannel")return saveChannel();
   if(act==="autoChannel"){ if(DEMO||!SB){toast("Deploy the analyze function + demo off to auto-pull 🌸");return;} toast("Pulling your numbers… 🐙"); try{ const r=await aiCall("channelStats",{channelId:CONFIG.youtubeChannelId,discordInvite:CONFIG.discordInvite,twitchHandle:CONFIG.twitchHandle}); toast(r&&r.error?r.error:"Channel pulse updated ✨"); render(); }catch(e){ toast("Couldn't auto-pull: "+(e.message||e)); } return; }
   if(act==="optMode"){ state.optMode=el.dataset.v; return render(); }
+  if(act==="pullSnapshot"){
+    const out=document.getElementById("snapOut"); if(!out)return;
+    if(DEMO||!SB){ out.innerHTML=snapHTML(DEMO_SNAP); toast("Demo snapshot — deploy the function + YouTube key for live numbers 🌸"); return; }
+    out.innerHTML=`<div class="label">pulling… 🐙</div>`;
+    try{ const r=await aiCall("channelSnapshot",{handle:CONFIG.youtubeHandle||"",channelId:CONFIG.youtubeChannelId}); if(r&&r.error){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(r.error)}</div>`; return; } out.innerHTML=snapHTML(r.snapshot||{}); }
+    catch(e){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(e.message||e)}</div>`; }
+    return;
+  }
   if(act==="runOptimize")return runOptimize();
   if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }

@@ -47,6 +47,11 @@ supabase secrets set DISCORD_INVITE=suckegg           # the code from discord.gg
 supabase secrets set TWITCH_HANDLE=eggieweggievt      # Twitch followers via DecAPI (free, no key)
 ```
 
+**Channel snapshot (Optimize tab):** the 📡 "Pull @handle" button uses this same `YOUTUBE_API_KEY` to show your
+subscribers, total views, video count, and 5 most-recent uploads (with view counts). It's the `channelSnapshot`
+mode — added to `analyze`, so **redeploy** (`supabase functions deploy analyze --no-verify-jwt`) after pulling
+these changes. Works in demo mode with placeholder numbers until the key + redeploy are in place.
+
 What auto-pulls for free: **YouTube** subs (needs the API key above), **Twitch** followers (DecAPI, no key),
 **Discord** members (from the invite, no key). **TikTok / X / Instagram** have no reliable free
 auto-count, so those stay manual. (The ↻ button on Channel Pulse passes your handles from CONFIG, so it
