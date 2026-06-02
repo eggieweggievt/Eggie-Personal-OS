@@ -807,7 +807,7 @@ async function renderContent(){
     ${pillarMeter(parents)}
     <div class="panel">
       <div class="card-head"><span class="label">Content pipeline 🎬 · ${shown.length}${state.fmt!=="all"?" "+FORMATS[state.fmt]:""} items</span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fmtSeg}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn" href="https://metricool.com" target="_blank" rel="noopener" title="Open Metricool in a new tab">📊 Metricool</a>${fmtSeg}
           <input class="inp" id="smartQ" placeholder="search…" style="width:140px" /><button class="btn" data-act="smart">🔍</button>${state.smartIds?`<button class="btn" data-act="smartClear">clear</button>`:""}
           <input class="inp" id="newContent" placeholder="New ${state.fmt==='all'?'idea':FORMATS[state.fmt].toLowerCase()}…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addContent" ${RO?"disabled":""}>+ add</button>
         </div></div>
