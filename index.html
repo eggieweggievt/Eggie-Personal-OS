@@ -135,12 +135,18 @@
   .note:hover{border-color:var(--pink);}
   /* floating sticky notes */
   #stickyLayer{position:fixed;inset:0;z-index:80;pointer-events:none;}
-  .sticky{position:absolute;width:184px;min-height:120px;border-radius:12px;box-shadow:0 8px 22px rgba(120,80,120,.22);pointer-events:auto;display:flex;flex-direction:column;transform:rotate(-1deg);}
-  .sticky-head{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;cursor:grab;border-radius:12px 12px 0 0;}
+  .sticky{position:absolute;width:184px;height:150px;min-width:140px;min-height:108px;border-radius:12px;overflow:hidden;box-shadow:0 8px 22px rgba(120,80,120,.22);pointer-events:auto;display:flex;flex-direction:column;transform:rotate(-1deg);}
+  .sticky-head{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;cursor:grab;border-radius:12px 12px 0 0;flex:0 0 auto;}
   .sticky-head:active{cursor:grabbing;}
   .sticky-dot{width:13px;height:13px;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);cursor:pointer;}
   .sticky-x{border:none;background:none;font-size:15px;line-height:1;color:rgba(74,58,77,.55);cursor:pointer;}
-  .sticky textarea{flex:1;border:none;background:transparent;resize:none;outline:none;font-family:var(--sans);font-size:12.5px;color:#4a3a4d;padding:2px 10px 10px;}
+  .sticky-tools{display:flex;gap:1px;flex-wrap:wrap;padding:1px 5px 2px;flex:0 0 auto;}
+  .sticky-tools button{border:none;background:transparent;min-width:19px;height:18px;font-size:11px;line-height:1;color:rgba(74,58,77,.7);cursor:pointer;border-radius:4px;padding:0 3px;}
+  .sticky-tools button:hover{background:rgba(0,0,0,.07);}
+  .sticky-tools button.on{background:rgba(74,58,77,.18);color:#3a2d3d;}
+  .sticky textarea{flex:1 1 auto;border:none;background:transparent;resize:none;outline:none;font-family:var(--sans);font-size:12.5px;color:#4a3a4d;padding:2px 10px 12px;}
+  .sticky-resize{position:absolute;right:1px;bottom:0;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;color:rgba(74,58,77,.45);cursor:nwse-resize;user-select:none;}
+  .sticky-resize:hover{color:rgba(74,58,77,.85);}
   #addStickyBtn{position:fixed;left:16px;bottom:16px;z-index:81;border:none;border-radius:999px;width:46px;height:46px;font-size:18px;background:linear-gradient(135deg,var(--pink),var(--lav));color:#fff;box-shadow:var(--shadow);}
   /* floating focus timer */
   #focusBtn{position:fixed;right:16px;bottom:16px;z-index:81;border:1.5px solid var(--line-2);border-radius:999px;width:46px;height:46px;font-size:18px;background:#fff;box-shadow:var(--shadow);}
@@ -1503,10 +1509,23 @@ async function exportData(){
 /* ===================== STICKY NOTES ===================== */
 function renderStickies(){
   const layer=document.getElementById("stickyLayer"); if(!layer)return;
-  layer.innerHTML=(STICKIES||[]).map(n=>`<div class="sticky" data-sid="${n.id}" style="left:${n.x||60}px;top:${n.y||110}px;background:${n.color||'#fff3b0'}">
+  layer.innerHTML=(STICKIES||[]).map(n=>{
+    const td=[n.u?"underline":"",n.s?"line-through":""].filter(Boolean).join(" ")||"none";
+    const ta=`font-size:${n.fs||12.5}px;font-weight:${n.b?700:400};font-style:${n.i?"italic":"normal"};text-decoration:${td}`;
+    const tools=RO?"":`<div class="sticky-tools">
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="dec" title="smaller text">A−</button>
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="inc" title="bigger text">A+</button>
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="b" class="${n.b?"on":""}" title="bold" style="font-weight:700">B</button>
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="i" class="${n.i?"on":""}" title="italic" style="font-style:italic">I</button>
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="u" class="${n.u?"on":""}" title="underline" style="text-decoration:underline">U</button>
+      <button data-act="stickyFmt" data-id="${n.id}" data-f="s" class="${n.s?"on":""}" title="strikethrough" style="text-decoration:line-through">S</button>
+    </div>`;
+    return `<div class="sticky" data-sid="${n.id}" style="left:${n.x||60}px;top:${n.y||110}px;width:${n.w||184}px;height:${n.h||150}px;background:${n.color||'#fff3b0'}">
     <div class="sticky-head" data-act="stickyDrag" data-id="${n.id}"><button class="sticky-dot" data-act="stickyColor" data-id="${n.id}" title="colour"></button><button class="sticky-x" data-act="delSticky" data-id="${n.id}" ${RO?'style="display:none"':''}>×</button></div>
-    <textarea data-act="stickyEdit" data-id="${n.id}" placeholder="note…" ${RO?"readonly":""}>${esc(n.text||"")}</textarea>
-  </div>`).join("");
+    ${tools}
+    <textarea data-act="stickyEdit" data-id="${n.id}" placeholder="note…" style="${ta}" ${RO?"readonly":""}>${esc(n.text||"")}</textarea>
+    ${RO?"":`<div class="sticky-resize" data-act="stickyResize" data-id="${n.id}" title="drag to resize">◢</div>`}
+  </div>`;}).join("");
   const btn=document.getElementById("addStickyBtn"); if(btn)btn.style.display=RO?"none":"";
   const fb=document.getElementById("focusBtn"); if(fb)fb.style.display=RO?"none":"";
 }
@@ -1614,7 +1633,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1723,6 +1742,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="timerBreakDown")return setLen("break",-1);
   if(act==="stickyColor"){ const cols=["#fff3b0","#ffd6e8","#d6f5e3","#e0d6fb","#cfe8ff"]; const n=STICKIES.find(s=>s.id===id); if(n){const i=cols.indexOf(n.color); n.color=cols[(i+1)%cols.length]; saveStickies(); renderStickies();} return; }
   if(act==="delSticky"){ STICKIES=STICKIES.filter(s=>s.id!==id); saveStickies(); renderStickies(); return; }
+  if(act==="stickyFmt"){ const n=STICKIES.find(s=>s.id===id); if(!n)return; const f=el.dataset.f; if(f==="inc")n.fs=Math.min(30,(n.fs||12.5)+1.5); else if(f==="dec")n.fs=Math.max(9,(n.fs||12.5)-1.5); else n[f]=!n[f]; saveStickies(); renderStickies(); return; }
   if(act==="editSchedule")return scheduleModal();
   if(act==="addSlot")return addSlot();
   if(act==="delSlot")return delSlot(id);
@@ -1768,6 +1788,11 @@ let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("mousedown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; e.preventDefault(); });
 document.addEventListener("mousemove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
 document.addEventListener("mouseup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
+/* sticky resize (drag the ◢ corner) */
+let resizeSticky=null,resizeStart=null;
+document.addEventListener("mousedown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; e.preventDefault(); e.stopPropagation(); });
+document.addEventListener("mousemove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
+document.addEventListener("mouseup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
 document.addEventListener("keydown",async(e)=>{
   if(e.key!=="Enter")return; const t=e.target;
   if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
