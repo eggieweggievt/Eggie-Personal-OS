@@ -109,6 +109,10 @@
   .cal-ev:hover{box-shadow:0 2px 8px rgba(150,110,150,.28);}
   .cal-ev:active{cursor:grabbing;}
   .cal-ev.dragging{opacity:.45;transform:scale(.95);}
+  .cal-ev.span{font-weight:500;}
+  .cal-ev.span-start{border-top-right-radius:3px;border-bottom-right-radius:3px;}
+  .cal-ev.span-mid{border-radius:3px;opacity:.9;}
+  .cal-ev.span-end{border-top-left-radius:3px;border-bottom-left-radius:3px;opacity:.95;}
   .cal-stream{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(236,127,175,.16);color:var(--pink-deep);border-left:3px solid var(--pink);cursor:pointer;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
   .cal-stream:hover{background:rgba(236,127,175,.28);}
   .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
@@ -535,6 +539,9 @@ function wallToUtc(dateStr,timeStr,tz){ const [Y,M,D]=dateStr.split("-").map(Num
 /* convert an event's wall-clock time in its source zone into Eastern; returns {etTime, etDate, dayDiff} or null */
 function toET(dateStr,timeStr,tz){ if(!timeStr)return null; const utc=wallToUtc(dateStr,timeStr,tz||CAL_TZ_TARGET); const p=new Intl.DateTimeFormat("en-US",{timeZone:CAL_TZ_TARGET,hour:"numeric",minute:"2-digit",hour12:true,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(utc)).reduce((a,x)=>(a[x.type]=x.value,a),{}); const etDate=`${p.year}-${p.month}-${p.day}`; return { etTime:`${p.hour}:${p.minute} ${p.dayPeriod}`, etDate, dayDiff: etDate!==dateStr }; }
 function fmt12(timeStr){ if(!timeStr)return ""; const [h,m]=timeStr.split(":").map(Number); const ap=h<12?"AM":"PM"; const hh=h%12||12; return `${hh}:${String(m).padStart(2,"0")} ${ap}`; }
+/* date-string math for multi-day events ("YYYY-MM-DD") */
+function calDiff(a,b){ const pa=a.split("-").map(Number), pb=b.split("-").map(Number); return Math.round((Date.UTC(pb[0],pb[1]-1,pb[2])-Date.UTC(pa[0],pa[1]-1,pa[2]))/86400000); }
+function calAdd(ds,n){ const p=ds.split("-").map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2]+n)).toISOString().slice(0,10); }
 async function renderCalendar(){
   const sent=await DB.daily(SENTINEL);
   const events=sent.calendarEvents||[];
@@ -552,10 +559,19 @@ async function renderCalendar(){
     const inMonth=d.getMonth()===m, isToday=ds===TODAY;
     const dayShort=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
     const streamChips=schedule.filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join("");
-    const chips=events.filter(ev=>ev.date===ds).sort((a,b)=>(a.time||"99:99").localeCompare(b.time||"99:99")).map(ev=>{
+    const dayEvents=events.filter(ev=>ds>=ev.date && ds<=((ev.endDate&&ev.endDate>=ev.date)?ev.endDate:ev.date));
+    dayEvents.sort((a,b)=>{ const sa=(a.endDate&&a.endDate>a.date)?0:1, sb=(b.endDate&&b.endDate>b.date)?0:1; if(sa!==sb)return sa-sb; return (a.time||"99:99").localeCompare(b.time||"99:99"); });
+    const chips=dayEvents.map(ev=>{
+      const end=(ev.endDate&&ev.endDate>ev.date)?ev.endDate:null;
+      const isStart=ds===ev.date, isEnd=ds===(end||ev.date);
       const et=toET(ev.date,ev.time,ev.tz);
+      const tip=esc((et?et.etTime+" ET — ":"")+ev.title+(end?` (through ${end})`:"")+(ev.note?" — "+ev.note:""));
+      if(end){
+        const span=isStart?"span-start":(isEnd?"span-end":"span-mid");
+        const body=isStart?`${et?`<b>${et.etTime}</b> `:""}${esc(ev.title)}${ev.note?" 📝":""} ›`:(isEnd?`‹ ${esc(ev.title)}`:`‹ ${esc(ev.title)} ›`);
+        return `<div class="cal-ev span ${span}" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${body}</div>`;
+      }
       const tlabel=et?`<b>${et.etTime}${et.dayDiff?" (+1d)":""}</b> `:"";
-      const tip=esc((et?et.etTime+" ET — ":"")+ev.title+(ev.note?" — "+ev.note:""));
       return `<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${tlabel}${esc(ev.title)}${ev.note?" 📝":""}</div>`;
     }).join("");
     cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${chips}</div>`;
@@ -579,10 +595,12 @@ async function calEventModal(date,eid){
     <input type="hidden" id="calEid" value="${ev?ev.id:""}" />
     <div class="label" style="margin-bottom:4px">What's happening?</div>
     <input class="inp" id="calTitle" value="${ev?esc(ev.title):""}" placeholder="e.g. Collab stream 🎀" />
-    <div class="label" style="margin:10px 0 4px">Date</div>
-    <input class="inp" id="calDate" type="date" value="${theDate}" />
     <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:110px"><div class="label" style="margin-bottom:4px">Time</div><input class="inp" id="calTime" type="time" value="${ev&&ev.time?ev.time:""}" /></div>
+      <div style="flex:1;min-width:130px"><div class="label" style="margin-bottom:4px">Date</div><input class="inp" id="calDate" type="date" value="${theDate}" /></div>
+      <div style="flex:1;min-width:130px"><div class="label" style="margin-bottom:4px">End date <span class="muted">· optional</span></div><input class="inp" id="calEnd" type="date" value="${ev&&ev.endDate?ev.endDate:""}" /></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:110px"><div class="label" style="margin-bottom:4px">Time <span class="muted">· start</span></div><input class="inp" id="calTime" type="time" value="${ev&&ev.time?ev.time:""}" /></div>
       <div style="flex:2;min-width:150px"><div class="label" style="margin-bottom:4px">Happening in</div><select class="inp" id="calTz">${CAL_TZS.map(([v,l])=>`<option value="${v}" ${v===curTz?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
     <div id="calConv" class="soft-card" style="margin-top:10px;font-size:12.5px;display:none"></div>
@@ -627,7 +645,7 @@ function wireCalDnD(){
       const date=cell.dataset.date;
       if(!eid||!date)return;
       if(RO){ toast("Read-only mode 🌸"); return; }
-      await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); const t=evs.find(x=>x.id===eid); if(t)t.date=date; return {...n,calendarEvents:evs}; });
+      await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); const t=evs.find(x=>x.id===eid); if(t){ if(t.endDate&&t.endDate>t.date){ const dur=calDiff(t.date,t.endDate); t.date=date; t.endDate=calAdd(date,dur); } else { t.date=date; } } return {...n,calendarEvents:evs}; });
       render();
     });
   });
@@ -1587,8 +1605,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="saveCalEvent"){
     const title=document.getElementById("calTitle").value.trim(), date=document.getElementById("calDate").value, eid=document.getElementById("calEid").value;
     const time=document.getElementById("calTime").value, tz=document.getElementById("calTz").value, note=document.getElementById("calNote").value.trim();
+    const endRaw=document.getElementById("calEnd").value, endDate=(endRaw&&endRaw>=date)?endRaw:"";
     if(!title){ toast("Give it a name 🌸"); return; }
-    await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); if(eid){ const t=evs.find(x=>x.id===eid); if(t){t.title=title;t.date=date;t.color=CAL_COLOR;t.time=time;t.tz=tz;t.note=note;} } else { evs.push({id:uid(),title,date,color:CAL_COLOR,time,tz,note}); } return {...n,calendarEvents:evs}; });
+    await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); if(eid){ const t=evs.find(x=>x.id===eid); if(t){t.title=title;t.date=date;t.endDate=endDate;t.color=CAL_COLOR;t.time=time;t.tz=tz;t.note=note;} } else { evs.push({id:uid(),title,date,endDate,color:CAL_COLOR,time,tz,note}); } return {...n,calendarEvents:evs}; });
     document.getElementById("modal").innerHTML=""; toast("Saved 💗"); return render();
   }
   if(act==="delCalEvent"){ const eid=el.dataset.eid; await DB.saveDaily(SENTINEL,n=>({...n,calendarEvents:(n.calendarEvents||[]).filter(x=>x.id!==eid)})); document.getElementById("modal").innerHTML=""; toast("Removed"); return render(); }
