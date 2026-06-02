@@ -115,6 +115,8 @@
   .cal-ev.span-end{border-top-left-radius:3px;border-bottom-left-radius:3px;opacity:.95;}
   .cal-stream{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(236,127,175,.16);color:var(--pink-deep);border-left:3px solid var(--pink);cursor:pointer;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
   .cal-stream:hover{background:rgba(236,127,175,.28);}
+  .cal-game{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(117,138,198,.16);color:#46508a;border-left:3px solid #758ac6;cursor:pointer;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
+  .cal-game:hover{background:rgba(117,138,198,.3);}
   .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
   /* ---- accessibility ---- */
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
@@ -542,10 +544,25 @@ function fmt12(timeStr){ if(!timeStr)return ""; const [h,m]=timeStr.split(":").m
 /* date-string math for multi-day events ("YYYY-MM-DD") */
 function calDiff(a,b){ const pa=a.split("-").map(Number), pb=b.split("-").map(Number); return Math.round((Date.UTC(pb[0],pb[1]-1,pb[2])-Date.UTC(pa[0],pa[1]-1,pa[2]))/86400000); }
 function calAdd(ds,n){ const p=ds.split("-").map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2]+n)).toISOString().slice(0,10); }
+/* Upcoming game updates/releases on the calendar. The weekly "game-dates" scheduled task
+   rewrites the array between the markers below, then you commit + push. `approx:true` = date is
+   a window/estimate, not officially confirmed. Last refreshed: 2026-06-02. */
+/* GAME_RELEASES_START */
+const GAME_RELEASES=[
+  { date:"2026-07-28", title:"FFXIV Patch 7.55", url:"https://na.finalfantasyxiv.com/" },
+  { date:"2026-09-08", title:"FFXIV 7.56 — final Dawntrail content", url:"https://na.finalfantasyxiv.com/" },
+  { date:"2026-12-05", title:"Path of Exile 2 — 1.0 full release", approx:true, url:"https://www.pathofexile.com/" },
+  { date:"2027-01-15", title:"FFXIV: Evercold (8.0 expansion)", approx:true, url:"https://na.finalfantasyxiv.com/" },
+  { date:"2026-06-30", title:"Space Marine 2 — Year 2 finale (PvP arenas)", approx:true, url:"https://www.focus-entmt.com/en/games/warhammer-40000-space-marine-2" },
+  { date:"2026-07-01", title:"Monster Hunter Wilds — expansion news", approx:true, url:"https://www.monsterhunter.com/wilds/en-us/" },
+  { date:"2026-10-31", title:"Silent Hill: Townfall", approx:true, url:"https://www.konami.com/games/series/silenthill/" },
+];
+/* GAME_RELEASES_END */
 async function renderCalendar(){
   const sent=await DB.daily(SENTINEL);
   const events=sent.calendarEvents||[];
   const schedule=sent.schedule||[];
+  const games=GAME_RELEASES.concat(sent.gameEvents||[]);
   if(!state.calRef){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); }
   const ref=state.calRef, y=ref.getFullYear(), m=ref.getMonth();
   const startDow=new Date(y,m,1).getDay();
@@ -559,6 +576,7 @@ async function renderCalendar(){
     const inMonth=d.getMonth()===m, isToday=ds===TODAY;
     const dayShort=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
     const streamChips=schedule.filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join("");
+    const gameChips=games.filter(g=>g.date===ds).map(g=>`<div class="cal-game" ${g.url?`data-act="gameLink" data-url="${esc(g.url)}"`:""} title="${esc(g.title)}${g.approx?" — date is a window/estimate, not officially confirmed":""}">🎮 ${esc(g.title)}${g.approx?" ~":""}</div>`).join("");
     const dayEvents=events.filter(ev=>ds>=ev.date && ds<=((ev.endDate&&ev.endDate>=ev.date)?ev.endDate:ev.date));
     dayEvents.sort((a,b)=>{ const sa=(a.endDate&&a.endDate>a.date)?0:1, sb=(b.endDate&&b.endDate>b.date)?0:1; if(sa!==sb)return sa-sb; return (a.time||"99:99").localeCompare(b.time||"99:99"); });
     const chips=dayEvents.map(ev=>{
@@ -574,10 +592,10 @@ async function renderCalendar(){
       const tlabel=et?`<b>${et.etTime}${et.dayDiff?" (+1d)":""}</b> `:"";
       return `<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${tlabel}${esc(ev.title)}${ev.note?" 📝":""}</div>`;
     }).join("");
-    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${chips}</div>`;
+    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${gameChips}${chips}</div>`;
   }
   return `<div class="panel" style="max-width:900px;margin:0 auto">
-    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag an event to move it · 🔴 = your stream days 🐙</div></div>
+    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag to move · 🔴 stream days · 🎮 game updates (~ = approx) 🐙</div></div>
       <div style="display:flex;gap:6px"><button class="btn" data-act="calPrev" title="previous month">‹</button><button class="btn" data-act="calToday">today</button><button class="btn" data-act="calNext" title="next month">›</button></div></div>
     <div class="cal-grid" style="margin-bottom:6px">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join("")}</div>
     <div class="cal-grid">${cells}</div>
@@ -1600,6 +1618,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="calPrev"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()-1,1); return render(); }
   if(act==="calNext"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()+1,1); return render(); }
   if(act==="calToday"){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); return render(); }
+  if(act==="gameLink"){ if(el.dataset.url)window.open(el.dataset.url,"_blank","noopener"); return; }
   if(act==="calAdd"){ return calEventModal(el.dataset.date); }
   if(act==="calEvent"){ return calEventModal(null,el.dataset.eid); }
   if(act==="saveCalEvent"){
