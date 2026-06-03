@@ -1867,5 +1867,38 @@ setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new
 applySettings();
 render();
 </script>
+<!-- ===================== AI PET WIDGET ===================== -->
+<script src="pet-widget.js"></script>
+<script>
+/* Floating sprite-sheet pet (drag to throw, tap to chat). Sheet: pet-sprite.png — a 96×96
+   uniform grid, 7 cols × 5 rows (672×480); rows: 0 idle, 1 walk, 2 sit, 3 stand, 4 jump.
+   Sheet lives at pet-widget/Sprite Sheet.png (committed in the repo). If the poses look off,
+   run  PetWidget.measure("pet-widget/Sprite Sheet.png").then(r=>console.log(JSON.stringify(r)))
+   in the console and adjust the rectangles below. */
+(function(){
+  if(!window.PetWidget) return;
+  var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
+  window.PET = PetWidget.init({
+    sheet:"pet-widget/Sprite Sheet.png", sheetW:672, sheetH:480,
+    walk: row(1),                 // row 1 = walk (7 frames)
+    sit:  {x:0,y:0,w:W,h:H},      // row 0, first frame = idle/sit
+    scale:1.1, faces:"right", speed:42, frameMs:130,
+    leftClear:86, rightClear:96,  // keep clear of the 🗒️+ (bottom-left) and focus timer (bottom-right)
+    title:"Eggie's pet", subtitle:"tap me — ask your OS 🐙",
+    accentFrom:"#ec7faf", accentTo:"#a98fe0",
+    font:"inherit",
+    greetings:["pspsps… ask me anything 🐙","heya! what're we making today? 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
+    reduceMotion:function(){ try{ return document.body.classList.contains("calm") || matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } },
+    ask: async function(q){
+      try{
+        var r = await aiCall("ask",{question:q});
+        if(r && r._needsBackend) return "I can really answer once the analyze function is deployed and demo mode is off 🐙 — for now I'm just keeping you company! 🌸";
+        if(r && r.error) throw new Error(r.error);
+        return (r && r.answer) || "hmm, ask me again? 🌸";
+      }catch(e){ throw new Error(e.message||"couldn't reach the OS brain"); }
+    }
+  });
+})();
+</script>
 </body>
 </html>
