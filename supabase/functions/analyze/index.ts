@@ -112,6 +112,11 @@ async function fullContext(userId: string, today: string): Promise<string> {
     lines.push(`TODAY (${today}): energy=${d.energy || "?"}${d.streamDay ? ", STREAM DAY" : ""}; habits done=${hbits}.`);
     if (Object.keys(h).length) lines.push(`  health today: ${Object.entries(h).map(([k, v]) => `${k}:${v}`).join(", ")}`);
     if (Object.keys(c).length) lines.push(`  care today: ${[c.feelings?.length ? "feelings:" + c.feelings.join("/") : "", c.mood != null ? "mood:" + c.mood : "", c.efStep ? "next-step:" + c.efStep : ""].filter(Boolean).join(", ")}`);
+    // meds list + which are taken today
+    if (s.medsList?.length) {
+      const taken = h.meds || {};
+      lines.push(`MEDS: ${s.medsList.map((m: any) => `${m.name}${taken[m.id] ? " ✓taken" : ""}`).join(", ")}`);
+    }
     // tasks
     const tasks = (s.tasks || s.planner || []).filter((t: any) => t && !t.done).slice(0, 12);
     if (tasks.length) lines.push(`OPEN TASKS: ${tasks.map((t: any) => `${t.text}${t.bucket ? " [" + t.bucket + "]" : ""}`).join("; ")}`);
@@ -321,6 +326,30 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addHabit: { label, emoji?, cat?: "Pre-stream"|"On-air"|"Post-stream"|"Content"|"Community"|"Health"|"Business"|"Batch days", energy?: "essential"|"normal"|"intensive", total?: number }
 - scheduleContent: { name (fuzzy-matched to an EXISTING content title in her list above), date: "YYYY-MM-DD" }   // sets that content's scheduled date. Use ONLY for content she already has; if it's a new idea, use addContent instead.
 - startScript: { kind: "short"|"long", title?, raw? (any idea/notes/spoken words she gave you to start from), references?, format?: boolean }   // opens the Script Writer seeded with this; set format:true ONLY if she gave enough raw/references to shape it now (otherwise leave false so she can dictate more first).
+- markMed: { name (fuzzy-matched to a med on her list), on?: boolean (default true) }   // "I took my <med>", "mark off my meds", "check off my morning pill"
+- markAllMeds: { on?: boolean }     // "I took all my meds today"
+- addMed: { name, dose?, time? }    // add a new medication to her list
+- completeTask: { name (fuzzy-matched to a planner task), done?: boolean }   // "mark <task> done", "I finished <task>", "uncheck <task>"
+- moveTask: { name, status: "todo"|"doing"|"done" }   // move a task on the kanban board
+- delTask: { name }                 // remove a planner task she names
+- addGoal: { scope: "week"|"month", text }     // add a goal to her week or month goals
+- checkGoal: { scope: "week"|"month", name, done?: boolean }   // tick/untick one of her goals
+- setCreative: { project?, step? }  // her gentle creative focus — what she's playing with + the next tiny step
+- addJoy: { text }                  // add an item to her joy jar
+- careToggle: { joy?: boolean, skill?: boolean, mood?: 1-5 }   // "I did something for me today" (joy), "I used a skill" (skill), weather-inside mood 1(🌧️)-5(🌞)
+- logHealth: also accepts counters (water, salt, slips — set the new running total) and these boolean flags via setHealthFlag below
+- setHealthFlag: { field: "compression"|"legsup"|"bracing"|"movement"|"paced", on?: boolean }   // POTS/EDS care checkboxes for today
+- setJoint: { joint: "jaw"|"shoulders"|"wrists"|"fingers"|"hips"|"knees"|"ankles"|"spine", on?: boolean }   // note an achy/unstable joint today
+- setFlare: { on?: boolean }        // "I'm in a flare today"
+- addSavingsGoal: { name, target?: number, emoji? }
+- allotSavings: { name (fuzzy-matched to a savings goal), amount: number }   // "put $20 toward <goal>"
+- addSponsor: { brand, stage?: "draft"|"sent"|"responded"|"signed"|"passed", deal_type?, value?: number, note? }
+- moveSponsor: { brand, stage: "draft"|"sent"|"responded"|"signed"|"passed" }
+- moveContent: { name (fuzzy-matched to existing content), stage: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published" }   // move a piece of content along its pipeline
+- setReview: { field: "wins"|"slipped"|"loops"|"followups"|"notes"|"spoons"|"top3", text }   // jot into this week's review
+- recoveryDay: { }                  // set today as a gentle recovery day (low energy, not a stream day)
+
+You can control essentially every part of her OS with the actions above — meds, health, POTS/joint care, tasks and the kanban, habits, goals, content pipeline, calendar, stream schedule, money, savings, sponsors, care/emotion check-ins, creative focus, joy jar, scripts, and the weekly review. If she asks for something and a matching action exists, DO it; only fall back to a plain reply when nothing fits or you're missing a detail.
 
 Stream schedule vs. event — keep these straight:
 - "I stream every Tuesday", "add Friday to my stream schedule", "my regular streams are Mon/Wed at 4pm" = RECURRING → addScheduleSlot (weekday, repeats weekly). One slot per weekday she names.

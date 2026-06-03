@@ -2649,6 +2649,101 @@ render();
         setTab("script");
         if(a.format && (state.script.raw||state.script.references)){ setTimeout(function(){ try{formatScript();}catch(e){} },80); }
         return "✍️ started a "+(a.kind==="long"?"long-form":"short")+" script"+(a.title?" — “"+a.title+"”":"")+(a.format?" and shaping it now…":" — talk it out and hit format when ready");
+      case "markMed": {
+        var meds=await loadMeds(); var nm=(a.name||"").toLowerCase();
+        var md=meds.find(function(x){ return (x.name||"").toLowerCase().indexOf(nm)>=0; });
+        if(!md) return "couldn't find a med like “"+(a.name||"")+"” — add it under Health ▸ Meds first 🌸";
+        var on=(a.on!==false);
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); var m=Object.assign({},h.meds||{}); m[md.id]=on; h.meds=m; return Object.assign({},n,{health:h}); });
+        return on? "💊 marked "+md.name+" as taken" : "unchecked "+md.name;
+      }
+      case "markAllMeds": {
+        var meds=await loadMeds(); if(!meds.length) return "no meds on your list yet 🌸";
+        var on=(a.on!==false);
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); var m=Object.assign({},h.meds||{}); meds.forEach(function(x){ m[x.id]=on; }); h.meds=m; return Object.assign({},n,{health:h}); });
+        return on? "💊 marked all your meds taken" : "cleared all meds for today";
+      }
+      case "addMed": {
+        var meds=await loadMeds(); meds=meds.concat([{id:"m"+uid().slice(0,8),name:a.name||"med",dose:a.dose||"",time:a.time||""}]);
+        await saveMeds(meds); return "💊 added "+(a.name||"med")+" to your meds list";
+      }
+      case "completeTask": {
+        var nm=(a.name||"").toLowerCase(); var done=(a.done!==false); var hit=null;
+        await taskMut(function(t){ return t.map(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{done:done,status:done?"done":"todo"}); } return x; }); });
+        return hit? (done?"✅ checked off “"+hit.text+"”":"↩ un-checked “"+hit.text+"”") : "couldn't find a task like “"+(a.name||"")+"” 🌸";
+      }
+      case "moveTask": {
+        var nm=(a.name||"").toLowerCase(); var st=a.status||"todo"; var hit=null;
+        await taskMut(function(t){ return t.map(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{status:st,done:st==="done"}); } return x; }); });
+        return hit? "🗂️ moved “"+hit.text+"” to "+st : "couldn't find a task like “"+(a.name||"")+"” 🌸";
+      }
+      case "delTask": {
+        var nm=(a.name||"").toLowerCase(); var hit=null;
+        await taskMut(function(t){ return t.filter(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return false; } return true; }); });
+        return hit? "🗑 removed “"+hit.text+"”" : "couldn't find a task like “"+(a.name||"")+"” 🌸";
+      }
+      case "addGoal":
+        await goalMut(a.scope==="month"?"month":"week", function(g){ return g.concat([{id:uid(),text:a.text||"goal",done:false}]); });
+        return "🎯 added a "+(a.scope==="month"?"month":"week")+" goal: "+(a.text||"");
+      case "checkGoal": {
+        var nm=(a.name||"").toLowerCase(); var done=(a.done!==false); var hit=null;
+        await goalMut(a.scope==="month"?"month":"week", function(g){ return g.map(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{done:done}); } return x; }); });
+        return hit? (done?"✅ ":"↩ ")+"“"+hit.text+"”" : "couldn't find that goal 🌸";
+      }
+      case "setCreative":
+        await DB.saveDaily(SENTINEL,function(n){ var cf=Object.assign({},n.creativeFocus||{}); if(a.project!=null)cf.project=a.project; if(a.step!=null)cf.step=a.step; return Object.assign({},n,{creativeFocus:cf}); });
+        return "🎨 updated your creative focus";
+      case "addJoy":
+        await joyMut(function(j){ return j.concat([a.text||"a little joy"]); });
+        return "🫙 added “"+(a.text||"")+"” to your joy jar";
+      case "careToggle":
+        await careMut(function(c){ var o=Object.assign({},c); if(a.joy!=null)o.joy=!!a.joy; if(a.skill!=null)o.skill=!!a.skill; if(a.mood!=null)o.mood=Number(a.mood); return o; });
+        return "💗 updated your gentle check-in";
+      case "setHealthFlag":
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); h[a.field]=(a.on!==false); return Object.assign({},n,{health:h}); });
+        return "💗 noted "+a.field;
+      case "setJoint": {
+        var j=(a.joint||"").toLowerCase();
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); var cur=(h.joints||[]).slice(); var has=cur.indexOf(j)>=0; if(a.on===false){ cur=cur.filter(function(x){return x!==j;}); } else if(!has){ cur.push(j); } h.joints=cur; return Object.assign({},n,{health:h}); });
+        return "🦴 noted "+j;
+      }
+      case "setFlare":
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); h.flare=(a.on!==false); return Object.assign({},n,{health:h}); });
+        return (a.on!==false)? "🌶️ marked a flare day — be gentle 🌙" : "cleared today's flare flag";
+      case "addSavingsGoal":
+        await DB.addGoal({name:a.name||"goal",emoji:a.emoji||null,target:Number(a.target)||0,saved:0});
+        return "🐖 added savings goal: "+(a.name||"");
+      case "allotSavings": {
+        var list=await DB.savings(); var nm=(a.name||"").toLowerCase();
+        var g=(list||[]).find(function(x){ return (x.name||"").toLowerCase().indexOf(nm)>=0; });
+        if(!g) return "couldn't find a savings goal like “"+(a.name||"")+"” 🌸";
+        await DB.updateGoal(g.id,{saved:Number(g.saved)+(Number(a.amount)||0)});
+        return "🐖 put $"+(Number(a.amount)||0)+" toward "+g.name;
+      }
+      case "addSponsor":
+        await DB.addSponsor({brand:a.brand||"Brand",stage:a.stage||"draft",deal_type:a.deal_type||null,value:a.value||null,note:a.note||null});
+        return "💌 added "+(a.brand||"a brand")+" to your sponsor pipeline";
+      case "moveSponsor": {
+        var list=await DB.sponsors(); var nm=(a.brand||"").toLowerCase();
+        var s=(list||[]).find(function(x){ return (x.brand||"").toLowerCase().indexOf(nm)>=0; });
+        if(!s) return "couldn't find a sponsor like “"+(a.brand||"")+"” 🌸";
+        await DB.updateSponsor(s.id,{stage:a.stage||"sent"});
+        return "💌 moved "+s.brand+" to "+(a.stage||"sent");
+      }
+      case "moveContent": {
+        var list=await DB.content(); var nm=(a.name||"").toLowerCase();
+        var ci=(list||[]).find(function(x){ return !x.parent_id && (x.title||"").toLowerCase().indexOf(nm)>=0; });
+        if(!ci) return "couldn't find content like “"+(a.name||"")+"” 🌸";
+        var patch={stage:a.stage||"idea"}; if(a.stage==="published")patch.published_at=new Date().toISOString();
+        await DB.updateContent(ci.id,patch);
+        return "🎬 moved “"+ci.title+"” to "+(a.stage||"idea");
+      }
+      case "setReview":
+        await DB.saveDaily(SENTINEL,function(n){ var rv=Object.assign({},n.review||{}); if(a.field)rv[a.field]=a.text||""; return Object.assign({},n,{review:rv}); });
+        return "🌷 added that to your weekly review";
+      case "recoveryDay":
+        await DB.saveDaily(TODAY,function(n){ return Object.assign({},n,{energy:"low",streamDay:false}); });
+        return "🌙 set today as a recovery day — rest is productive too 💜";
       default: return "";
     }
   }
