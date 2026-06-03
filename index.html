@@ -126,6 +126,9 @@
   html{-webkit-text-size-adjust:100%;}
   .drop-hot{outline:2px dashed var(--lav-deep);outline-offset:-2px;}
   .drag-ghost{border-radius:8px;}
+  /* ---- cursor petal trail ---- */
+  .petal{position:fixed;pointer-events:none;z-index:9000;border-radius:150% 0 150% 0;will-change:transform,opacity;opacity:0;}
+  @keyframes petalFloat{ 0%{opacity:0;transform:translate(0,0) rotate(0deg) scale(.55);} 18%{opacity:var(--o,.7);} 100%{opacity:0;transform:translate(var(--dx,12px),var(--dy,60px)) rotate(var(--dr,200deg)) scale(1);} }
   .kanban{-webkit-overflow-scrolling:touch;}
   .cal-ev,.cc-chip,.citem,[data-act="dragSponsor"],.sticky-head,.sticky-resize{touch-action:none;}
   @media (hover:none){
@@ -2204,6 +2207,29 @@ function postRender(){ const c=document.getElementById("clock"); if(c)c.textCont
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
 render();
+/* ===== glowing sakura petal cursor trail (pink + white) ===== */
+(function(){
+  const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
+  let last=0, count=0; const MAX=42;
+  function spawn(x,y){
+    if(reduce()||count>=MAX)return;
+    const p=document.createElement("div"); p.className="petal";
+    const size=(9+Math.random()*9).toFixed(0);
+    const c1=Math.random()<0.5?"#ffffff":"#ffd9ee", c2=Math.random()<0.5?"#ff9ed8":"#ffc2e3";
+    p.style.width=p.style.height=size+"px";
+    p.style.left=(x-size/2)+"px"; p.style.top=(y-size/2)+"px";
+    p.style.background=`radial-gradient(circle at 34% 28%, ${c1}, ${c2})`;
+    p.style.boxShadow=`0 0 ${(6+Math.random()*9).toFixed(0)}px ${(1+Math.random()*2).toFixed(0)}px rgba(255,160,214,.55)`;
+    p.style.setProperty("--dx",(Math.random()*64-32).toFixed(0)+"px");
+    p.style.setProperty("--dy",(40+Math.random()*64).toFixed(0)+"px");
+    p.style.setProperty("--dr",(Math.random()*340-120).toFixed(0)+"deg");
+    p.style.setProperty("--o",(0.45+Math.random()*0.35).toFixed(2));
+    p.style.animation=`petalFloat ${(1.6+Math.random()*1.5).toFixed(2)}s ease-out forwards`;
+    document.body.appendChild(p); count++;
+    p.addEventListener("animationend",()=>{ p.remove(); count--; });
+  }
+  window.addEventListener("pointermove",e=>{ if(e.pointerType==="touch")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
+})();
 </script>
 <!-- ===================== AI PET WIDGET ===================== -->
 <script src="pet-widget.js"></script>
