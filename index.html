@@ -254,7 +254,7 @@
   .tp-bar label{font-size:12px;color:#b9b9c8;display:flex;align-items:center;gap:6px;}
   .tp-bar input[type=range]{accent-color:#ec7faf;width:120px;}
   .tp-scroll{flex:1;overflow:hidden;position:relative;cursor:ns-resize;}
-  .tp-text{padding:42vh 8vw;font-size:44px;line-height:1.6;white-space:pre-wrap;text-align:center;will-change:transform;}
+  .tp-text{padding:42vh 24px;max-width:70%;margin:0 auto;font-size:44px;line-height:1.6;white-space:pre-wrap;text-align:center;will-change:transform;}
   .tp-line{position:absolute;left:0;right:0;top:40vh;height:2px;background:rgba(236,127,175,.55);pointer-events:none;}
   .tp-mask{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#0b0b12 1%,transparent 24%,transparent 76%,#0b0b12 99%);}
 </style>
@@ -1800,6 +1800,7 @@ function openTeleprompter(text){
       <button id="tpRestart">↻ Restart</button>
       <label>🐢 Speed <input type="range" id="tpSpeed" min="10" max="240" value="55"> 🐇</label>
       <label>Size <input type="range" id="tpSize" min="24" max="92" value="44"></label>
+      <label>Width <input type="range" id="tpWidth" min="30" max="100" value="70"></label>
       <button id="tpMirror" title="flip for teleprompter glass">🪞 Mirror</button>
       <div style="flex:1"></div>
       <span style="font-size:11.5px;color:#9a9ab0">space play/pause · ↑↓ speed · scroll to scrub · Esc close</span>
@@ -1811,9 +1812,9 @@ function openTeleprompter(text){
     </div>`;
   document.body.appendChild(ov);
   const txt=ov.querySelector("#tpText");
-  const T={y:0,speed:55,size:44,playing:false,mirror:false,raf:null,last:0};
+  const T={y:0,speed:55,size:44,width:70,playing:false,mirror:false,raf:null,last:0};
   function maxY(){ return Math.max(0, txt.scrollHeight - innerHeight*0.5); }
-  function apply(){ txt.style.fontSize=T.size+"px"; txt.style.transform=(T.mirror?"scaleX(-1) ":"")+"translateY("+(-T.y)+"px)"; }
+  function apply(){ txt.style.fontSize=T.size+"px"; txt.style.maxWidth=T.width+"%"; txt.style.transform=(T.mirror?"scaleX(-1) ":"")+"translateY("+(-T.y)+"px)"; }
   function setPlay(p){ T.playing=p; const b=ov.querySelector("#tpPlay"); b.textContent=p?"⏸ Pause":"▶ Play"; if(p){ T.last=0; T.raf=requestAnimationFrame(frame); } else if(T.raf){ cancelAnimationFrame(T.raf); T.raf=null; } }
   function frame(now){ if(!T.playing)return; const dt=Math.min(80, now-(T.last||now)); T.last=now; T.y+=T.speed*dt/1000; if(T.y>=maxY()){ T.y=maxY(); apply(); setPlay(false); return; } apply(); T.raf=requestAnimationFrame(frame); }
   ov.querySelector("#tpPlay").onclick=()=>setPlay(!T.playing);
@@ -1822,6 +1823,7 @@ function openTeleprompter(text){
   ov.querySelector("#tpMirror").onclick=function(){ T.mirror=!T.mirror; this.style.background=T.mirror?"#ec7faf":""; this.style.borderColor=T.mirror?"#ec7faf":""; apply(); };
   ov.querySelector("#tpSpeed").oninput=e=>{ T.speed=+e.target.value; };
   ov.querySelector("#tpSize").oninput=e=>{ T.size=+e.target.value; apply(); };
+  ov.querySelector("#tpWidth").oninput=e=>{ T.width=+e.target.value; apply(); };
   ov.querySelector("#tpScroll").addEventListener("wheel",e=>{ e.preventDefault(); T.y=Math.max(0,Math.min(maxY(),T.y+e.deltaY)); apply(); },{passive:false});
   T._key=e=>{ if(!document.getElementById("tpOverlay"))return; if(e.key===" "){e.preventDefault();setPlay(!T.playing);} else if(e.key==="Escape"){closeTeleprompter();} else if(e.key==="ArrowUp"){e.preventDefault();T.speed=Math.min(240,T.speed+10);ov.querySelector("#tpSpeed").value=T.speed;} else if(e.key==="ArrowDown"){e.preventDefault();T.speed=Math.max(10,T.speed-10);ov.querySelector("#tpSpeed").value=T.speed;} };
   document.addEventListener("keydown",T._key);
