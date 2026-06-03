@@ -2236,22 +2236,25 @@ render();
 /* ===== ambient rising bubbles (octopus vibes) 🐙 ===== */
 (function(){
   const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
-  let count=0; const MAX=16;
+  let count=0; const MAX=55;
   function bubble(){
     if(!reduce() && count<MAX){
-      const b=document.createElement("div"); b.className="bubble";
-      const size=(10+Math.random()*32).toFixed(0);
-      b.style.width=b.style.height=size+"px";
-      b.style.left=(Math.random()*100).toFixed(1)+"vw";
-      b.style.setProperty("--dx",(Math.random()*90-45).toFixed(0)+"px");
-      b.style.setProperty("--o",(0.16+Math.random()*0.28).toFixed(2));
-      b.style.animation=`bubbleRise ${(8+Math.random()*7).toFixed(1)}s linear forwards`;
-      document.body.appendChild(b); count++;
-      b.addEventListener("animationend",()=>{ b.remove(); count--; });
+      const burst=1+(Math.random()<0.5?1:0);   // sometimes spawn two at once
+      for(let k=0;k<burst && count<MAX;k++){
+        const b=document.createElement("div"); b.className="bubble";
+        const size=(10+Math.random()*34).toFixed(0);
+        b.style.width=b.style.height=size+"px";
+        b.style.left=(Math.random()*100).toFixed(1)+"vw";
+        b.style.setProperty("--dx",(Math.random()*110-55).toFixed(0)+"px");
+        b.style.setProperty("--o",(0.22+Math.random()*0.3).toFixed(2));
+        b.style.animation=`bubbleRise ${(4.5+Math.random()*4).toFixed(1)}s linear forwards`;
+        document.body.appendChild(b); count++;
+        b.addEventListener("animationend",()=>{ b.remove(); count--; });
+      }
     }
-    setTimeout(bubble, 700+Math.random()*1500);
+    setTimeout(bubble, 260+Math.random()*520);
   }
-  setTimeout(bubble, 600);
+  setTimeout(bubble, 400);
 })();
 </script>
 <!-- ===================== AI PET WIDGET ===================== -->
