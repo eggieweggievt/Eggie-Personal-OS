@@ -117,6 +117,10 @@
   .cal-stream:hover{background:rgba(236,127,175,.28);}
   .cal-game{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(117,138,198,.16);color:#46508a;border-left:3px solid #758ac6;cursor:pointer;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
   .cal-game:hover{background:rgba(117,138,198,.3);}
+  .cal-content,.cc-chip{font-size:10.5px;line-height:1.25;padding:3px 7px;border-radius:8px;background:rgba(124,189,164,.2);color:#2f6a55;border-left:3px solid #5cc6a3;cursor:grab;white-space:normal;overflow-wrap:anywhere;transition:background .12s;}
+  .cal-content{cursor:pointer;}
+  .cal-content:hover,.cc-chip:hover{background:rgba(124,189,164,.34);}
+  .cc-cell.drag-over{background:rgba(124,189,164,.18);border-color:#5cc6a3;}
   .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
   /* ---- accessibility ---- */
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
@@ -515,6 +519,11 @@ const DB = {
 /* editable settings live on the sentinel daily_logs row */
 async function loadLib(){ const s=await DB.daily(SENTINEL); const lib=s.habitsLib; return (lib&&lib.length)?lib:CONFIG.defaultHabits.map(h=>({...h})); }
 async function saveLib(list){ await DB.saveDaily(SENTINEL,n=>({...n,habitsLib:list})); }
+/* editable habit categories (name + emoji), stored on the sentinel row */
+const DEFAULT_CATS=[{name:"Pre-stream",emoji:"🌅"},{name:"On-air",emoji:"🎙️"},{name:"Post-stream",emoji:"🌙"},{name:"Content",emoji:"📅"},{name:"Community",emoji:"💬"},{name:"Health",emoji:"💖"},{name:"Business",emoji:"💼"},{name:"Batch days",emoji:"🎨"}];
+let HABIT_CATS=DEFAULT_CATS.slice();
+async function loadCats(){ const s=await DB.daily(SENTINEL); return (s.habitCats&&s.habitCats.length)?s.habitCats:DEFAULT_CATS.map(c=>({...c})); }
+async function saveCats(list){ await DB.saveDaily(SENTINEL,n=>({...n,habitCats:list})); }
 async function loadMeds(){ const s=await DB.daily(SENTINEL); return s.medsList||[]; }
 async function saveMeds(list){ await DB.saveDaily(SENTINEL,n=>({...n,medsList:list})); }
 /* editable config overrides (set in the ⚙️ settings → details editor; merged over CONFIG) */
@@ -579,7 +588,8 @@ async function renderCalendar(){
   const events=sent.calendarEvents||[];
   const schedule=sent.schedule||[];
   const games=GAME_RELEASES.concat(sent.gameEvents||[]);
-  const showStream=localStorage.getItem("cal-hide-stream")!=="1", showGame=localStorage.getItem("cal-hide-game")!=="1", showEvent=localStorage.getItem("cal-hide-event")!=="1";
+  const showStream=localStorage.getItem("cal-hide-stream")!=="1", showGame=localStorage.getItem("cal-hide-game")!=="1", showEvent=localStorage.getItem("cal-hide-event")!=="1", showContent=localStorage.getItem("cal-hide-content")!=="1";
+  const content = showContent ? await DB.content() : [];
   if(!state.calRef){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); }
   const ref=state.calRef, y=ref.getFullYear(), m=ref.getMonth();
   const startDow=new Date(y,m,1).getDay();
@@ -594,6 +604,7 @@ async function renderCalendar(){
     const dayShort=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
     const streamChips=showStream?schedule.filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join(""):"";
     const gameChips=showGame?games.filter(g=>g.date===ds).map(g=>`<div class="cal-game" ${g.url?`data-act="gameLink" data-url="${esc(g.url)}"`:""} title="${esc(g.title)}${g.approx?" — date is a window/estimate, not officially confirmed":""}">🎮 ${esc(g.title)}${g.approx?" ~":""}</div>`).join(""):"";
+    const contentChips=showContent?content.filter(c=>!c.parent_id&&c.scheduled_for===ds).map(c=>`<div class="cal-content" data-act="openContent" data-id="${c.id}" title="${esc(c.title)}">🎬 ${stageShort(c.stage)} ${esc(c.title)}</div>`).join(""):"";
     const dayEvents=showEvent?events.filter(ev=>ds>=ev.date && ds<=((ev.endDate&&ev.endDate>=ev.date)?ev.endDate:ev.date)):[];
     dayEvents.sort((a,b)=>{ const sa=(a.endDate&&a.endDate>a.date)?0:1, sb=(b.endDate&&b.endDate>b.date)?0:1; if(sa!==sb)return sa-sb; return (a.time||"99:99").localeCompare(b.time||"99:99"); });
     const chips=dayEvents.map(ev=>{
@@ -609,15 +620,16 @@ async function renderCalendar(){
       const tlabel=et?`<b>${et.etTime}${et.dayDiff?" (+1d)":""}</b> `:"";
       return `<div class="cal-ev" draggable="true" data-eid="${ev.id}" data-act="calEvent" style="background:${ev.color||CAL_COLORS[0]}" title="${tip}">${tlabel}${esc(ev.title)}${ev.note?" 📝":""}</div>`;
     }).join("");
-    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${gameChips}${chips}</div>`;
+    cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-date="${ds}" data-act="calAdd"><span class="cal-daynum">${d.getDate()}</span>${streamChips}${gameChips}${contentChips}${chips}</div>`;
   }
   return `<div class="panel" style="max-width:900px;margin:0 auto">
-    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag to move · 🔴 stream days · 🎮 game updates (~ = approx) 🐙</div></div>
+    <div class="card-head"><div><h2 style="font-size:18px">📅 ${monthName}</h2><div class="label" style="margin-top:2px">tap a day to add · drag to move · 🔴 streams · 🎮 games · 📹 scheduled content 🐙</div></div>
       <div style="display:flex;gap:6px"><button class="btn" data-act="calPrev" title="previous month">‹</button><button class="btn" data-act="calToday">today</button><button class="btn" data-act="calNext" title="next month">›</button></div></div>
     <div style="margin:2px 0 12px"><span class="label" style="margin-right:8px">show</span><div class="seg" style="display:inline-flex">
       <button data-act="calToggle" data-layer="stream" class="${showStream?"on":""}">🔴 Streams</button>
       <button data-act="calToggle" data-layer="game" class="${showGame?"on":""}">🎮 Games</button>
       <button data-act="calToggle" data-layer="event" class="${showEvent?"on":""}">🗓️ Events</button>
+      <button data-act="calToggle" data-layer="content" class="${showContent?"on":""}">📹 Content</button>
     </div></div>
     <div class="cal-grid" style="margin-bottom:6px">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join("")}</div>
     <div class="cal-grid">${cells}</div>
@@ -698,6 +710,7 @@ async function render(){
   if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
   const _sent = await DB.daily(SENTINEL);
   state.lib = (_sent.habitsLib && _sent.habitsLib.length) ? _sent.habitsLib : CONFIG.defaultHabits.map(h=>({...h}));
+  HABIT_CATS = (_sent.habitCats && _sent.habitCats.length) ? _sent.habitCats : DEFAULT_CATS.slice();
   mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || [];
   const view=document.getElementById("view");
   const tabChanged=state._animTab!==state.tab;
@@ -820,6 +833,8 @@ async function renderContent(){
   const selN=state.sel.size;
   const bulk=selN?`<div class="panel" style="display:flex;gap:12px;align-items:center;margin-bottom:12px;padding:10px 14px"><span class="label">${selN} selected</span><button class="btn btn-pink" data-act="bulkPublish" ${RO?"disabled":""}>✅ mark live</button><button class="btn" data-act="bulkClear">clear</button></div>`:"";
   const fmtSeg=`<div class="seg">${[["all","All"],...Object.entries(FORMATS)].map(([k,l])=>`<button data-act="fmt" data-f="${k}" class="${state.fmt===k?'on':''}">${l}</button>`).join("")}</div>`;
+  const cview=state.contentView||"board";
+  const viewSeg=`<div class="seg">${[["board","🗂️ Board"],["calendar","📅 Calendar"]].map(([k,l])=>`<button data-act="contentView" data-v="${k}" class="${cview===k?'on':''}">${l}</button>`).join("")}</div>`;
   const cols=STAGES.map(([key,lbl])=>{
     const col=shown.filter(c=>c.stage===key).sort((a,b)=>b.priority-a.priority);
     return `<div class="kcol" data-act="dropStage" data-stage="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(c=>contentCard(c,kids(c.id))).join("")||`<div class="label" style="padding:6px;opacity:.6">drop here</div>`}</div>`;
@@ -828,14 +843,35 @@ async function renderContent(){
     ${pillarMeter(parents)}
     <div class="panel">
       <div class="card-head"><span class="label">Content pipeline 🎬 · ${shown.length}${state.fmt!=="all"?" "+FORMATS[state.fmt]:""} items</span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn" href="https://metricool.com" target="_blank" rel="noopener" title="Open Metricool in a new tab">📊 Metricool</a>${fmtSeg}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${viewSeg}<a class="btn" href="https://metricool.com" target="_blank" rel="noopener" title="Open Metricool in a new tab">📊 Metricool</a>${fmtSeg}
           <input class="inp" id="smartQ" placeholder="search…" style="width:140px" /><button class="btn" data-act="smart">🔍</button>${state.smartIds?`<button class="btn" data-act="smartClear">clear</button>`:""}
           <input class="inp" id="newContent" placeholder="New ${state.fmt==='all'?'idea':FORMATS[state.fmt].toLowerCase()}…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addContent" ${RO?"disabled":""}>+ add</button>
         </div></div>
       ${bulk}
-      <div class="kanban">${cols}</div>
-      <div class="label" style="margin-top:10px">Drag cards across stages · click a card to open its brief · click the title to select for bulk · + sub to nest a to-do.</div>
+      ${cview==="calendar" ? contentCalendarHTML(shown) : `<div class="kanban">${cols}</div>
+      <div class="label" style="margin-top:10px">Drag cards across stages · click a card to open its brief · click the title to select for bulk · + sub to nest a to-do.</div>`}
     </div>
+  </div>`;
+}
+/* content-only month calendar (Content tab → 📅). Schedules via content_items.scheduled_for. */
+function contentCalendarHTML(items){
+  if(!state.calRef){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); }
+  const ref=state.calRef, y=ref.getFullYear(), m=ref.getMonth();
+  const startDow=new Date(y,m,1).getDay(), gridStart=new Date(y,m,1-startDow);
+  const monthName=ref.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const dows=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const chip=c=>`<div class="cc-chip" draggable="true" data-act="dragContent" data-id="${c.id}" title="${esc(c.title)}"><span data-act="openContent" data-id="${c.id}">${stageShort(c.stage)} ${esc(c.title)}</span></div>`;
+  let cells="";
+  for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const inM=d.getMonth()===m, today=ds===TODAY;
+    const dayItems=items.filter(c=>c.scheduled_for===ds);
+    cells+=`<div class="cal-cell cc-cell ${inM?"":"other"} ${today?"today":""}" data-act="ccDrop" data-date="${ds}" ondragover="event.preventDefault()"><span class="cal-daynum">${d.getDate()}</span>${dayItems.map(chip).join("")}</div>`;
+  }
+  const unsched=items.filter(c=>!c.scheduled_for && c.stage!=="published");
+  return `<div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px"><div class="label">📅 ${monthName} — drag a card onto a day to schedule · tap to open 🎬</div><div style="display:flex;gap:6px"><button class="btn" data-act="calPrev">‹</button><button class="btn" data-act="calToday">today</button><button class="btn" data-act="calNext">›</button></div></div>
+    <div class="cal-grid" style="margin-bottom:6px">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join("")}</div>
+    <div class="cal-grid">${cells}</div>
+    <div class="cc-tray" data-act="ccUnschedule" ondragover="event.preventDefault()" style="margin-top:12px;border:1px dashed var(--line);border-radius:12px;padding:8px"><div class="label" style="margin-bottom:5px">🗂️ unscheduled — drag onto a day (or drop a card here to unschedule)</div><div style="display:flex;gap:6px;flex-wrap:wrap">${unsched.length?unsched.map(chip).join(""):`<span class="soft" style="font-size:12px">nothing waiting — nice 🌸</span>`}</div></div>
   </div>`;
 }
 function pillarMeter(parents){
@@ -944,7 +980,7 @@ async function renderHabits(){
     </div>${groups}</div>`;
 }
 function habitModal(h){
-  const cats=[...new Set([...state.lib.map(x=>x.cat),"Pre-stream","On-air","Post-stream","Content","Community","Health","Business","Batch days"])];
+  const cats=[...new Set([...HABIT_CATS.map(c=>c.name),...state.lib.map(x=>x.cat)])];
   const isNew=!h;
   h=h||{label:"",emoji:"",cat:"Content",energy:"normal",total:""};
   document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%">
@@ -984,8 +1020,30 @@ function habitLibraryModal(){
   document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:480px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">📚 Habit library</h3><button class="btn" data-act="closeModal">✕</button></div>
     <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle on what fits your life — start with 3–5 essentials and add more when you have the spoons. Toggling one off just removes it from your list; turn it back on anytime. 🌸</p>
     ${groups}${customHtml}
-    <button class="btn btn-pink" data-act="addHabit" style="margin-top:14px;width:100%" ${RO?"disabled":""}>+ add a custom habit</button>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-pink grow" data-act="addHabit" ${RO?"disabled":""} style="flex:1">+ add a custom habit</button><button class="btn" data-act="editCats" ${RO?"disabled":""}>✏️ categories</button></div>
   </div></div>`;
+}
+async function categoriesModal(){
+  const cats=await loadCats();
+  const rows=cats.map(c=>`<div class="catrow" data-old="${esc(c.name)}" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input class="inp catEmoji" value="${esc(c.emoji||"")}" maxlength="3" style="width:54px;text-align:center"/><input class="inp catName" value="${esc(c.name)}" style="flex:1"/><button class="btn catDel" type="button" style="color:var(--rose)">✕</button></div>`).join("");
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">✏️ Habit categories</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 4px">Rename a category or change its emoji — renaming updates the habits in that group. Add or remove as you like. 🌸</p>
+    <div id="catRows">${rows}</div>
+    <button class="btn" id="catAddBtn" type="button" style="margin-top:8px">+ add category</button>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-pink" data-act="saveCats">💾 save categories</button></div>
+  </div></div>`;
+  function wireDel(b){ b.onclick=function(){ b.closest(".catrow").remove(); }; }
+  Array.from(document.querySelectorAll("#catRows .catDel")).forEach(wireDel);
+  document.getElementById("catAddBtn").onclick=function(){ const d=document.createElement("div"); d.className="catrow"; d.setAttribute("data-old",""); d.style.cssText="display:flex;gap:6px;align-items:center;margin-top:6px"; d.innerHTML='<input class="inp catEmoji" value="🌸" maxlength="3" style="width:54px;text-align:center"/><input class="inp catName" placeholder="New category" style="flex:1"/><button class="btn catDel" type="button" style="color:var(--rose)">✕</button>'; document.getElementById("catRows").appendChild(d); wireDel(d.querySelector(".catDel")); };
+}
+async function saveCatsFromModal(){
+  const rowsEls=Array.from(document.querySelectorAll("#catRows .catrow"));
+  const list=[], renames={};
+  rowsEls.forEach(r=>{ const name=r.querySelector(".catName").value.trim(); if(!name)return; const emoji=r.querySelector(".catEmoji").value.trim()||"🌸"; const old=r.getAttribute("data-old"); list.push({name,emoji}); if(old&&old!==name)renames[old]=name; });
+  if(!list.length){ toast("Keep at least one category 🌸"); return; }
+  await saveCats(list);
+  if(Object.keys(renames).length){ const lib=state.lib.map(h=>renames[h.cat]?{...h,cat:renames[h.cat]}:h); await saveLib(lib); }
+  document.getElementById("modal").innerHTML=""; toast("Saved 🌸"); render();
 }
 
 /* ===================== PLANNER ===================== */
@@ -1724,7 +1782,7 @@ function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<1
 function habitVisible(h,energy,streamDay){if(h.energy==="essential")return true;if(h.energy==="intensive")return energy==="high"||streamDay;return energy!=="low";}
 function energyShort(e){return e==="essential"?"🟢":e==="intensive"?"🌸":"🟦";}
 function energyPill(e){return e==="essential"?"pill-mint":e==="intensive"?"pill-pink":"pill-lav";}
-function catEmoji(c){return {"Pre-stream":"🌅","On-air":"🎙️","Post-stream":"🌙","Content":"📅","Community":"💬","Health":"💖","Business":"💼","Batch days":"🎨"}[c]||"🌸";}
+function catEmoji(c){const f=HABIT_CATS.find(x=>x.name===c);if(f)return f.emoji;return {"Pre-stream":"🌅","On-air":"🎙️","Post-stream":"🌙","Content":"📅","Community":"💬","Health":"💖","Business":"💼","Batch days":"🎨"}[c]||"🌸";}
 function stageShort(s){return {idea:"💡",scripting:"✍️",recording:"🎥",editing:"✂️",thumbnail:"🖼️",scheduled:"📅",published:"✅"}[s]||s;}
 function fmtShort(f){return {short:"SF",long:"LF",twitter:"X"}[f]||f;}
 function pillarPill(p){return {growth:"pill-pink",retention:"pill-lav",experimental:"pill-peach"}[p]||"pill-gray";}
@@ -1733,7 +1791,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1741,6 +1799,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} DB.bust(); return render(); }
   if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
   if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
+  if(act==="contentView"){ state.contentView=el.dataset.v; return render(); }
   if(act==="calPrev"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()-1,1); return render(); }
   if(act==="calNext"){ state.calRef=new Date(state.calRef.getFullYear(),state.calRef.getMonth()+1,1); return render(); }
   if(act==="calToday"){ const t=new Date(); state.calRef=new Date(t.getFullYear(),t.getMonth(),1); return render(); }
@@ -1782,6 +1841,8 @@ document.addEventListener("click",async(e)=>{
 
   if(act==="addHabit")return habitModal(null);
   if(act==="habitLibrary")return habitLibraryModal();
+  if(act==="editCats")return categoriesModal();
+  if(act==="saveCats")return saveCatsFromModal();
   if(act==="libToggle"){ const hid=el.dataset.id; if(state.lib.some(h=>h.id===hid)){ state.lib=state.lib.filter(h=>h.id!==hid); } else { const def=CONFIG.defaultHabits.find(h=>h.id===hid); if(def)state.lib=[...state.lib,{...def}]; } await saveLib(state.lib); habitLibraryModal(); render(); return; }
   if(act==="editHabit")return habitModal(state.lib.find(h=>h.id===id));
   if(act==="saveHabit")return saveHabit(id);
@@ -1915,8 +1976,10 @@ document.addEventListener("keydown",async(e)=>{
 let dragId=null,dragType=null;
 document.addEventListener("dragstart",e=>{const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}});
 document.addEventListener("drop",async e=>{
-  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');
-  if(cs&&dragType==="content"&&dragId){e.preventDefault();const stage=cs.dataset.stage;const patch={stage};if(stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(dragId,patch);dragId=null;render();}
+  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');
+  if(cd&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:cd.dataset.date});dragId=null;render();}
+  else if(cu&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:null});dragId=null;render();}
+  else if(cs&&dragType==="content"&&dragId){e.preventDefault();const stage=cs.dataset.stage;const patch={stage};if(stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(dragId,patch);dragId=null;render();}
   else if(ss&&dragType==="sponsor"&&dragId){e.preventDefault();await DB.updateSponsor(dragId,{stage:ss.dataset.stage});dragId=null;render();}
 });
 
@@ -1986,6 +2049,13 @@ render();
       case "addContent":
         await DB.addContent({title:a.title||"idea",format:a.format||"short",stage:a.stage||"idea",pillar:a.pillar||null,priority:60});
         return "🎬 added content “"+(a.title||"")+"”";
+      case "scheduleContent": {
+        var cn=(a.name||"").toLowerCase();
+        var list=await DB.content();
+        var ci=(list||[]).find(function(x){ return !x.parent_id && (x.title||"").toLowerCase().indexOf(cn)>=0; });
+        if(ci){ await DB.updateContent(ci.id,{scheduled_for:a.date||TODAY}); return "📹 scheduled “"+ci.title+"” for "+(a.date||TODAY); }
+        return "couldn't find content like “"+(a.name||"")+"” 🌸";
+      }
       case "addIncome":
         await DB.addIncome({kind:a.kind||"in",source:a.source||"other",category:a.category||null,amount:Number(a.amount)||0,note:a.note||null});
         return "💰 logged "+(a.kind==="out"?"expense":"income")+" $"+(Number(a.amount)||0);
