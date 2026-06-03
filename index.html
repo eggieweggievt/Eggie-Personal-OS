@@ -1285,7 +1285,7 @@ async function renderPlanner(){
   const vbtn=(v,l)=>`<button data-act="plannerView" data-v="${v}" class="${view===v?'on':''}">${l}</button>`;
   const remUp=(sent.reminders||[]).filter(r=>!r.done).sort((a,b)=>String(a.date+(a.time||"")).localeCompare(String(b.date+(b.time||"")))).slice(0,8);
   const needPerm=(window.Notification&&Notification.permission!=="granted");
-  const remPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><span class="label">⏰ Reminders</span>${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable browser pings</button>`:`<span class="label">🔔 pings on</span>`}</div>
+  const remPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><span class="label">⏰ Reminders</span><div style="display:flex;gap:8px;align-items:center">${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable pings</button>`:`<span class="label">🔔 on</span>`}<button class="btn" data-act="pushSub" title="get reminders on this device even when the tab is closed">📲 push to this device</button></div></div>
     ${remUp.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">${remUp.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:12.5px;${(r.date<TODAY)?'color:var(--rose)':''}">${esc(r.text)}</span><span class="label num">${esc(r.date)}${r.time?` · ${esc(r.time)}`:""}</span>${r.email!==false?`<span title="emails too">💌</span>`:""}<button class="ft-ic" data-act="remindDel" data-id="${r.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0 0 10px">Nothing pending — tell Eugene "remind me Friday at 3 to send the invoice", or add one here. 🌸</p>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input class="inp" id="remText" placeholder="remind me to…" style="flex:1;min-width:150px" ${RO?"disabled":""}/>
@@ -2100,6 +2100,29 @@ function renderEugene(){
     ${card}</div>`;
 }
 
+/* ===== web push: this device subscribes itself; the public key comes from the reminders function (GET) ===== */
+if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js").catch(function(){}); }catch(e){} }
+function b64ToU8(b64){ const pad="=".repeat((4-b64.length%4)%4); const s=(b64+pad).replace(/-/g,"+").replace(/_/g,"/"); const raw=atob(s); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0))); }
+async function pushSubscribe(){
+  try{
+    if(!("serviceWorker" in navigator)||!("PushManager" in window)){ toast("This browser doesn't support push 🌸"); return; }
+    if(DEMO||!SB){ toast("Push needs the backend — switch demo off first 🌸"); return; }
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){ toast("Notifications are blocked for this site 🌸"); return; }
+    let pub="";
+    try{ const r=await fetch(CONFIG.url+"/functions/v1/reminders",{headers:{apikey:CONFIG.anonKey}}); const j=await r.json(); pub=j.publicKey||""; }catch(e){}
+    if(!pub){ toast("Deploy the reminders function + set the VAPID keys first 🌸"); return; }
+    const reg=await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(sub && sub.options && sub.options.applicationServerKey){ /* keep existing */ }
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pub)});
+    const j2=sub.toJSON();
+    await DB.saveDaily(SENTINEL,n=>{ const subs=(n.pushSubs||[]).filter(s=>s.endpoint!==j2.endpoint); subs.push({endpoint:j2.endpoint,keys:j2.keys,ua:(navigator.userAgent||"").slice(0,90),added:TODAY}); return {...n,pushSubs:subs}; });
+    toast("This device gets pushes now — even with the tab closed 📲");
+    render();
+  }catch(e){ console.error(e); toast("Push setup hiccuped: "+(e.message||e)+" 🌸"); }
+}
+
 /* Eugene voice input — separate recognizer so it never clashes with the Script Writer's */
 let EUREC=null, euRecOn=false;
 function euMicToggle(){
@@ -2552,6 +2575,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindDone"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).map(r=>r.id===id?{...r,done:!r.done}:r)})); render(); return; }
   if(act==="remindDel"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>r.id!==id)})); render(); return; }
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
+  if(act==="pushSub"){ pushSubscribe(); return; }
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
   if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
   if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekText=txt;c.weekDone=false;c.week=mondayOf(TODAY);}else{c.dayText=txt;c.dayDone=false;c.day=TODAY;} return {...n,artChallenge:c};}); render(); return; }
