@@ -954,7 +954,8 @@ async function saveContent(id){
 async function renderHabits(){
   const day=await DB.daily(TODAY); const energy=day.energy||"medium", streamDay=!!day.streamDay;
   const counts=(day.habits&&day.habits.counts)||{};
-  const cats=[...new Set(state.lib.map(h=>h.cat))];
+  const used=[...new Set(state.lib.map(h=>h.cat))];
+  const cats=[...HABIT_CATS.map(c=>c.name).filter(n=>used.includes(n)), ...used.filter(n=>!HABIT_CATS.some(c=>c.name===n))];
   const eOpt=(v,e,l)=>`<button data-act="energy" data-v="${v}" ${RO?"disabled":""} class="${energy===v?'on':''}">${e} ${l}</button>`;
   const groups=cats.map(cat=>{
     const hs=state.lib.filter(h=>h.cat===cat);
@@ -1007,7 +1008,8 @@ async function delHabit(id){ const lib=state.lib.filter(x=>x.id!==id); await sav
 function habitLibraryModal(){
   const active=new Set(state.lib.map(h=>h.id));
   const catalogIds=new Set(CONFIG.defaultHabits.map(h=>h.id));
-  const cats=[...new Set(CONFIG.defaultHabits.map(h=>h.cat))];
+  const usedC=[...new Set(CONFIG.defaultHabits.map(h=>h.cat))];
+  const cats=[...HABIT_CATS.map(c=>c.name).filter(n=>usedC.includes(n)), ...usedC.filter(n=>!HABIT_CATS.some(c=>c.name===n))];
   const groups=cats.map(c=>{
     const hs=CONFIG.defaultHabits.filter(h=>h.cat===c);
     return `<div style="margin-top:12px"><div class="label" style="margin-bottom:4px">${catEmoji(c)} ${c}</div>${hs.map(h=>{
@@ -1025,16 +1027,24 @@ function habitLibraryModal(){
 }
 async function categoriesModal(){
   const cats=await loadCats();
-  const rows=cats.map(c=>`<div class="catrow" data-old="${esc(c.name)}" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input class="inp catEmoji" value="${esc(c.emoji||"")}" maxlength="3" style="width:54px;text-align:center"/><input class="inp catName" value="${esc(c.name)}" style="flex:1"/><button class="btn catDel" type="button" style="color:var(--rose)">✕</button></div>`).join("");
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">✏️ Habit categories</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <p class="soft" style="font-size:12px;margin:0 0 4px">Rename a category or change its emoji — renaming updates the habits in that group. Add or remove as you like. 🌸</p>
-    <div id="catRows">${rows}</div>
+  const rowHTML=c=>`<div class="catrow" data-old="${esc(c?c.name:"")}" style="display:flex;gap:5px;align-items:center;margin-top:6px">
+    <span style="display:flex;flex-direction:column;line-height:1"><button class="catUp" type="button" title="move up" style="border:none;background:none;cursor:pointer;font-size:10px;color:var(--lav-deep);padding:0">▲</button><button class="catDn" type="button" title="move down" style="border:none;background:none;cursor:pointer;font-size:10px;color:var(--lav-deep);padding:0">▼</button></span>
+    <input class="inp catEmoji" value="${esc(c?(c.emoji||""):"🌸")}" maxlength="3" style="width:50px;text-align:center"/>
+    <input class="inp catName" value="${esc(c?c.name:"")}" placeholder="New category" style="flex:1"/>
+    <button class="btn catDel" type="button" style="color:var(--rose)">✕</button></div>`;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">✏️ Habit categories</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 4px">Rename, re-emoji, reorder with ▲▼, add or remove — your Habits tab follows this order. Renaming updates the habits in that group. 🌸</p>
+    <div id="catRows">${cats.map(rowHTML).join("")}</div>
     <button class="btn" id="catAddBtn" type="button" style="margin-top:8px">+ add category</button>
     <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-pink" data-act="saveCats">💾 save categories</button></div>
   </div></div>`;
-  function wireDel(b){ b.onclick=function(){ b.closest(".catrow").remove(); }; }
-  Array.from(document.querySelectorAll("#catRows .catDel")).forEach(wireDel);
-  document.getElementById("catAddBtn").onclick=function(){ const d=document.createElement("div"); d.className="catrow"; d.setAttribute("data-old",""); d.style.cssText="display:flex;gap:6px;align-items:center;margin-top:6px"; d.innerHTML='<input class="inp catEmoji" value="🌸" maxlength="3" style="width:54px;text-align:center"/><input class="inp catName" placeholder="New category" style="flex:1"/><button class="btn catDel" type="button" style="color:var(--rose)">✕</button>'; document.getElementById("catRows").appendChild(d); wireDel(d.querySelector(".catDel")); };
+  function wireRow(d){
+    d.querySelector(".catDel").onclick=function(){ d.remove(); };
+    d.querySelector(".catUp").onclick=function(){ const p=d.previousElementSibling; if(p)d.parentNode.insertBefore(d,p); };
+    d.querySelector(".catDn").onclick=function(){ const n=d.nextElementSibling; if(n)d.parentNode.insertBefore(n,d); };
+  }
+  Array.from(document.querySelectorAll("#catRows .catrow")).forEach(wireRow);
+  document.getElementById("catAddBtn").onclick=function(){ const wrap=document.getElementById("catRows"); const tmp=document.createElement("div"); tmp.innerHTML=rowHTML(null); const d=tmp.firstElementChild; wrap.appendChild(d); wireRow(d); };
 }
 async function saveCatsFromModal(){
   const rowsEls=Array.from(document.querySelectorAll("#catRows .catrow"));
