@@ -923,23 +923,33 @@ function contentCard(c,kids){
 async function openContent(id){
   const c=(state._content||await DB.content()).find(x=>x.id===id); if(!c)return; const crit=c.criteria||{};
   const sel=(id2,obj,cur)=>`<select class="inp" id="${id2}">${["",...Object.keys(obj)].map(p=>`<option value="${p}" ${cur===p?"selected":""}>${p?obj[p]:"—"}</option>`).join("")}</select>`;
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:560px;width:100%;max-height:90vh;overflow:auto">
-    <div class="card-head"><h3 style="font-size:16px">Content brief</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <div class="label">Title</div><input class="inp" id="f_title" value="${esc(c.title)}" />
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:580px;width:100%;max-height:92vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">📝 Content brief</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="grow" style="min-width:200px"><div class="label">Title</div><input class="inp" id="f_title" value="${esc(c.title)}" /></div>
+      <div style="width:160px"><div class="label">🗓️ Deadline</div><input class="inp" id="f_deadline" type="date" value="${esc(crit.deadline||"")}" /></div>
+    </div>
     <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <div class="grow" style="min-width:120px"><div class="label">Format</div>${sel("f_format",FORMATS,c.format)}</div>
-      <div class="grow" style="min-width:120px"><div class="label">Platform</div>${sel("f_platform",CONFIG.platforms,c.platform)}</div>
-      <div class="grow" style="min-width:120px"><div class="label">Pillar</div>${sel("f_pillar",PILLARS,c.pillar)}</div>
-      <div style="width:80px"><div class="label">Score ▶</div><input class="inp" id="f_score" type="number" value="${c.analyzer_score??""}" /></div>
+      <div class="grow" style="min-width:110px"><div class="label">Format</div>${sel("f_format",FORMATS,c.format)}</div>
+      <div class="grow" style="min-width:110px"><div class="label">Platform</div>${sel("f_platform",CONFIG.platforms,c.platform)}</div>
+      <div class="grow" style="min-width:110px"><div class="label">Pillar</div>${sel("f_pillar",PILLARS,c.pillar)}</div>
+      <div class="grow" style="min-width:110px"><div class="label">Stage</div><select class="inp" id="f_stage">${STAGES.map(([k,l])=>`<option value="${k}" ${c.stage===k?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
     <div class="label" style="margin-top:10px">Hook</div><input class="inp" id="f_hook" value="${esc(c.hook||"")}" placeholder="the first line that stops the scroll" />
-    <div class="label" style="margin-top:10px">Script / notes</div><textarea class="inp" id="f_script" rows="3">${esc(c.script||"")}</textarea>
-    <div class="label" style="margin-top:10px">Hashtags · formula 1 small / 2 medium / 2 large</div><input class="inp" id="f_tags" value="${esc((c.hashtags||[]).join(" "))}" placeholder="#vtuber #cozystream …" />
-    <div class="label" style="margin-top:12px">4-criteria check — does it pass?</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">${CRITERIA.map(([k,l])=>`<button class="hbtn ${crit[k]?'done':''}" data-act="critToggle" data-k="${k}" style="display:flex;gap:6px;align-items:center;padding:6px 10px"><span class="check ${crit[k]?'on':''}"></span>${l}</button>`).join("")}</div>
-    <div style="display:flex;gap:8px;margin-top:8px"><div class="grow"><div class="label">Thumbnail</div><select class="inp" id="f_thumb">${["none","wip","done"].map(s=>`<option value="${s}" ${c.thumbnail_status===s?"selected":""}>${s}</option>`).join("")}</select></div><div class="grow"><div class="label">Stage</div><select class="inp" id="f_stage">${STAGES.map(([k,l])=>`<option value="${k}" ${c.stage===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px"><button class="btn" data-act="delContentModal" data-id="${c.id}" style="color:var(--rose)">🗑 delete</button><div style="display:flex;gap:8px"><button class="btn" data-act="aiAnalyze">✨ analyze</button><button class="btn btn-pink" data-act="saveContent" data-id="${c.id}">💾 save brief</button></div></div>
-    <div id="aiOut" style="margin-top:12px"></div>
+    <div class="label" style="margin-top:10px">Description</div><textarea class="inp" id="f_script" rows="3" placeholder="what it's about, the angle, the key beats…">${esc(c.script||"")}</textarea>
+    <div class="label" style="margin-top:10px">Hashtags · 1 small / 2 medium / 2 large</div><input class="inp" id="f_tags" value="${esc((c.hashtags||[]).join(" "))}" placeholder="#vtuber #cozystream …" />
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-pink" data-act="briefToOptimizer">🎯 send to Optimizer</button><button class="btn" data-act="aiAnalyze">✨ quick analyze</button></div>
+    <div id="aiOut" style="margin-top:10px"></div>
+    <div class="label" style="margin-top:14px">📎 The short / file <span class="muted">· paste a link, or pick one to preview</span></div>
+    <input class="inp" id="f_upload" value="${esc(crit.upload||"")}" placeholder="link to the file (Drive, unlisted YouTube…) — saved with the brief" />
+    <input class="inp" id="f_uploadFile" type="file" accept="video/*,image/*" style="margin-top:6px" />
+    <div id="f_uploadPrev" style="margin-top:8px">${crit.upload?`<a href="${esc(crit.upload)}" target="_blank" rel="noopener" class="label" style="color:var(--lav-deep)">open saved link ↗</a>`:""}</div>
+    <div class="label" style="margin-top:14px">📝 Notes</div><textarea class="inp" id="f_notes" rows="3" placeholder="anything else to remember…">${esc(crit.notes||"")}</textarea>
+    <details class="acc" style="margin-top:12px"><summary>✅ 4-criteria · thumbnail · score</summary><div class="acc-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">${CRITERIA.map(([k,l])=>`<button class="hbtn ${crit[k]?'done':''}" data-act="critToggle" data-k="${k}" style="display:flex;gap:6px;align-items:center;padding:6px 10px"><span class="check ${crit[k]?'on':''}"></span>${l}</button>`).join("")}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><div class="grow"><div class="label">Thumbnail</div><select class="inp" id="f_thumb">${["none","wip","done"].map(s=>`<option value="${s}" ${c.thumbnail_status===s?"selected":""}>${s}</option>`).join("")}</select></div><div style="width:96px"><div class="label">Score ▶</div><input class="inp" id="f_score" type="number" value="${c.analyzer_score??""}" /></div></div>
+    </div></details>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px"><button class="btn" data-act="delContentModal" data-id="${c.id}" style="color:var(--rose)">🗑 delete</button><button class="btn btn-pink" data-act="saveContent" data-id="${c.id}">💾 save brief</button></div>
   </div></div>`;
   modalCrit=JSON.parse(JSON.stringify(crit));
 }
@@ -965,8 +975,10 @@ async function aiAnalyze(){
 }
 let modalCrit={};
 async function saveContent(id){
-  const tags=(document.getElementById("f_tags").value||"").split(/\s+/).filter(t=>t.trim()).map(t=>t.startsWith("#")?t:"#"+t);
-  await DB.updateContent(id,{ title:document.getElementById("f_title").value.trim()||"Untitled", format:document.getElementById("f_format").value||null, platform:document.getElementById("f_platform").value||null, pillar:document.getElementById("f_pillar").value||null, analyzer_score:document.getElementById("f_score").value!==""?parseInt(document.getElementById("f_score").value):null, hook:document.getElementById("f_hook").value, script:document.getElementById("f_script").value, hashtags:tags, thumbnail_status:document.getElementById("f_thumb").value, stage:document.getElementById("f_stage").value, criteria:modalCrit });
+  const gv=i=>{const e=document.getElementById(i);return e?e.value:"";};
+  const tags=(gv("f_tags")||"").split(/\s+/).filter(t=>t.trim()).map(t=>t.startsWith("#")?t:"#"+t);
+  const crit=Object.assign({}, modalCrit, { deadline:gv("f_deadline"), notes:gv("f_notes"), upload:gv("f_upload") });
+  await DB.updateContent(id,{ title:gv("f_title").trim()||"Untitled", format:gv("f_format")||null, platform:gv("f_platform")||null, pillar:gv("f_pillar")||null, analyzer_score:gv("f_score")!==""?parseInt(gv("f_score")):null, hook:gv("f_hook"), script:gv("f_script"), hashtags:tags, thumbnail_status:gv("f_thumb")||"none", stage:gv("f_stage"), criteria:crit });
   document.getElementById("modal").innerHTML=""; toast("Brief saved 🌸"); render();
 }
 /* ===================== HABITS (editable library) ===================== */
@@ -1692,6 +1704,7 @@ async function delScriptDraft(id){ await DB.saveDaily(SENTINEL,n=>({...n,scripts
 async function scrToContent(){ scrCapture(); const s=state.script, o=s.out||{}; const title=(o.title||s.title||"Untitled script").slice(0,160); const hook=(o.hooks&&o.hooks[0])||""; await DB.addContent({title,format:s.kind==="long"?"long":"short",stage:"scripting",hook,priority:60}); toast("Added to content 🎬"); }
 function renderOptimize(){
   const live=state.optMode==="livestream";
+  const pf=state.optPrefill||{};
   const seg=`<div class="seg">${[["video","📹 Video"],["livestream","🔴 Livestream"]].map(([k,l])=>`<button data-act="optMode" data-v="${k}" class="${state.optMode===k?'on':''}">${l}</button>`).join("")}</div>`;
   const handle=(CONFIG.youtubeHandle||(CONFIG.creator&&CONFIG.creator.handle||"").replace(/^@/,"")||"eggieweggievt");
   return `<div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
@@ -1703,12 +1716,13 @@ function renderOptimize(){
     <div class="panel">
     <div class="card-head"><h2 style="font-size:18px">🎯 ${live?"Livestream":"Video"} optimization</h2>${seg}</div>
     <p class="soft" style="font-size:12.5px;margin:0 0 12px">${live?"Set up a YouTube stream — get stream titles (your format + the game), a ready-to-paste description with your links, tags, and a going-live post.":"Title score, stronger titles, tags, 1S/2M/2L hashtags, and a full description — in your voice, learning from your channel."}${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
-    <div class="label">${live?"Game / stream focus":"Title / working title"}</div><input class="inp" id="oTitle" placeholder="${live?"e.g. Elden Ring DLC — first deathless attempt":"e.g. I tried VTubing on a $0 budget"}" />
+    ${pf.title||pf.topic?`<div class="soft-card" style="font-size:11.5px;margin:0 0 10px">🎯 pulled in from a content brief — tweak and optimize 🌸</div>`:""}
+    <div class="label">${live?"Game / stream focus":"Title / working title"}</div><input class="inp" id="oTitle" value="${esc(pf.title||"")}" placeholder="${live?"e.g. Elden Ring DLC — first deathless attempt":"e.g. I tried VTubing on a $0 budget"}" />
     ${live?"":`<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <div class="grow" style="min-width:140px"><div class="label">Format</div><select class="inp" id="oFormat"><option value="long">Long form</option><option value="short">Short form</option><option value="twitter">Twitter post</option></select></div>
-      <div class="grow" style="min-width:140px"><div class="label">Platform</div><select class="inp" id="oPlatform">${Object.entries(CONFIG.platforms).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
+      <div class="grow" style="min-width:140px"><div class="label">Format</div><select class="inp" id="oFormat"><option value="long" ${pf.format==="long"?"selected":""}>Long form</option><option value="short" ${pf.format==="short"?"selected":""}>Short form</option><option value="twitter" ${pf.format==="twitter"?"selected":""}>Twitter post</option></select></div>
+      <div class="grow" style="min-width:140px"><div class="label">Platform</div><select class="inp" id="oPlatform">${Object.entries(CONFIG.platforms).map(([k,v])=>`<option value="${k}" ${pf.platform===k?"selected":""}>${v}</option>`).join("")}</select></div>
     </div>`}
-    <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}"></textarea>
+    <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}">${esc(pf.topic||"")}</textarea>
     <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
     <div id="optOut" style="margin-top:14px"></div>
     <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
@@ -1975,6 +1989,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="smart")return smart();
   if(act==="smartClear"){ state.smartIds=null; render(); }
   if(act==="openContent")return openContent(id);
+  if(act==="briefToOptimizer"){ const gv=i=>{const e=document.getElementById(i);return e?e.value:"";}; state.optPrefill={ title:gv("f_title"), topic:gv("f_script"), format:gv("f_format")||"long", platform:gv("f_platform")||"youtube" }; state.optMode="video"; document.getElementById("modal").innerHTML=""; setTab("optimize"); toast("Sent to the Optimizer 🎯"); return; }
   if(act==="critToggle"){ const k=el.dataset.k; modalCrit[k]=!modalCrit[k]; el.classList.toggle("done"); el.querySelector(".check").classList.toggle("on"); }
   if(act==="saveContent")return saveContent(id);
   if(act==="delContentModal"){ await DB.delContent(id); document.getElementById("modal").innerHTML=""; toast("Deleted"); render(); }
@@ -2103,6 +2118,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="ask")return ask();
 });
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
+  if(e.target&&e.target.id==="f_uploadFile"&&e.target.files&&e.target.files[0]){ const file=e.target.files[0], url=URL.createObjectURL(file), up=document.getElementById("f_upload"), prev=document.getElementById("f_uploadPrev"); if(up&&!up.value.trim())up.value=file.name; if(prev)prev.innerHTML=(file.type.indexOf("video")===0?`<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`:`<img src="${url}" style="max-width:170px;border-radius:10px" />`)+`<div class="soft" style="font-size:11px;margin-top:4px">preview only — paste a link above to keep it with the brief 🌸</div>`; }
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); } });
 /* sticky drag */
