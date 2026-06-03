@@ -144,6 +144,10 @@ async function fullContext(userId: string, today: string): Promise<string> {
     }
     if (s.artBoard?.length || s.artResources?.length) lines.push(`ART STUDIO: mood board has ${s.artBoard?.length || 0} card(s); art library has ${s.artResources?.length || 0} saved link(s).`);
     if (s.eugeneFacts?.length) lines.push(`REMEMBERED FACTS (she told you to keep these): ${s.eugeneFacts.slice(-20).join(" | ")}`);
+    if (s.reminders?.length) {
+      const up = s.reminders.filter((r: any) => !r.done).sort((a: any, b: any) => String(a.date + (a.time || "")).localeCompare(String(b.date + (b.time || "")))).slice(0, 6);
+      if (up.length) lines.push(`REMINDERS PENDING: ${up.map((r: any) => `${r.date}${r.time ? " " + r.time : ""} — ${r.text}`).join("; ")}`);
+    }
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -391,6 +395,9 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delBoardCard: { text }              // remove a mood-board NOTE matching the text, or a SWATCH by exact "#hex"
 - delSticky: { text (fuzzy) }         // peel a sticky note off the screen
 
+- setReminder: { text, date: "YYYY-MM-DD", time?: "HH:MM" 24h (default "09:00"), email?: boolean (default true) }   // "remind me Friday at 3 to send the invoice", "remind me in 2 hours to stretch" — resolve relative dates/times to absolute using today + her timezone. She gets a browser ping (if the OS is open) AND an email (cron). Reminders are a real struggle for her — set them generously whenever she even hints at one.
+- delReminder: { text (fuzzy) }       // cancel a reminder
+- doneReminder: { text (fuzzy) }      // mark a reminder handled
 - rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep
 - forgetFact: { hint }                // remove a remembered fact matching the hint
 - optimizeTitle: { title, topic?, format?: "short"|"long", platform? }   // "score/optimize this title: …" — runs her real optimizer and returns the score + better titles in chat

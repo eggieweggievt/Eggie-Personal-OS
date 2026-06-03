@@ -1283,6 +1283,17 @@ async function renderPlanner(){
   const spoonOpts=TASK_SPOONS.map(([k,e,l])=>`<option value="${k}">${e} ${l}</option>`).join("");
   const fbtn=(v,l)=>`<button data-act="taskSpoonFilter" data-v="${v}" class="${sf===v?'on':''}">${l}</button>`;
   const vbtn=(v,l)=>`<button data-act="plannerView" data-v="${v}" class="${view===v?'on':''}">${l}</button>`;
+  const remUp=(sent.reminders||[]).filter(r=>!r.done).sort((a,b)=>String(a.date+(a.time||"")).localeCompare(String(b.date+(b.time||"")))).slice(0,8);
+  const needPerm=(window.Notification&&Notification.permission!=="granted");
+  const remPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><span class="label">⏰ Reminders</span>${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable browser pings</button>`:`<span class="label">🔔 pings on</span>`}</div>
+    ${remUp.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">${remUp.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:12.5px;${(r.date<TODAY)?'color:var(--rose)':''}">${esc(r.text)}</span><span class="label num">${esc(r.date)}${r.time?` · ${esc(r.time)}`:""}</span>${r.email!==false?`<span title="emails too">💌</span>`:""}<button class="ft-ic" data-act="remindDel" data-id="${r.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0 0 10px">Nothing pending — tell Eugene "remind me Friday at 3 to send the invoice", or add one here. 🌸</p>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input class="inp" id="remText" placeholder="remind me to…" style="flex:1;min-width:150px" ${RO?"disabled":""}/>
+      <input class="inp" id="remDate" type="date" value="${TODAY}" style="width:auto" ${RO?"disabled":""}/>
+      <input class="inp" id="remTime" type="time" value="09:00" style="width:auto" ${RO?"disabled":""}/>
+      <label class="art-chip" title="also email me">💌 <input type="checkbox" id="remEmail" checked style="accent-color:var(--pink)"/></label>
+      <button class="btn btn-pink" data-act="remindAdd" ${RO?"disabled":""}>＋ add</button>
+    </div></div>`;
   return `<div>
     <div class="panel" style="margin-bottom:14px">
       <div class="card-head"><h2 style="font-size:18px">🗒️ Planner</h2><div class="seg">${vbtn("list","☰ List")}${vbtn("board","▦ Board")}</div></div>
@@ -1296,7 +1307,7 @@ async function renderPlanner(){
       <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
         <span class="label">Show</span><div class="seg">${fbtn("all","Everything")}${fbtn("low","🌙 Low-spoon")}${fbtn("some","🌤 Some")}${fbtn("full","🌞 Full")}</div>
       </div>
-    </div>${view==="board"?board:groups}</div>`;
+    </div>${remPanel}${view==="board"?board:groups}</div>`;
 }
 
 /* ===================== CARE (self-care · DBT · mindfulness) ===================== */
@@ -2054,6 +2065,7 @@ const EUGENE_ASKS=[
   "Score this title for me: I tried VTubing on $0"
 ];
 function renderEugene(){
+  if(state.eugeneLog==null){ try{ state.eugeneLog=JSON.parse(localStorage.getItem("eugene-log")||"[]"); }catch(e){ state.eugeneLog=[]; } }
   const log=state.eugeneLog||[];
   const max=!!state.eugeneMax;
   const logHtml = log.length
@@ -2536,6 +2548,10 @@ document.addEventListener("click",async(e)=>{
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
   if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
   if(act==="plannerView"){ state.plannerView=el.dataset.v; try{localStorage.setItem("eggie-planner-view",el.dataset.v);}catch(e){} render(); return; }
+  if(act==="remindAdd"){ const t=((document.getElementById("remText")||{}).value||"").trim(); if(!t){toast("What should I remind you of? 🌸");return;} const d=(document.getElementById("remDate")||{}).value||TODAY, tm=(document.getElementById("remTime")||{}).value||"09:00", em=!!((document.getElementById("remEmail")||{}).checked); await DB.saveDaily(SENTINEL,n=>({...n,reminders:[...(n.reminders||[]),{id:uid(),text:t,date:d,time:tm,email:em,done:false,notified:false,emailed:false}]})); try{ if(window.Notification&&Notification.permission==="default")Notification.requestPermission(); }catch(e){} toast("Reminder set ⏰"); render(); return; }
+  if(act==="remindDone"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).map(r=>r.id===id?{...r,done:!r.done}:r)})); render(); return; }
+  if(act==="remindDel"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>r.id!==id)})); render(); return; }
+  if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
   if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
   if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekText=txt;c.weekDone=false;c.week=mondayOf(TODAY);}else{c.dayText=txt;c.dayDone=false;c.day=TODAY;} return {...n,artChallenge:c};}); render(); return; }
@@ -2563,7 +2579,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="artResAdd"){ const ti=document.getElementById("artResTitle"), ui=document.getElementById("artResUrl"), tg=document.getElementById("artResTag"); const title=(ti&&ti.value||"").trim(), url=(ui&&ui.value||"").trim(); if(!title||!url){toast("Need a title and a link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artResources:[...((n.artResources)||DEFAULT_ART_RES),{id:uid(),title,url,tag:(tg&&tg.value)||"other"}]})); render(); return; }
   if(act==="artResDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artResources:((n.artResources)||DEFAULT_ART_RES).filter(x=>x.id!==id)})); render(); return; }
   if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
-  if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; render(); return; }
+  if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; window.EUGENE_HIST=[]; try{ localStorage.removeItem("eugene-log"); localStorage.removeItem("eugene-hist"); }catch(e){} render(); return; }
   if(act==="eugeneAsksToggle"){ state.eugeneShowAsks=!state.eugeneShowAsks; render(); return; }
   if(act==="euMic"){ euMicToggle(); return; }
   if(act==="euSpeak"){ let on=false; try{ on=localStorage.getItem("eugene-speak")==="1"; localStorage.setItem("eugene-speak",on?"0":"1"); }catch(e){} if(!on){ try{ const u=new SpeechSynthesisUtterance("Hi! I'll read my replies out loud now."); u.pitch=1.1; speechSynthesis.speak(u); }catch(e){} } else { try{speechSynthesis.cancel();}catch(e){} } render(); return; }
@@ -2575,7 +2591,10 @@ document.addEventListener("click",async(e)=>{
     state.eugeneLog=[...(state.eugeneLog||[]),{role:"me",text:q}]; state.eugeneBusy=true; state.eugeneShowAsks=false; render();
     let ans; try{ ans = window.eugeneAsk ? await window.eugeneAsk(q) : "Eugene's brain isn't wired up yet 🌸"; }
     catch(e){ ans="aw, I couldn't reach the OS brain — "+(e.message||"try again in a moment")+" 🌸"; }
-    state.eugeneLog=[...(state.eugeneLog||[]),{role:"pet",text:ans}]; state.eugeneBusy=false; render(); return;
+    state.eugeneLog=[...(state.eugeneLog||[]),{role:"pet",text:ans}]; state.eugeneBusy=false;
+    if(state.eugeneLog.length>60) state.eugeneLog=state.eugeneLog.slice(-60);
+    try{ localStorage.setItem("eugene-log",JSON.stringify(state.eugeneLog)); }catch(e){}
+    render(); return;
   }
   if(act==="addSubtask"){ const tx=prompt("Break it into a small step:"); if(tx&&tx.trim()){ await taskMut(t=>t.map(x=>x.id===id?{...x,sub:[...(x.sub||[]),{id:"s"+uid().slice(0,6),text:tx.trim(),done:false}]}:x)); render(); } return; }
   if(act==="subDone"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:x)); render(); return; }
@@ -3294,6 +3313,22 @@ render();
         STICKIES=STICKIES.filter(function(s){return s.id!==st.id;}); saveStickies(); renderStickies();
         return "🗑 peeled off that sticky note";
       }
+      case "setReminder": {
+        if(!a.text||!a.date) return "I need what to remind you of and when 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{reminders:(n.reminders||[]).concat([{id:uid(),text:String(a.text).slice(0,300),date:a.date,time:a.time||"09:00",email:a.email!==false,done:false,notified:false,emailed:false}])}); });
+        try{ if(window.Notification&&Notification.permission==="default")Notification.requestPermission(); }catch(e){}
+        return "⏰ reminder set for "+a.date+" at "+(a.time||"09:00")+" — "+a.text+(a.email!==false?" (browser ping + email 💌)":" (browser ping only)");
+      }
+      case "delReminder": {
+        var nm=(a.text||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var rs=(n.reminders||[]).filter(function(r){ if(!hit&&(r.text||"").toLowerCase().indexOf(nm)>=0){hit=r;return false;} return true; }); return Object.assign({},n,{reminders:rs}); });
+        return hit? "🗑 removed the reminder “"+hit.text+"”" : "couldn't find a reminder like that 🌸";
+      }
+      case "doneReminder": {
+        var nm=(a.text||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var rs=(n.reminders||[]).map(function(r){ if(!hit&&!r.done&&(r.text||"").toLowerCase().indexOf(nm)>=0){hit=r;return Object.assign({},r,{done:true});} return r; }); return Object.assign({},n,{reminders:rs}); });
+        return hit? "✅ marked “"+hit.text+"” done — nice" : "couldn't find a reminder like that 🌸";
+      }
       case "rememberFact":
         if(!a.fact) return "";
         await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push(String(a.fact).slice(0,300)); if(f.length>40)f=f.slice(-40); return Object.assign({},n,{eugeneFacts:f}); });
@@ -3330,7 +3365,7 @@ render();
     .replace(/[*_`#>~|]/g,"")              // any stray md symbols
     .replace(/\n{3,}/g,"\n\n")
     .trim(); }
-  window.EUGENE_HIST = window.EUGENE_HIST || [];   // rolling conversation memory shared by the bubble chat + the Ask tab
+  window.EUGENE_HIST = (function(){ try{ return JSON.parse(localStorage.getItem("eugene-hist")||"[]"); }catch(e){ return []; } })();   // rolling conversation memory — survives reloads
   function eugeneSpeak(text){
     try{ if(localStorage.getItem("eugene-speak")!=="1"||!window.speechSynthesis) return;
       var clean=String(text).replace(/[\u{1F000}-\u{1FAFF}]|[☀-➿]|[←-⇿]/gu,"").replace(/\s+/g," ").trim();
@@ -3351,6 +3386,7 @@ render();
     if(did.length) reply += "\n\n"+did.join("\n");
     window.EUGENE_HIST.push({role:"me",text:q},{role:"pet",text:reply});
     if(window.EUGENE_HIST.length>24) window.EUGENE_HIST=window.EUGENE_HIST.slice(-24);
+    try{ localStorage.setItem("eugene-hist",JSON.stringify(window.EUGENE_HIST)); }catch(e){}
     eugeneSpeak(reply);
     return reply;
   }
@@ -3384,6 +3420,7 @@ render();
   });
   /* ---- Eugene's once-a-day check-in: a bubble with today's shape, built from her own data ---- */
   function showPetBubble(text,ms){ var b=document.getElementById("petBubble"); if(!b)return; b.textContent=text; b.classList.remove("pet-hidden"); clearTimeout(b._h); b._h=setTimeout(function(){ b.classList.add("pet-hidden"); },ms||9000); }
+  window.showPetBubble=showPetBubble;
   async function eugeneDailyBrief(){
     try{
       var key="eugene-brief"; if(localStorage.getItem(key)===TODAY) return;
@@ -3403,6 +3440,24 @@ render();
     }catch(e){}
   }
   setTimeout(eugeneDailyBrief, 6500);
+  /* ---- reminder watcher: while the OS is open, ping due reminders (browser notification + bubble + toast).
+     Email delivery for closed-tab times is handled by the "reminders" Edge Function on a cron. ---- */
+  async function checkReminders(){
+    try{
+      if(RO) return;
+      var sent=await DB.daily(SENTINEL); var rems=sent.reminders||[];
+      var now=new Date(); var hm=("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
+      var due=rems.filter(function(r){ return !r.done&&!r.notified&&(r.date<TODAY||(r.date===TODAY&&(r.time||"09:00")<=hm)); });
+      if(!due.length) return;
+      due.forEach(function(r){
+        try{ if(window.Notification&&Notification.permission==="granted") new Notification("⏰ Eugene reminder",{body:r.text,icon:"pet-widget/Screenshot 2026-06-02 202234.png"}); }catch(e){}
+        toast("⏰ "+r.text);
+      });
+      showPetBubble("⏰ psst — "+due.map(function(r){return r.text;}).join(" · "),20000);
+      await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{reminders:(n.reminders||[]).map(function(r){ return due.some(function(d){return d.id===r.id;})?Object.assign({},r,{notified:true}):r; })}); });
+    }catch(e){}
+  }
+  setTimeout(checkReminders, 5000); setInterval(checkReminders, 30000);
 })();
 </script>
 </body>
