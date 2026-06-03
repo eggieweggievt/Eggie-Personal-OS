@@ -212,11 +212,11 @@ Return ONLY JSON, no prose around it:
 - "actions": the things to perform. Empty array for pure questions/chit-chat.
 
 Allowed action types and their args (use ONLY these; pick valid enum values):
-- addCalendarEvent: { title, date:"YYYY-MM-DD", endDate?:"YYYY-MM-DD" (multi-day), time?:"HH:MM" 24h, tz?:IANA zone (default ${tz}), note?, color?:"#hex" }
+- addCalendarEvent: { title, date:"YYYY-MM-DD", endDate?:"YYYY-MM-DD" (multi-day), time?:"HH:MM" 24h, tz?:IANA zone (default ${tz}), note?, color?:"#hex" }   // a ONE-OFF thing on a specific date (incl. a one-time stream, collab, appointment, deadline). Resolve relative dates to an absolute date.
 - addTask: { text, bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full" }
 - addContent: { title, format?: "short"|"long"|"twitter", stage?: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published", pillar?: "growth"|"retention"|"experimental" }
 - addIncome: { kind: "in"|"out", source, amount:number, category?, note? }
-- addScheduleSlot: { day: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun", time?, title? }   // recurring stream day
+- addScheduleSlot: { day: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun", time?, title? }   // a RECURRING weekly stream day that repeats every week — use the weekday name, NEVER a single date
 - setStreamDay: { on: boolean }        // marks TODAY a stream day or not
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
@@ -229,6 +229,11 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addHabit: { label, emoji?, cat?: "Pre-stream"|"On-air"|"Post-stream"|"Content"|"Community"|"Health"|"Business"|"Batch days", energy?: "essential"|"normal"|"intensive", total?: number }
 - scheduleContent: { name (fuzzy-matched to an EXISTING content title in her list above), date: "YYYY-MM-DD" }   // sets that content's scheduled date. Use ONLY for content she already has; if it's a new idea, use addContent instead.
 - startScript: { kind: "short"|"long", title?, raw? (any idea/notes/spoken words she gave you to start from), references?, format?: boolean }   // opens the Script Writer seeded with this; set format:true ONLY if she gave enough raw/references to shape it now (otherwise leave false so she can dictate more first).
+
+Stream schedule vs. event — keep these straight:
+- "I stream every Tuesday", "add Friday to my stream schedule", "my regular streams are Mon/Wed at 4pm" = RECURRING → addScheduleSlot (weekday, repeats weekly). One slot per weekday she names.
+- "schedule a stream this Friday", "I'm streaming on the 14th", "collab stream next Tuesday at 4pm", a one-time/dated stream = a ONE-OFF → addCalendarEvent (a specific date). A dated one-time stream is an EVENT, not a schedule slot.
+- If she says "stream" + a weekday with no specific date and it sounds routine → schedule slot. If she says "stream" + a specific/relative date ("this/next Friday", "the 14th", "tomorrow") → calendar event. If genuinely unsure which she means, ask in "reply" instead of guessing.
 
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
       const raw = await claude(
