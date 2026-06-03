@@ -63,7 +63,10 @@
   .grid-home{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;}
   /* ---- modular dashboard ---- */
   .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:16px;}
-  .home-widget{position:relative;}
+  .home-widget{position:relative;transition:transform .24s cubic-bezier(.2,.8,.25,1);}
+  #nav .tab{transition:transform .2s cubic-bezier(.2,.8,.25,1);}
+  .drag-clone{position:fixed;left:0;top:0;z-index:9999;pointer-events:none;border-radius:18px;box-shadow:0 16px 38px rgba(120,80,120,.34);opacity:.97;}
+  .home-widget.dragsrc,#nav .tab.dragsrc{visibility:hidden;}
   .home-widget.reordering{outline:2px dashed var(--lav);outline-offset:3px;border-radius:18px;}
   .home-widget.resizing{outline:2px dashed var(--pink);outline-offset:3px;border-radius:18px;}
   .home-grip{position:absolute;top:9px;right:36px;z-index:6;border:none;background:rgba(255,255,255,.55);border-radius:8px;font-size:13px;line-height:1;color:#b3a6c0;cursor:grab;padding:3px 7px;opacity:.45;touch-action:none;user-select:none;}
@@ -2314,7 +2317,7 @@ render();
   }
   requestAnimationFrame(loop);
 })();
-/* ===== modular drag-reorder: top tabs + Home widgets (mouse + touch) ===== */
+/* ===== modular drag-reorder + resize: iOS-style lift, follow, slide, settle ===== */
 (function(){
   let d=null, sc=false;
   const gridEl=()=>document.querySelector(".grid-modular");
@@ -2322,6 +2325,13 @@ render();
   function commitTabs(order){ try{ localStorage.setItem("tab-order",JSON.stringify(order)); }catch(e){} }
   function commitHomeOrder(order){ DB.saveDaily(SENTINEL,n=>({...n,homeOrder:order})).catch(()=>{}); }
   function commitHomeSize(key,cols){ DB.saveDaily(SENTINEL,n=>({...n,homeSize:Object.assign({},n.homeSize||{},{[key]:cols})})).catch(()=>{}); }
+  function moveGhost(x,y,scale){ if(d&&d.ghost)d.ghost.style.transform="translate("+(x-d.gx)+"px,"+(y-d.gy)+"px) scale("+(scale||1.04)+")"; }
+  /* FLIP: smoothly slide siblings into their new spots after a DOM reorder */
+  function flipReorder(c, mutate){
+    const kids=[...c.children], firsts=kids.map(k=>k.getBoundingClientRect());
+    mutate(); try{layoutHome();}catch(_){}
+    kids.forEach((k,i)=>{ if(k===(d&&d.item))return; const a=firsts[i], b=k.getBoundingClientRect(), dx=a.left-b.left, dy=a.top-b.top; if(!dx&&!dy)return; k.style.transition="none"; k.style.transform="translate("+dx+"px,"+dy+"px)"; requestAnimationFrame(()=>{ k.style.transition=""; k.style.transform=""; }); });
+  }
   document.addEventListener("pointerdown",e=>{
     if(RO)return;
     const rez=e.target.closest(".home-resize");
@@ -2333,21 +2343,30 @@ render();
   },true);
   document.addEventListener("pointermove",e=>{
     if(!d)return;
-    if(!d.moved){ if(Math.abs(e.clientX-d.sx)+Math.abs(e.clientY-d.sy)<6)return; d.moved=true; d.item.classList.add(d.mode==="resize"?"resizing":"reordering"); if(d.mode==="order")d.item.style.pointerEvents="none"; }
+    if(!d.moved){ if(Math.abs(e.clientX-d.sx)+Math.abs(e.clientY-d.sy)<6)return; d.moved=true;
+      if(d.mode==="resize"){ d.item.classList.add("resizing"); }
+      else { const r=d.item.getBoundingClientRect(); d.gx=d.sx-r.left; d.gy=d.sy-r.top; const g=d.item.cloneNode(true); g.classList.add("drag-clone"); g.classList.remove("reordering","dragsrc"); g.style.width=r.width+"px"; g.style.height=r.height+"px"; g.querySelectorAll(".home-grip,.home-resize").forEach(x=>x.remove()); document.body.appendChild(g); d.ghost=g; d.item.classList.add("dragsrc"); moveGhost(d.sx,d.sy); }
+    }
     e.preventDefault();
     if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(1,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; try{layoutHome();}catch(_){} } return; }
+    moveGhost(e.clientX,e.clientY);
     const el=document.elementFromPoint(e.clientX,e.clientY), over=el&&el.closest(d.itemSel);
-    if(over&&over!==d.item&&over.parentElement===d.c){ const r=over.getBoundingClientRect(), before=d.horiz?(e.clientX<r.left+r.width/2):(e.clientY<r.top+r.height/2); d.c.insertBefore(d.item, before?over:over.nextSibling); }
+    if(over&&over!==d.item&&over.parentElement===d.c){ const r=over.getBoundingClientRect(), before=d.horiz?(e.clientX<r.left+r.width/2):(e.clientY<r.top+r.height/2); const ref=before?over:over.nextSibling; if(ref!==d.item){ flipReorder(d.c, ()=>d.c.insertBefore(d.item, ref)); } }
   },true);
   document.addEventListener("pointerup",()=>{
     if(!d)return; const x=d; d=null;
-    x.item.classList.remove("reordering","resizing"); if(x.mode==="order")x.item.style.pointerEvents="";
     try{x.cap.releasePointerCapture(x.pid);}catch(_){}
-    if(!x.moved)return; sc=true; setTimeout(()=>sc=false,350);
-    if(x.mode==="resize"){ commitHomeSize(x.key,x.cols); try{layoutHome();}catch(_){} return; }
+    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitHomeSize(x.key,x.cols); try{layoutHome();}catch(_){} } return; }
+    if(!x.moved){ return; }
+    sc=true; setTimeout(()=>sc=false,350);
+    // settle the floating clone into the placeholder's final spot, then reveal
+    const fr=x.item.getBoundingClientRect();
+    if(x.ghost){ x.ghost.style.transition="transform .2s cubic-bezier(.2,.8,.25,1),opacity .2s"; x.ghost.style.transform="translate("+fr.left+"px,"+fr.top+"px) scale(1)"; x.ghost.style.opacity="0"; const gh=x.ghost; setTimeout(()=>{ gh&&gh.remove(); },220); }
+    x.item.classList.remove("dragsrc");
     x.commit([...x.c.querySelectorAll(x.itemSel)].map(it=>it.getAttribute(x.key)));
     if(x.itemSel===".home-widget"){ try{layoutHome();}catch(_){} }
   },true);
+  document.addEventListener("pointercancel",()=>{ if(!d)return; if(d.ghost)d.ghost.remove(); if(d.item){d.item.classList.remove("dragsrc","resizing","reordering");} d=null; },true);
   document.addEventListener("click",e=>{ if(sc){ e.stopPropagation(); e.preventDefault(); sc=false; } },true);
 })();
 </script>
