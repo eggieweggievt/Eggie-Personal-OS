@@ -246,6 +246,17 @@
   .eu-chip{border:1px solid var(--line);background:#faf8ff;color:var(--ink);border-radius:13px;padding:9px 13px;font:inherit;font-size:12.5px;line-height:1.35;cursor:pointer;text-align:left;transition:background .12s;}
   .eu-chip:hover{background:#f0ecfb;}
   .eu-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);}
+  /* teleprompter overlay */
+  .tp-overlay{position:fixed;inset:0;z-index:10000;background:#0b0b12;display:flex;flex-direction:column;color:#fff;font-family:var(--display);}
+  .tp-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#15151f;border-bottom:1px solid #2a2a3a;flex-wrap:wrap;}
+  .tp-bar button{background:#262635;border:1px solid #3a3a4d;color:#fff;border-radius:10px;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer;}
+  .tp-bar button.tp-go{background:linear-gradient(135deg,#ec7faf,#a98fe0);border:none;font-weight:700;}
+  .tp-bar label{font-size:12px;color:#b9b9c8;display:flex;align-items:center;gap:6px;}
+  .tp-bar input[type=range]{accent-color:#ec7faf;width:120px;}
+  .tp-scroll{flex:1;overflow:hidden;position:relative;cursor:ns-resize;}
+  .tp-text{padding:42vh 8vw;font-size:44px;line-height:1.6;white-space:pre-wrap;text-align:center;will-change:transform;}
+  .tp-line{position:absolute;left:0;right:0;top:40vh;height:2px;background:rgba(236,127,175,.55);pointer-events:none;}
+  .tp-mask{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#0b0b12 1%,transparent 24%,transparent 76%,#0b0b12 99%);}
 </style>
 </head>
 <body>
@@ -1019,7 +1030,7 @@ async function openContent(id){
       <div class="grow" style="min-width:110px"><div class="label">Stage</div><select class="inp" id="f_stage">${STAGES.map(([k,l])=>`<option value="${k}" ${c.stage===k?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
     <div class="label" style="margin-top:10px">Hook</div><input class="inp" id="f_hook" value="${esc(c.hook||"")}" placeholder="the first line that stops the scroll" />
-    <div class="label" style="margin-top:10px">Description</div><textarea class="inp" id="f_script" rows="3" placeholder="what it's about, the angle, the key beats…">${esc(c.script||"")}</textarea>
+    <div class="label" style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">Description / script<button class="btn btn-pink" data-act="teleprompter" data-src="f_script" style="padding:2px 8px">🎬 Teleprompter</button></div><textarea class="inp" id="f_script" rows="3" placeholder="what it's about, the angle, the key beats…">${esc(c.script||"")}</textarea>
     <div class="label" style="margin-top:10px">Hashtags · 1 small / 2 medium / 2 large</div><input class="inp" id="f_tags" value="${esc((c.hashtags||[]).join(" "))}" placeholder="#vtuber #cozystream …" />
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-pink" data-act="briefToOptimizer">🎯 send to Optimizer</button><button class="btn" data-act="aiAnalyze">✨ quick analyze</button></div>
     <div id="aiOut" style="margin-top:10px"></div>
@@ -1777,6 +1788,47 @@ function renderEugene(){
     ${card}</div>`;
 }
 
+/* ===================== TELEPROMPTER ===================== */
+function openTeleprompter(text){
+  text=(text||"").trim();
+  if(!text){ toast("No script to read yet 🌸"); return; }
+  closeTeleprompter();
+  const ov=document.createElement("div"); ov.className="tp-overlay"; ov.id="tpOverlay";
+  ov.innerHTML=`
+    <div class="tp-bar">
+      <button class="tp-go" id="tpPlay">▶ Play</button>
+      <button id="tpRestart">↻ Restart</button>
+      <label>🐢 Speed <input type="range" id="tpSpeed" min="10" max="240" value="55"> 🐇</label>
+      <label>Size <input type="range" id="tpSize" min="24" max="92" value="44"></label>
+      <button id="tpMirror" title="flip for teleprompter glass">🪞 Mirror</button>
+      <div style="flex:1"></div>
+      <span style="font-size:11.5px;color:#9a9ab0">space play/pause · ↑↓ speed · scroll to scrub · Esc close</span>
+      <button id="tpClose">✕ Close</button>
+    </div>
+    <div class="tp-scroll" id="tpScroll">
+      <div class="tp-mask"></div><div class="tp-line"></div>
+      <div class="tp-text" id="tpText">${esc(text)}</div>
+    </div>`;
+  document.body.appendChild(ov);
+  const txt=ov.querySelector("#tpText");
+  const T={y:0,speed:55,size:44,playing:false,mirror:false,raf:null,last:0};
+  function maxY(){ return Math.max(0, txt.scrollHeight - innerHeight*0.5); }
+  function apply(){ txt.style.fontSize=T.size+"px"; txt.style.transform=(T.mirror?"scaleX(-1) ":"")+"translateY("+(-T.y)+"px)"; }
+  function setPlay(p){ T.playing=p; const b=ov.querySelector("#tpPlay"); b.textContent=p?"⏸ Pause":"▶ Play"; if(p){ T.last=0; T.raf=requestAnimationFrame(frame); } else if(T.raf){ cancelAnimationFrame(T.raf); T.raf=null; } }
+  function frame(now){ if(!T.playing)return; const dt=Math.min(80, now-(T.last||now)); T.last=now; T.y+=T.speed*dt/1000; if(T.y>=maxY()){ T.y=maxY(); apply(); setPlay(false); return; } apply(); T.raf=requestAnimationFrame(frame); }
+  ov.querySelector("#tpPlay").onclick=()=>setPlay(!T.playing);
+  ov.querySelector("#tpRestart").onclick=()=>{ T.y=0; apply(); };
+  ov.querySelector("#tpClose").onclick=closeTeleprompter;
+  ov.querySelector("#tpMirror").onclick=function(){ T.mirror=!T.mirror; this.style.background=T.mirror?"#ec7faf":""; this.style.borderColor=T.mirror?"#ec7faf":""; apply(); };
+  ov.querySelector("#tpSpeed").oninput=e=>{ T.speed=+e.target.value; };
+  ov.querySelector("#tpSize").oninput=e=>{ T.size=+e.target.value; apply(); };
+  ov.querySelector("#tpScroll").addEventListener("wheel",e=>{ e.preventDefault(); T.y=Math.max(0,Math.min(maxY(),T.y+e.deltaY)); apply(); },{passive:false});
+  T._key=e=>{ if(!document.getElementById("tpOverlay"))return; if(e.key===" "){e.preventDefault();setPlay(!T.playing);} else if(e.key==="Escape"){closeTeleprompter();} else if(e.key==="ArrowUp"){e.preventDefault();T.speed=Math.min(240,T.speed+10);ov.querySelector("#tpSpeed").value=T.speed;} else if(e.key==="ArrowDown"){e.preventDefault();T.speed=Math.max(10,T.speed-10);ov.querySelector("#tpSpeed").value=T.speed;} };
+  document.addEventListener("keydown",T._key);
+  window._tp=T; apply();
+}
+function closeTeleprompter(){ const o=document.getElementById("tpOverlay"); if(o){ const T=window._tp; if(T){ if(T.raf)cancelAnimationFrame(T.raf); if(T._key)document.removeEventListener("keydown",T._key); } o.remove(); window._tp=null; } }
+
 /* ===================== VIDEO OPTIMIZATION ===================== */
 const DEMO_SNAP={title:"EggieWeggie VT",subscribers:8421,views:512300,videos:212,recent:[
   {title:"I tried VTubing on a $0 budget!! #vtuber #shorts",views:14200},
@@ -1801,7 +1853,7 @@ async function renderScript(){
   const out=s.out;
   const outHtml = out ? `<div class="soft-card" style="margin-top:10px">
       ${(out.hooks&&out.hooks.length)?`<div class="label">hook options</div>${out.hooks.map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span class="grow" style="font-size:12.5px">${esc(h)}</span><button class="btn" data-act="copyText" data-t="${esc(h)}" style="padding:2px 8px">copy</button></div>`).join("")}`:""}
-      <div class="label" style="margin-top:10px">script${out.title?` · <span class="soft">${esc(out.title)}</span>`:""} <button class="btn" data-act="copyScript" style="padding:2px 8px;margin-left:6px">copy script</button></div>
+      <div class="label" style="margin-top:10px">script${out.title?` · <span class="soft">${esc(out.title)}</span>`:""} <button class="btn" data-act="copyScript" style="padding:2px 8px;margin-left:6px">copy script</button><button class="btn btn-pink" data-act="teleprompter" data-src="scrScript" style="padding:2px 8px;margin-left:6px">🎬 Teleprompter</button></div>
       <div id="scrScript" style="white-space:pre-wrap;font-size:13px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:4px;background:#fff">${esc(out.script||"")}</div>
       ${out.cta?`<div class="label" style="margin-top:8px">CTA</div><div class="soft" style="font-size:12.5px">${esc(out.cta)}</div>`:""}
       <div style="margin-top:12px"><button class="btn btn-pink" data-act="scrToContent">＋ add to content pipeline</button></div>
@@ -2284,6 +2336,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="delScript")return delScriptDraft(id);
   if(act==="scrToContent")return scrToContent();
   if(act==="copyScript"){ const el2=document.getElementById("scrScript"); if(el2&&navigator.clipboard)navigator.clipboard.writeText(el2.innerText); toast("Copied 💗"); return; }
+  if(act==="teleprompter"){ const src=el.dataset.src; const f=src?document.getElementById(src):null; const text=f?(f.value!=null?f.value:f.innerText):""; openTeleprompter(text); return; }
   if(act==="runOptimize")return runOptimize();
   if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
