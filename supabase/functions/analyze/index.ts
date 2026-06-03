@@ -140,8 +140,9 @@ async function fullContext(userId: string, today: string): Promise<string> {
       const wkd = new Date(today + "T00:00"); wkd.setDate(wkd.getDate() - ((wkd.getDay() + 6) % 7));
       const wks = wkd.toLocaleDateString("en-CA");
       const am = s.artLog.filter((e: any) => e.date >= wks).reduce((a: number, e: any) => a + Number(e.min || 0), 0);
-      lines.push(`ART: ${am} min of art/play this week${s.artChallenge?.dayText ? `; today's challenge: ${s.artChallenge.dayText}${s.artChallenge.dayDone ? " ✓" : ""}` : ""}.`);
+      lines.push(`ART: ${am} min of art/play this week${s.artChallenge?.dayText ? `; today's challenge: ${s.artChallenge.dayText}${s.artChallenge.dayDone ? " ✓" : ""}` : ""}${s.artChallenge?.weekText ? `; week challenge: ${s.artChallenge.weekText}${s.artChallenge.weekDone ? " ✓" : ""}` : ""}.`);
     }
+    if (s.artBoard?.length || s.artResources?.length) lines.push(`ART STUDIO: mood board has ${s.artBoard?.length || 0} card(s); art library has ${s.artResources?.length || 0} saved link(s).`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -357,10 +358,17 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - recoveryDay: { }                  // set today as a gentle recovery day (low energy, not a stream day)
 - logArt: { minutes: number, note? }   // "I drew for 30 minutes", "log 20 min of art" — celebrate it, art is just-for-her and counts
 - artChallengeDone: { scope: "day"|"week", done?: boolean }   // tick her daily or weekly art challenge
+- addBoardNote: { text }              // pin a note card to her art mood board
+- addBoardImage: { url }              // add an image BY URL to the mood board (she uploads local files herself)
+- addBoardColor: { color?: "#hex" }   // drop a colour swatch onto the mood board
+- addArtResource: { title, url, tag?: "reference"|"colour"|"perspective"|"learn"|"other" }   // save a tutorial / tool link to her art library
+- rollArtPrompt: { }                  // "give me something to draw" — rolls a fresh OC/anime draw-this prompt and opens the Art tab
+- startArtTimer: { seconds? }         // "start an art timer", "let's warm up" — starts her gesture-practice timer (default 120s rounds)
+- showGuide: { type: "thirds"|"phi"|"spiral"|"armature"|"radial"|"iso"|"persp1"|"persp2"|"persp3" }   // open a composition guide — golden spiral, phi grid, dynamic symmetry, radial, isometric, 1/2/3-pt perspective
 
 When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
 
-You can control essentially every part of her OS with the actions above — meds, health, POTS/joint care, tasks and the kanban, habits, goals, content pipeline, calendar, stream schedule, money, savings, sponsors, care/emotion check-ins, creative focus, joy jar, scripts, and the weekly review. If she asks for something and a matching action exists, DO it; only fall back to a plain reply when nothing fits or you're missing a detail.
+You can control essentially every part of her OS with the actions above — meds, health, POTS/joint care, tasks and the kanban, habits, goals, content pipeline, calendar, stream schedule, money, savings, sponsors, care/emotion check-ins, creative focus, joy jar, scripts, the weekly review, AND the whole art studio (draw-this prompts, the practice timer, composition guides, the mood board, the resource library, art minutes and challenges). If she asks for something and a matching action exists, DO it; only fall back to a plain reply when nothing fits or you're missing a detail.
 
 Stream schedule vs. event — keep these straight:
 - "I stream every Tuesday", "add Friday to my stream schedule", "my regular streams are Mon/Wed at 4pm" = RECURRING → addScheduleSlot (weekday, repeats weekly). One slot per weekday she names.

@@ -3128,6 +3128,44 @@ render();
       case "artChallengeDone":
         await DB.saveDaily(SENTINEL,function(n){ var c=Object.assign({},n.artChallenge||{}); if(a.scope==="week")c.weekDone=(a.done!==false); else c.dayDone=(a.done!==false); return Object.assign({},n,{artChallenge:c}); });
         return "🌷 marked your "+(a.scope==="week"?"weekly":"daily")+" art challenge done — yay you! ✨";
+      case "addBoardNote": {
+        var ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50);
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artBoard:(n.artBoard||[]).concat([{id:uid(),type:"note",text:a.text||"",x:ox,y:oy,w:170,h:120}])}); });
+        return "📝 pinned a note to your mood board";
+      }
+      case "addBoardImage": {
+        if(!a.url) return "I need an image link for the board 🌸";
+        var ox=24+Math.floor(Math.random()*60), oy=24+Math.floor(Math.random()*50);
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artBoard:(n.artBoard||[]).concat([{id:uid(),type:"img",url:a.url,x:ox,y:oy,w:180,h:180}])}); });
+        return "🖼️ added that image to your mood board";
+      }
+      case "addBoardColor": {
+        var col=(a.color||"").trim(); if(!/^#?[0-9a-fA-F]{3,8}$/.test(col)) col=(state.art&&state.art.pBase)||"#ec7faf"; if(col[0]!=="#")col="#"+col;
+        var ox=40+Math.floor(Math.random()*60), oy=40+Math.floor(Math.random()*50);
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artBoard:(n.artBoard||[]).concat([{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}])}); });
+        return "🎨 dropped "+col+" onto your mood board";
+      }
+      case "addArtResource":
+        if(!a.url) return "I need a link to save 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artResources:((n.artResources)||DEFAULT_ART_RES).concat([{id:uid(),title:a.title||a.url,url:a.url,tag:a.tag||"other"}])}); });
+        return "📚 saved “"+(a.title||a.url)+"” to your art library";
+      case "rollArtPrompt": {
+        state.art=state.art||{}; state.art.prompt={subject:artRand(ART_SUBJECTS),mood:artRand(ART_MOODS),constraint:artRand(ART_CONSTRAINTS)};
+        setTab("art"); var p=state.art.prompt;
+        return "🎲 your prompt: "+p.subject+" — "+p.mood+", "+p.constraint;
+      }
+      case "startArtTimer": {
+        state.art=state.art||{}; var t=state.art.timer=state.art.timer||{round:0};
+        t.len=Math.max(15,Math.min(600,Number(a.seconds)||120));
+        setTab("art"); setTimeout(function(){ try{artTimerStart();}catch(e){} },80);
+        return "⏲️ practice timer started — "+t.len+"s rounds, fresh pose each round 🖍️";
+      }
+      case "showGuide": {
+        var ok=["thirds","phi","spiral","armature","radial","iso","persp1","persp2","persp3"];
+        state.art=state.art||{}; state.art.gType=ok.indexOf(a.type)>=0?a.type:"thirds";
+        setTab("art");
+        return "📐 opened the "+state.art.gType+" guide — grab it as an SVG from the panel";
+      }
       default: return "";
     }
   }
