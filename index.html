@@ -129,9 +129,7 @@
   /* ---- cursor petal trail ---- */
   .petal{position:fixed;pointer-events:none;z-index:9000;border-radius:150% 0 150% 0;will-change:transform,opacity;opacity:0;}
   @keyframes petalFloat{ 0%{opacity:0;transform:translate(0,0) rotate(0deg) scale(.55);} 18%{opacity:var(--o,.7);} 100%{opacity:0;transform:translate(var(--dx,12px),var(--dy,60px)) rotate(var(--dr,200deg)) scale(1);} }
-  /* ---- ambient rising bubbles ---- */
-  .bubble{position:fixed;bottom:-44px;pointer-events:none;z-index:8999;border-radius:50%;opacity:0;will-change:transform,opacity;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.9),rgba(193,226,255,.34) 46%,rgba(168,205,242,.1) 72%);box-shadow:0 0 8px rgba(150,200,240,.4),inset 0 0 6px rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.4);}
-  @keyframes bubbleRise{ 0%{opacity:0;transform:translate(0,0) scale(.6);} 12%{opacity:var(--o,.35);} 86%{opacity:var(--o,.35);} 100%{opacity:0;transform:translate(var(--dx,20px),calc(-100vh - 80px)) scale(1);} }
+  /* ambient bubble field is a canvas (#bubbleCanvas) injected at boot — see the bubble IIFE */
   .kanban{-webkit-overflow-scrolling:touch;}
   .cal-ev,.cc-chip,.citem,[data-act="dragSponsor"],.sticky-head,.sticky-resize{touch-action:none;}
   @media (hover:none){
@@ -2233,28 +2231,45 @@ render();
   }
   window.addEventListener("pointermove",e=>{ if(e.pointerType==="touch")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
 })();
-/* ===== ambient rising bubbles (octopus vibes) 🐙 ===== */
+/* ===== ambient bubble field — canvas, behind the boxes, plentiful + mouse-interactive 🐙 ===== */
 (function(){
   const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
-  let count=0; const MAX=55;
-  function bubble(){
-    if(!reduce() && count<MAX){
-      const burst=1+(Math.random()<0.5?1:0);   // sometimes spawn two at once
-      for(let k=0;k<burst && count<MAX;k++){
-        const b=document.createElement("div"); b.className="bubble";
-        const size=(10+Math.random()*34).toFixed(0);
-        b.style.width=b.style.height=size+"px";
-        b.style.left=(Math.random()*100).toFixed(1)+"vw";
-        b.style.setProperty("--dx",(Math.random()*110-55).toFixed(0)+"px");
-        b.style.setProperty("--o",(0.22+Math.random()*0.3).toFixed(2));
-        b.style.animation=`bubbleRise ${(4.5+Math.random()*4).toFixed(1)}s linear forwards`;
-        document.body.appendChild(b); count++;
-        b.addEventListener("animationend",()=>{ b.remove(); count--; });
-      }
+  const cv=document.createElement("canvas"); cv.id="bubbleCanvas";
+  cv.style.cssText="position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;";
+  document.body.appendChild(cv);
+  const ctx=cv.getContext("2d");
+  let DPR=Math.min(2,window.devicePixelRatio||1), W=0, H=0;
+  function resize(){ DPR=Math.min(2,window.devicePixelRatio||1); W=cv.width=Math.floor(innerWidth*DPR); H=cv.height=Math.floor(innerHeight*DPR); }
+  resize(); addEventListener("resize",resize);
+  /* pre-rendered bubble sprite (fast to stamp many times) */
+  const SS=72, spr=document.createElement("canvas"); spr.width=spr.height=SS; const s=spr.getContext("2d");
+  const g=s.createRadialGradient(SS*0.4,SS*0.37,SS*0.04,SS*0.5,SS*0.5,SS*0.5);
+  g.addColorStop(0,"rgba(255,255,255,.95)"); g.addColorStop(.45,"rgba(200,228,255,.42)"); g.addColorStop(.82,"rgba(168,205,242,.12)"); g.addColorStop(1,"rgba(168,205,242,0)");
+  s.fillStyle=g; s.beginPath(); s.arc(SS/2,SS/2,SS/2,0,6.2832); s.fill();
+  s.lineWidth=1.6; s.strokeStyle="rgba(255,255,255,.5)"; s.beginPath(); s.arc(SS/2,SS/2,SS/2-1.6,0,6.2832); s.stroke();
+  s.fillStyle="rgba(255,255,255,.92)"; s.beginPath(); s.arc(SS*0.36,SS*0.34,SS*0.09,0,6.2832); s.fill();
+  let mx=-9999,my=-9999;
+  addEventListener("pointermove",e=>{ mx=e.clientX*DPR; my=e.clientY*DPR; });
+  addEventListener("pointerleave",()=>{ mx=my=-9999; });
+  const COUNT=90, bub=[];
+  function mk(seed){ const r=(7+Math.random()*22)*DPR; return { x:Math.random()*W, y: seed? Math.random()*H : H+r+Math.random()*60*DPR, r, sp:(0.35+Math.random()*0.95)*DPR, wob:Math.random()*6.28, wobsp:0.008+Math.random()*0.02, amp:(0.3+Math.random()*0.7)*DPR, o:0.2+Math.random()*0.4 }; }
+  for(let i=0;i<COUNT;i++)bub.push(mk(true));
+  const R=120; // mouse push radius (css px)
+  function loop(){
+    ctx.clearRect(0,0,W,H);
+    if(reduce()){ requestAnimationFrame(loop); return; }
+    const Rd=R*DPR;
+    for(let i=0;i<COUNT;i++){ const b=bub[i];
+      b.wob+=b.wobsp; b.y-=b.sp; b.x+=Math.sin(b.wob)*b.amp;
+      const dx=b.x-mx, dy=b.y-my, d2=dx*dx+dy*dy;
+      if(d2<Rd*Rd){ const d=Math.sqrt(d2)||1, f=(Rd-d)/Rd*3.2*DPR; b.x+=dx/d*f; b.y+=dy/d*f; }
+      if(b.y< -b.r-12*DPR || b.x< -60*DPR || b.x>W+60*DPR){ const n=mk(false); b.x=n.x;b.y=n.y;b.r=n.r;b.sp=n.sp;b.wob=n.wob;b.wobsp=n.wobsp;b.amp=n.amp;b.o=n.o; }
+      ctx.globalAlpha=b.o; ctx.drawImage(spr,b.x-b.r,b.y-b.r,b.r*2,b.r*2);
     }
-    setTimeout(bubble, 260+Math.random()*520);
+    ctx.globalAlpha=1;
+    requestAnimationFrame(loop);
   }
-  setTimeout(bubble, 400);
+  requestAnimationFrame(loop);
 })();
 </script>
 <!-- ===================== AI PET WIDGET ===================== -->
