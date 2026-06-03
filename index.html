@@ -78,6 +78,7 @@
   .home-resize{position:absolute;right:3px;bottom:3px;z-index:6;border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:12px;line-height:1;color:#9b8fae;cursor:nwse-resize;padding:2px 5px;opacity:.4;touch-action:none;user-select:none;}
   .home-widget:hover .home-resize,.home-resize:hover{opacity:.95;}
   .home-add{border:2px dashed var(--line);border-radius:16px;background:rgba(255,255,255,.4);color:var(--lav-deep);font-size:13px;cursor:pointer;min-height:80px;grid-column:span 4;grid-row:span 4;}
+  body.locked .home-tools,body.locked .home-resize,body.locked .home-add{display:none!important;}
   #nav .tab{touch-action:none;user-select:none;-webkit-user-select:none;}
   #nav .tab.reordering{opacity:.55;}
   .col{display:flex;flex-direction:column;gap:16px;}
@@ -242,6 +243,7 @@
   </div>
   <div class="right">
     <span id="status" class="chip">…</span>
+    <button id="lockChip" class="chip" data-act="toggleLock" title="Lock / unlock the layout">🔓</button>
     <button class="chip" data-act="settings" title="Accessibility + display">⚙️</button>
     <button id="demoChip" class="chip" data-act="toggleDemo">demo</button>
     <span class="avatar"><img src="favicon.png" alt="Eggie" /></span>
@@ -573,6 +575,9 @@ function applySettings(){
     document.body.classList.toggle("calm",localStorage.getItem("eggie-calm")==="1");
     document.body.classList.toggle("text-lg",localStorage.getItem("eggie-text")==="1");
     state.focus=localStorage.getItem("eggie-focus")==="1";
+    const locked=localStorage.getItem("layout-locked")==="1";
+    document.body.classList.toggle("locked",locked);
+    const lc=document.getElementById("lockChip"); if(lc){ lc.textContent=locked?"🔒":"🔓"; lc.className="chip"+(locked?" on":""); }
   }catch{}
 }
 /* AI brain — calls the Supabase "analyze" Edge Function (see EDGE-FUNCTION-SETUP.md) */
@@ -2107,6 +2112,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
   if(act==="homeMin"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeMin:Object.assign({},n.homeMin||{},{[k]:!((n.homeMin||{})[k])})})); render(); return; }
   if(act==="homeHide"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeHidden:Object.assign({},n.homeHidden||{},{[k]:true})})); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
+  if(act==="toggleLock"){ localStorage.setItem("layout-locked",localStorage.getItem("layout-locked")==="1"?"0":"1"); applySettings(); toast(localStorage.getItem("layout-locked")==="1"?"Layout locked 🔒":"Layout unlocked 🔓"); return; }
   if(act==="manageCards")return manageCardsModal();
   if(act==="cardToggle"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>{const hid=Object.assign({},n.homeHidden||{}); hid[k]=!hid[k]; const o=(n.homeOrder||[]).slice(); if(!hid[k]&&!o.includes(k))o.push(k); return {...n,homeHidden:hid,homeOrder:o};}); manageCardsModal(); render(); return; }
   if(act==="openNote")return openNote(id);
@@ -2364,7 +2370,7 @@ render();
     kids.forEach((k,i)=>{ if(k===(d&&d.item))return; const a=firsts[i], b=k.getBoundingClientRect(), dx=a.left-b.left, dy=a.top-b.top; if(!dx&&!dy)return; k.style.transition="none"; k.style.transform="translate("+dx+"px,"+dy+"px)"; requestAnimationFrame(()=>{ k.style.transition=""; k.style.transform=""; }); });
   }
   document.addEventListener("pointerdown",e=>{
-    if(RO)return;
+    if(RO||document.body.classList.contains("locked"))return;
     const rez=e.target.closest(".home-resize");
     if(rez){ const item=rez.closest(".home-widget"); if(item){ const r=item.getBoundingClientRect(), cur=parseInt(((item.style.gridColumn||"").match(/span (\d+)/)||[])[1]||"1"), panel=item.querySelector(".panel,section"), startH=panel?panel.getBoundingClientRect().height:160; d={mode:"resize",item,panel,key:item.getAttribute("data-w"),startW:r.width,startCols:cur,cols:cur,startH,h:startH,sx:e.clientX,sy:e.clientY,moved:false,cap:rez,pid:e.pointerId}; try{rez.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
     const grip=e.target.closest(".home-grip");
