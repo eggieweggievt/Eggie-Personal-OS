@@ -1446,11 +1446,35 @@ function healthChartSVG(rows,key,max,offset,color,days){
   const summary=vals.length?`avg ${(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1)} · range ${Math.min.apply(null,vals)}–${Math.max.apply(null,vals)} · ${vals.length} day${vals.length>1?"s":""} logged`:"no data for this one yet — log a few days 🌸";
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block"><defs><linearGradient id="hgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".5"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>${grid}${areas}${lines}${dots}${xl}</svg><div class="soft" style="font-size:11.5px;margin-top:4px;text-align:center">${summary}</div>`;
 }
+/* overlay several metrics, each normalised to its own 0–100% range so shapes are comparable */
+function healthChartMultiSVG(rows,metrics,days){
+  if(metrics.length===1){ const m=metrics[0]; return healthChartSVG(rows,m[0],m[2],m[3],m[5],days); }
+  const sorted=rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-days);
+  const W=680,H=180,padL=30,padR=12,padT=14,padB=22, n=sorted.length, innerW=W-padL-padR, innerH=H-padT-padB;
+  const X=i=> padL+(n<=1?innerW/2:i*innerW/(n-1)), Y=norm=> padT+innerH*(1-Math.max(0,Math.min(1,norm)));
+  let grid=""; [0,0.5,1].forEach(g=>{ const yy=padT+innerH*(1-g); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#efe6f2" stroke-width="1"/><text x="${padL-5}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#b3a6c0">${Math.round(g*100)}%</text>`; });
+  let body="", legend=[];
+  metrics.forEach(m=>{ const key=m[0],label=m[1],max=m[2],offset=m[3],emoji=m[4],color=m[5];
+    const pts=sorted.map((r,i)=>{ const hv=(r.notes&&r.notes.health)||{}; let raw=hv[key]; const has=raw!=null&&raw!==""; return {i, raw:has?Number(raw):null, norm:has?(Number(raw)+(offset||0))/max:null}; });
+    let lines="",dots="",seg=[]; const flush=()=>{ if(seg.length){ const lp=seg.map((p,k)=>(k?"L":"M")+X(p.i).toFixed(1)+" "+Y(p.norm).toFixed(1)).join(" "); lines+=`<path d="${lp}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; seg=[]; } };
+    pts.forEach(p=>{ if(p.norm==null)flush(); else seg.push(p); }); flush();
+    pts.forEach((p,i)=>{ if(p.norm!=null){ const last=i===n-1; dots+=`<circle cx="${X(p.i).toFixed(1)}" cy="${Y(p.norm).toFixed(1)}" r="${last?3.4:2.2}" fill="#fff" stroke="${color}" stroke-width="1.8"><title>${sorted[p.i].date} · ${label}: ${p.raw}</title></circle>`; } });
+    body+=lines+dots;
+    const vals=pts.filter(p=>p.raw!=null).map(p=>p.raw); const avg=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):"—";
+    legend.push(`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#5a4a5e"><span style="width:14px;height:3px;border-radius:2px;background:${color};display:inline-block"></span>${emoji} ${label} <span class="muted">avg ${avg}</span></span>`);
+  });
+  const dl=ds=>{const p=ds.split("-");return p[1]+"/"+p[2];};
+  const xl=n?`<text x="${X(0).toFixed(1)}" y="${H-6}" font-size="9" fill="#b3a6c0">${dl(sorted[0].date)}</text><text x="${(W-padR).toFixed(1)}" y="${H-6}" text-anchor="end" font-size="9" fill="#b3a6c0">${dl(sorted[n-1].date)}</text>`:"";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block">${grid}${body}${xl}</svg>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px">${legend.join("")}</div>
+    <div class="soft" style="font-size:11px;margin-top:6px;text-align:center">each line scaled to its own range (0–100%) so you can compare shapes 🌸</div>`;
+}
 async function renderHealth(){
   const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(30)]);
   const pat=healthPatterns(rows);
   const h=day.health||{}; const meds=await loadMeds(); const joints=h.joints||[];
-  const hm=HMETRICS.find(m=>m[0]===(state.healthMetric||"mood"))||HMETRICS[0];
+  let selKeys=(state.healthMetrics&&state.healthMetrics.length)?state.healthMetrics:(state.healthMetric?[state.healthMetric]:["mood"]); state.healthMetrics=selKeys;
+  const selMetrics=selKeys.map(k=>HMETRICS.find(m=>m[0]===k)).filter(Boolean);
   const moodBtns=[-3,-2,-1,0,1,2,3].map(i=>`<button data-act="healthSet" data-f="mood" data-v="${i}" class="${h.mood===i?'on':''}">${i>0?"+"+i:i}</button>`).join("");
   const medRows=meds.length?meds.map(m=>`<button class="hbtn ${(h.meds&&h.meds[m.id])?'done':''}" data-act="medToggle" data-id="${m.id}" style="display:flex;align-items:center;gap:8px"><span class="check ${(h.meds&&h.meds[m.id])?'on':''}"></span><span class="grow" style="font-size:12.5px">${esc(m.name)}${m.dose?` <span class="muted">${esc(m.dose)}</span>`:""}</span>${m.time?`<span class="label">${esc(m.time)}</span>`:""}</button>`).join(""):`<div class="soft" style="font-size:12.5px">No meds added yet — tap “edit list”.</div>`;
   const heavy=(h.pain>=4)||(h.fatigue>=4);
@@ -1519,10 +1543,10 @@ async function renderHealth(){
       <button class="btn btn-pink" data-act="saveHealthNotes" style="margin-top:10px">💾 save notes + sleep</button>
     </div>
     <div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${HMETRICS.map(m=>`<button class="chiptog ${m[0]===hm[0]?'on':''}" data-act="healthMetric" data-f="${m[0]}" style="font-size:11px">${m[4]} ${m[1]}</button>`).join("")}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">${HMETRICS.map(m=>`<button class="chiptog ${selKeys.includes(m[0])?'on':''}" data-act="healthMetric" data-f="${m[0]}" style="font-size:11px">${m[4]} ${m[1]}</button>`).join("")}</div>
+      <p class="soft" style="font-size:11px;margin:0 0 8px">tap to add or remove metrics — overlay a few to cross-reference your feelings + symptoms 🌸</p>
       <div style="background:linear-gradient(135deg,#fef5fb,#f4eefc);border:1px solid #f0e4f3;border-radius:16px;padding:12px 10px 6px">
-        <div class="label" style="margin:0 0 2px 4px">${hm[4]} ${hm[1]}</div>
-        ${healthChartSVG(rows,hm[0],hm[2],hm[3],hm[5],state.healthRange||14)}
+        ${healthChartMultiSVG(rows,selMetrics,state.healthRange||14)}
       </div>
       ${flares.length?`<div class="label" style="margin-top:12px">recent flares 🌶️</div>${flares.map(r=>`<div style="font-size:12px;margin-top:3px" class="soft">🌶️ ${r.date}${r.notes.health.triggers?` · ${esc(r.notes.health.triggers)}`:""}</div>`).join("")}`:""}
       <p class="soft" style="font-size:11.5px;margin-top:12px">Tap a chip to switch what you're seeing. Gaps just mean a rest day from tracking — that's allowed. 💗</p>
@@ -2036,7 +2060,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=v; return {...n,health:h};}); render(); }
   if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=Math.max(0,(Number(h[f])||0)+d); return {...n,health:h};}); render(); }
   if(act==="healthToggle"){ const f=el.dataset.f; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=!h[f]; return {...n,health:h};}); render(); }
-  if(act==="healthMetric"){ state.healthMetric=el.dataset.f; return render(); }
+  if(act==="healthMetric"){ const f=el.dataset.f; let s=(state.healthMetrics||[]).slice(); const i=s.indexOf(f); if(i>=0){ if(s.length>1)s.splice(i,1); } else s.push(f); state.healthMetrics=s; return render(); }
   if(act==="healthRange"){ state.healthRange=Number(el.dataset.v); return render(); }
   if(act==="saveCreative"){ const project=document.getElementById("cfProject").value.trim(), step=document.getElementById("cfStep").value.trim(); await DB.saveDaily(SENTINEL,n=>({...n,creativeFocus:{project,step}})); toast("Saved 🎨 one tiny step at a time"); render(); return; }
   if(act==="healthJoint"){ const j=el.dataset.j; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); const cur=h.joints||[]; h.joints=cur.includes(j)?cur.filter(x=>x!==j):[...cur,j]; return {...n,health:h};}); render(); }
