@@ -233,6 +233,19 @@
   /* health counter stepper */
   .hcount{display:flex;align-items:center;gap:8px;}
   .hcount>span{min-width:30px;text-align:center;font-size:18px;font-family:var(--display);color:var(--ink);}
+  /* Ask Eugene — full chat page */
+  .eu-full{position:fixed;inset:0;z-index:9995;background:var(--bg);padding:14px;display:flex;flex-direction:column;}
+  .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
+  .eu-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,#ec7faf18,#a98fe018);}
+  .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#eef2fb center/cover no-repeat url("pet-widget/Screenshot 2026-06-02 202234.png");flex:0 0 auto;}
+  .eu-log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0;}
+  .eu-msg{font-size:14px;line-height:1.55;padding:10px 14px;border-radius:16px;max-width:82%;white-space:pre-wrap;word-break:break-word;}
+  .eu-msg.me{align-self:flex-end;background:linear-gradient(135deg,#ec7faf,#a98fe0);color:#fff;border-bottom-right-radius:5px;}
+  .eu-msg.pet{align-self:flex-start;background:#f6f4fb;border:1px solid var(--line);color:var(--ink);border-bottom-left-radius:5px;}
+  .eu-asks{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .eu-chip{border:1px solid var(--line);background:#faf8ff;color:var(--ink);border-radius:13px;padding:9px 13px;font:inherit;font-size:12.5px;line-height:1.35;cursor:pointer;text-align:left;transition:background .12s;}
+  .eu-chip:hover{background:#f0ecfb;}
+  .eu-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);}
 </style>
 </head>
 <body>
@@ -589,7 +602,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
@@ -777,6 +790,7 @@ async function render(){
     else if(state.tab==="income") html=await renderIncome();
     else if(state.tab==="pitch") html=await renderPitch();
     else if(state.tab==="review") html=await renderReview();
+    else if(state.tab==="eugene") html=renderEugene();
     view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
@@ -1719,6 +1733,50 @@ function renderAsk(){
     <div id="askResults" style="margin-top:14px"></div></div>`;
 }
 
+/* ===================== ASK EUGENE (full-page chat) ===================== */
+const EUGENE_ASKS=[
+  "What's trending for VTuber shorts right now?",
+  "Look up when Path of Exile 2 fully releases",
+  "How much money did I make this month?",
+  "How has my energy been the last 2 weeks?",
+  "Give me 3 cozy short ideas for this week",
+  "Add a stream this Friday at 4pm",
+  "What's on my calendar coming up?",
+  "Score this title for me: I tried VTubing on $0"
+];
+function renderEugene(){
+  const log=state.eugeneLog||[];
+  const max=!!state.eugeneMax;
+  const logHtml = log.length
+    ? log.map(m=>`<div class="eu-msg ${m.role==="me"?"me":"pet"}">${esc(m.text)}</div>`).join("")
+    : `<div class="eu-msg pet">Hi, I'm Eugene! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. Tap an example below to start. 🌸</div>`;
+  const busyHtml = state.eugeneBusy ? `<div class="eu-msg pet">…thinking 🐙</div>` : "";
+  const asks = `<div style="padding:0 16px 14px"><div class="label" style="margin:2px 0 8px">✨ try asking me</div><div class="eu-asks">${EUGENE_ASKS.map(q=>`<button class="eu-chip" data-act="eugeneAsk" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div></div>`;
+  const showAsks = (log.length===0) || state.eugeneShowAsks;
+  const card = `<div class="eu-card" style="${max?'flex:1':'height:calc(100vh - 210px);min-height:420px'}">
+      <div class="eu-head">
+        <div class="eu-av"></div>
+        <div style="flex:1"><div style="font-family:var(--display);font-size:17px">Eugene</div><div class="label" style="margin-top:1px">your octopus helper · web-connected 🌐</div></div>
+        <button class="btn" data-act="eugeneAsksToggle" title="example questions">💡</button>
+        <button class="btn" data-act="eugeneClear" title="clear chat">🧹</button>
+        <button class="btn btn-pink" data-act="eugeneMax" title="${max?'minimize':'maximize'}">${max?'⤡ minimize':'⤢ maximize'}</button>
+      </div>
+      <div class="eu-log" id="euLog">${logHtml}${busyHtml}</div>
+      ${showAsks?asks:""}
+      <div class="eu-input">
+        <input class="inp" id="euInput" placeholder="ask Eugene anything…" ${state.eugeneBusy?"disabled":""} />
+        <button class="btn btn-pink" data-act="eugeneSend" ${state.eugeneBusy?"disabled":""}>send</button>
+      </div>
+    </div>`;
+  if(max) return `<div class="eu-full">${card}</div>`;
+  return `<div style="max-width:860px;margin:0 auto">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+      <h2 style="font-size:20px;font-family:var(--display)">🐙 Ask Eugene</h2>
+      <span class="label">plain talk · no asterisks · web + your whole OS</span>
+    </div>
+    ${card}</div>`;
+}
+
 /* ===================== VIDEO OPTIMIZATION ===================== */
 const DEMO_SNAP={title:"EggieWeggie VT",subscribers:8421,views:512300,videos:212,recent:[
   {title:"I tried VTubing on a $0 budget!! #vtuber #shorts",views:14200},
@@ -2109,6 +2167,18 @@ document.addEventListener("click",async(e)=>{
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
   if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
   if(act==="plannerView"){ state.plannerView=el.dataset.v; try{localStorage.setItem("eggie-planner-view",el.dataset.v);}catch(e){} render(); return; }
+  if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
+  if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; render(); return; }
+  if(act==="eugeneAsksToggle"){ state.eugeneShowAsks=!state.eugeneShowAsks; render(); return; }
+  if(act==="eugeneSend"||act==="eugeneAsk"){
+    if(state.eugeneBusy) return;
+    const q = act==="eugeneAsk" ? (el.dataset.q||"") : ((document.getElementById("euInput")||{}).value||"").trim();
+    if(!q) return;
+    state.eugeneLog=[...(state.eugeneLog||[]),{role:"me",text:q}]; state.eugeneBusy=true; state.eugeneShowAsks=false; render();
+    let ans; try{ ans = window.eugeneAsk ? await window.eugeneAsk(q) : "Eugene's brain isn't wired up yet 🌸"; }
+    catch(e){ ans="aw, I couldn't reach the OS brain — "+(e.message||"try again in a moment")+" 🌸"; }
+    state.eugeneLog=[...(state.eugeneLog||[]),{role:"pet",text:ans}]; state.eugeneBusy=false; render(); return;
+  }
   if(act==="addSubtask"){ const tx=prompt("Break it into a small step:"); if(tx&&tx.trim()){ await taskMut(t=>t.map(x=>x.id===id?{...x,sub:[...(x.sub||[]),{id:"s"+uid().slice(0,6),text:tx.trim(),done:false}]}:x)); render(); } return; }
   if(act==="subDone"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:x)); render(); return; }
   if(act==="delSub"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).filter(s=>s.id!==sid)}:x)); render(); return; }
@@ -2273,6 +2343,7 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="ledAmount"||t.id==="ledNote")document.querySelector('[data-act="addLedger"]').click();
   if(t.id==="sponsorBrand")document.querySelector('[data-act="addSponsor"]').click();
   if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
+  if(t.id==="euInput"){ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
   if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
   if(t.id==="smartQ")smart();
   if(t.id==="askQ")ask();
@@ -2327,7 +2398,7 @@ async function keywordAsk(raw,box){
 }
 
 /* boot */
-function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } }
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } }
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
@@ -2551,6 +2622,7 @@ render();
     if(did.length) reply += "\n\n"+did.join("\n");
     return reply;
   }
+  window.eugeneAsk = function(q){ return runAgent(q); };   // lets the 🐙 Ask Eugene tab share the same brain
   var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
   window.PET = PetWidget.init({
     sheet:"pet-widget/Sprite Sheet.png", sheetW:672, sheetH:480,
