@@ -135,6 +135,13 @@ async function fullContext(userId: string, today: string): Promise<string> {
       lines.push(`MONEY (${month}): in $${mIn}, out $${mOut}, net $${mIn - mOut}.`);
     }
     if (sponsors?.data?.length) lines.push(`SPONSORS: ${sponsors.data.map((x: any) => `${x.brand}(${x.stage}${x.value ? " $" + x.value : ""})`).join(", ")}`);
+    // art minutes this week
+    if (s.artLog?.length) {
+      const wkd = new Date(today + "T00:00"); wkd.setDate(wkd.getDate() - ((wkd.getDay() + 6) % 7));
+      const wks = wkd.toLocaleDateString("en-CA");
+      const am = s.artLog.filter((e: any) => e.date >= wks).reduce((a: number, e: any) => a + Number(e.min || 0), 0);
+      lines.push(`ART: ${am} min of art/play this week${s.artChallenge?.dayText ? `; today's challenge: ${s.artChallenge.dayText}${s.artChallenge.dayDone ? " ✓" : ""}` : ""}.`);
+    }
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -318,7 +325,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
-- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"income"|"pitch"|"review" }
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"review"|"eugene" }
 - logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
 - logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
 - setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
@@ -348,6 +355,10 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - moveContent: { name (fuzzy-matched to existing content), stage: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published" }   // move a piece of content along its pipeline
 - setReview: { field: "wins"|"slipped"|"loops"|"followups"|"notes"|"spoons"|"top3", text }   // jot into this week's review
 - recoveryDay: { }                  // set today as a gentle recovery day (low energy, not a stream day)
+- logArt: { minutes: number, note? }   // "I drew for 30 minutes", "log 20 min of art" — celebrate it, art is just-for-her and counts
+- artChallengeDone: { scope: "day"|"week", done?: boolean }   // tick her daily or weekly art challenge
+
+When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
 
 You can control essentially every part of her OS with the actions above — meds, health, POTS/joint care, tasks and the kanban, habits, goals, content pipeline, calendar, stream schedule, money, savings, sponsors, care/emotion check-ins, creative focus, joy jar, scripts, and the weekly review. If she asks for something and a matching action exists, DO it; only fall back to a plain reply when nothing fits or you're missing a detail.
 

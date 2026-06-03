@@ -246,6 +246,16 @@
   .eu-chip{border:1px solid var(--line);background:#faf8ff;color:var(--ink);border-radius:13px;padding:9px 13px;font:inherit;font-size:12.5px;line-height:1.35;cursor:pointer;text-align:left;transition:background .12s;}
   .eu-chip:hover{background:#f0ecfb;}
   .eu-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);}
+  /* art studio */
+  .art-sw{display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--line);height:62px;}
+  .art-sw>button{flex:1;border:none;cursor:pointer;position:relative;transition:flex .15s;color:#fff;font:inherit;font-size:10px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.45);}
+  .art-sw>button:hover{flex:1.4;}
+  .art-chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel-soft);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;}
+  .art-tim{font-family:var(--display);font-size:48px;text-align:center;letter-spacing:.02em;color:var(--ink);}
+  .art-prompt{background:linear-gradient(135deg,#fef2f9,#f3ecfb);border:1px solid var(--line);border-radius:14px;padding:16px;font-family:var(--display);font-size:18px;line-height:1.5;color:var(--pink-deep);text-align:center;}
+  .art-grid-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  .art-ref{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);aspect-ratio:1;background:#faf6fb center/cover no-repeat;}
+  .art-ref button{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:8px;width:22px;height:22px;cursor:pointer;font-size:12px;}
   /* teleprompter overlay */
   .tp-overlay{position:fixed;inset:0;z-index:10000;background:#0b0b12;display:flex;flex-direction:column;color:#fff;font-family:var(--display);}
   .tp-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#15151f;border-bottom:1px solid #2a2a3a;flex-wrap:wrap;}
@@ -613,7 +623,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
@@ -794,6 +804,7 @@ async function render(){
     else if(state.tab==="planner") html=await renderPlanner();
     else if(state.tab==="calendar") html=await renderCalendar();
     else if(state.tab==="care") html=await renderCare();
+    else if(state.tab==="art") html=await renderArt();
     else if(state.tab==="habits") html=await renderHabits();
     else if(state.tab==="optimize") html=renderOptimize();
     else if(state.tab==="script") html=await renderScript();
@@ -1744,6 +1755,187 @@ function renderAsk(){
     <div id="askResults" style="margin-top:14px"></div></div>`;
 }
 
+/* ===================== ART & CREATIVITY 🎨 ===================== */
+const ART_SUBJECTS=["a cozy octopus","your OC","a sleepy cat","a forest spirit","a cup of tea with steam","a magical girl","a tiny dragon","a mushroom house","a koi fish","a star-catcher","a jellyfish","a little robot companion","a flower crown","a luna moth","a sea slug","a friendly ghost","a frog knight","a constellation given a face"];
+const ART_MOODS=["golden hour","moody & rainy","dreamy pastel","neon night","misty morning","candle-lit","underwater glow","autumn warmth","frosty blue","sunset gradient"];
+const ART_CONSTRAINTS=["only 3 colours","no black, no white","one light source","under 20 minutes","fit it inside a circle","monochrome + one accent","big shapes only, no lineart","non-dominant hand","grayscale values first","one continuous line"];
+const ART_GESTURES=["standing figure","dynamic action pose","a pair of hands","a face at 3/4","running pose","seated figure","an animal in motion","drapery / cloth fold","feet","expressive silhouette","twisting torso","two figures interacting"];
+const ART_REFRAMES=[
+  "Art isn't a detour from your work — it's the well your work draws from. A dry well makes nothing. 🌊",
+  "You're allowed to make things that only matter to you. That's not wasted time, that's being a person. 💗",
+  "Play is how skill sneaks in. Every doodle is reps. 🖍️",
+  "Rest and joy ARE productive — they're what keep you able to do everything else. 🥄",
+  "No one ever regretted the 20 minutes they spent drawing something silly. 🐙",
+  "Done beats perfect. A scribble finished beats a masterpiece imagined. 🌸",
+  "Your worth isn't an output. You're allowed to make art for absolutely no reason. ✨",
+  "The pressure to be 'productive' is what's stealing your art — not the art stealing your productivity. 🌙"
+];
+const ART_DAILY=["5-minute warm-up scribbles","draw one small thing from life","fill a page with one repeated shape","redraw an old sketch","quick colour study from a photo","draw the last thing you ate","one-line contour of your hand","tiny 3-colour doodle","draw your mood as a creature","gesture 5 poses, 30s each"];
+const ART_WEEKLY=["finish one small piece, all the way to colour","try a brand-new brush or tool","do a master study — copy an artist you love","draw the same subject three ways","make one limited-palette illustration","a full sketchbook page, any day this week","draw your OC in a brand-new outfit","learn one new shortcut or technique"];
+const DEFAULT_ART_RES=[
+  {id:"r1",title:"Line of Action — gesture / figure timer",url:"https://line-of-action.com/practice-tools/",tag:"reference"},
+  {id:"r2",title:"Coolors — palette generator",url:"https://coolors.co/",tag:"colour"},
+  {id:"r3",title:"Adobe Color — colour wheel + harmonies",url:"https://color.adobe.com/create/color-wheel",tag:"colour"},
+  {id:"r4",title:"Paletton — classical colour schemes",url:"https://paletton.com/",tag:"colour"},
+  {id:"r5",title:"Free perspective grid generator",url:"https://art-and-see.com/blogs/tools/perspective-grid-generator",tag:"perspective"},
+  {id:"r6",title:"17 digital drawing exercises (Don Corgi)",url:"https://doncorgi.com/blog/digital-drawing-exercises/",tag:"learn"},
+  {id:"r7",title:"Color theory for digital artists (Clip Studio)",url:"https://www.clipstudio.net/how-to-draw/archives/161372",tag:"learn"}
+];
+function artRand(a){ return a[Math.floor(Math.random()*a.length)]; }
+function seedPick(list,seed){ let h=0; for(let i=0;i<seed.length;i++)h=(h*31+seed.charCodeAt(i))>>>0; return list[h%list.length]; }
+function mondayOf(d){ const dt=new Date(d+"T00:00"); const off=(dt.getDay()+6)%7; dt.setDate(dt.getDate()-off); return dt.toLocaleDateString("en-CA"); }
+/* colour maths — no libraries */
+function hex2hsl(hex){ hex=(hex||"#ec7faf").replace("#",""); if(hex.length===3)hex=hex.split("").map(c=>c+c).join(""); const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h,s,l=(mx+mn)/2; if(mx===mn){h=s=0;}else{const d=mx-mn; s=l>.5?d/(2-mx-mn):d/(mx+mn); switch(mx){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return {h:h*360,s:s*100,l:l*100}; }
+function hsl2hex(h,s,l){ h=(h%360+360)%360; s=Math.max(0,Math.min(100,s))/100; l=Math.max(0,Math.min(100,l))/100; const c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs((h/60)%2-1)), m=l-c/2; let r,g,b; if(h<60){r=c;g=x;b=0;}else if(h<120){r=x;g=c;b=0;}else if(h<180){r=0;g=c;b=x;}else if(h<240){r=0;g=x;b=c;}else if(h<300){r=x;g=0;b=c;}else{r=c;g=0;b=x;} const t=v=>("0"+Math.round((v+m)*255).toString(16)).slice(-2); return "#"+t(r)+t(g)+t(b); }
+function genPalette(base,scheme){ const {h,s,l}=hex2hsl(base); const mk=(dh,dl,ds)=>hsl2hex(h+dh,s+(ds||0),Math.max(10,Math.min(94,l+(dl||0))));
+  switch(scheme){
+    case "complementary": return [mk(0,20),mk(0,4),mk(0,-12),mk(180,8),mk(180,-12)];
+    case "triadic": return [mk(0,0),mk(120,6),mk(240,6),mk(120,-18),mk(0,20)];
+    case "split": return [mk(0,4),mk(0,20),mk(150,2),mk(210,2),mk(180,-14)];
+    case "tetradic": return [mk(0,2),mk(90,4),mk(180,2),mk(270,4),mk(0,22)];
+    case "mono": return [mk(0,30),mk(0,15),mk(0,0),mk(0,-15),mk(0,-30)];
+    default: return [mk(-60,6),mk(-30,3),mk(0,0),mk(30,3),mk(60,6)]; // analogous
+  }
+}
+function randHex(){ return hsl2hex(Math.random()*360, 42+Math.random()*42, 44+Math.random()*26); }
+function artGridSVG(type){
+  const W=800,H=600,hy=H*0.5,vx=W/2; const sk='stroke="#cdb1de" stroke-width="1"'; let L="";
+  if(type==="1"){ for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${hy}" ${sk}/><line x1="${x}" y1="${H}" x2="${vx}" y2="${hy}" ${sk}/>`; } for(let i=1;i<8;i++){ const r=i*42; L+=`<rect x="${vx-r*1.33}" y="${hy-r}" width="${r*2.66}" height="${r*2}" fill="none" ${sk}/>`; } }
+  else if(type==="2"){ const v1=-W*0.45,v2=W*1.45; for(let i=-8;i<=32;i++){ const y=(H/24)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk}/>`; } for(let i=2;i<=22;i+=2){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#e6d3ef" stroke-width="1"/>`; } }
+  else { const v1=-W*0.35,v2=W*1.35,v3y=H*1.7; for(let i=-6;i<=28;i++){ const y=(H/22)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk}/>`; } for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${v3y}" ${sk}/>`; } }
+  const horizon = type!=="3" ? `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="#ec7faf" stroke-width="1.5" stroke-dasharray="7 5"/>` : `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="#ec7faf" stroke-width="1.5" stroke-dasharray="7 5"/>`;
+  return `<svg id="artGridSvg" viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#fff;max-height:380px">${L}${horizon}</svg>`;
+}
+async function renderArt(){
+  const sent=await DB.daily(SENTINEL);
+  if(!state.art)state.art={};
+  const A=state.art;
+  const log=sent.artLog||[];
+  const wk=mondayOf(TODAY);
+  // challenges (reset daily / weekly)
+  let ch=Object.assign({},sent.artChallenge||{}); let chChanged=false;
+  if(ch.day!==TODAY){ ch.day=TODAY; ch.dayText=seedPick(ART_DAILY,TODAY); ch.dayDone=false; chChanged=true; }
+  if(ch.week!==wk){ ch.week=wk; ch.weekText=seedPick(ART_WEEKLY,wk); ch.weekDone=false; chChanged=true; }
+  if(chChanged){ DB.saveDaily(SENTINEL,n=>({...n,artChallenge:ch})).catch(()=>{}); }
+  // minutes this week + sparkline
+  const weekMin=log.filter(e=>e.date>=wk).reduce((a,e)=>a+Number(e.min||0),0);
+  const weekDays=new Set(log.filter(e=>e.date>=wk&&Number(e.min)>0).map(e=>e.date)).size;
+  const days14=[]; for(let i=13;i>=0;i--){ const d=new Date(TODAY+"T00:00"); d.setDate(d.getDate()-i); const ds=d.toLocaleDateString("en-CA"); days14.push(log.filter(e=>e.date===ds).reduce((a,e)=>a+Number(e.min||0),0)); }
+  const maxd=Math.max(30,...days14);
+  const spark=`<div class="spark" style="height:34px">${days14.map(v=>`<span style="height:${v?Math.max(3,(v/maxd)*32):2}px;opacity:${v?1:.3}" title="${v} min"></span>`).join("")}</div>`;
+  const reframe=A.reframe||seedPick(ART_REFRAMES,TODAY);
+  const P=A.prompt||(A.prompt={subject:artRand(ART_SUBJECTS),mood:artRand(ART_MOODS),constraint:artRand(ART_CONSTRAINTS)});
+  const pBase=A.pBase||"#ec7faf", pScheme=A.pScheme||"analogous", pal=genPalette(pBase,pScheme);
+  const SCHEMES=[["analogous","Analogous"],["complementary","Complement"],["triadic","Triadic"],["split","Split"],["tetradic","Tetradic"],["mono","Monochrome"]];
+  const sw=arr=>`<div class="art-sw">${arr.map(c=>`<button style="background:${c}" data-act="copyText" data-t="${c}">${c}</button>`).join("")}</div>`;
+  const t=A.timer||{len:60,round:0,left:60}; const tLen=t.len||60;
+  const lenSeg=[[30,"30s"],[60,"1m"],[120,"2m"],[300,"5m"]].map(([v,l])=>`<button data-act="artTimerLen" data-v="${v}" class="${tLen===v?'on':''}" ${t.on?'disabled':''}>${l}</button>`).join("");
+  const gridType=A.gridType||"1";
+  const gridSeg=[["1","1-point"],["2","2-point"],["3","3-point"]].map(([v,l])=>`<button data-act="artGridType" data-v="${v}" class="${gridType===v?'on':''}">${l}</button>`).join("");
+  const refs=sent.artRefs||[];
+  const res=sent.artResources||DEFAULT_ART_RES;
+  const resTags={reference:"🧍",colour:"🎨",perspective:"📐",learn:"📚",other:"🔗"};
+  return `<div style="max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:22px;font-family:var(--display)">🎨 Art & creativity</h2>
+      <span class="label">just for you · play is allowed 🌸</span>
+    </div>
+
+    <div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
+      <div class="art-prompt" style="background:none;border:none;padding:0">${esc(reframe)}</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-pink" data-act="artStartNow">🎨 I'm making art now</button>
+        <button class="btn" data-act="artReframe">↻ another reminder</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="panel"><div class="card-head"><span class="label">🌱 today's tiny challenge</span><button class="btn" data-act="artRoll" data-scope="day" style="padding:2px 8px">↻</button></div>
+        <button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.dayText)}</span></button>
+      </div>
+      <div class="panel"><div class="card-head"><span class="label">🌷 this week's challenge</span><button class="btn" data-act="artRoll" data-scope="week" style="padding:2px 8px">↻</button></div>
+        <button class="hbtn ${ch.weekDone?'done':''}" data-act="artChallengeDone" data-scope="week" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.weekDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.weekText)}</span></button>
+      </div>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏱️ Art minutes</h2><span class="label">every minute counts — even 5</span></div>
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div><div class="num" style="font-size:30px;font-family:var(--display);color:var(--pink-deep)">${weekMin}<span style="font-size:14px"> min</span></div><div class="label">this week · ${weekDays} day${weekDays===1?'':'s'} of play 💗</div></div>
+        <div class="grow" style="min-width:180px">${spark}<div class="label" style="margin-top:2px">last 14 days</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+        <span class="label">log</span>
+        <button class="btn" data-act="artLogQuick" data-m="15">+15</button>
+        <button class="btn" data-act="artLogQuick" data-m="30">+30</button>
+        <button class="btn" data-act="artLogQuick" data-m="60">+60</button>
+        <input class="inp" id="artMin" type="number" placeholder="min" style="width:80px"/>
+        <input class="inp" id="artNote" placeholder="what did you make? (optional)" style="flex:1;min-width:140px"/>
+        <button class="btn btn-pink" data-act="artLog">＋ log</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">No streaks to break, no red numbers. A blank week just means you rested — that's allowed too. 🌙</p>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🎲 Draw-this prompt</h2><button class="btn btn-pink" data-act="artPromptRoll">↻ roll a new one</button></div>
+      <div class="art-prompt">Draw <b>${esc(P.subject)}</b><br><span style="font-size:14px;color:var(--lav-deep)">${esc(P.mood)} · ${esc(P.constraint)}</span></div>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏲️ Practice timer</h2><span class="label">gesture / warm-ups</span></div>
+      <div id="artStage" style="border-radius:14px;padding:16px;text-align:center;transition:background .6s">
+        <div class="art-tim" id="artTimerDisp">${("0"+Math.floor((t.left??tLen)/60)).slice(-1)}:${("0"+((t.left??tLen)%60)).slice(-2)}</div>
+        <div style="font-family:var(--display);font-size:16px;color:var(--pink-deep);min-height:22px" id="artTimerSub">${t.on?esc(t.subject||""):"press start to begin"}</div>
+        <div class="label" id="artTimerRound">${t.on?("round "+t.round):"&nbsp;"}</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px;flex-wrap:wrap">
+        <div class="seg">${lenSeg}</div>
+        ${t.on?`<button class="btn btn-pink" data-act="artTimerStop">⏹ stop</button><button class="btn" data-act="artTimerSkip">⏭ next pose</button>`:`<button class="btn btn-pink" data-act="artTimerStart">▶ start</button>`}
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0;text-align:center">A fresh subject each round. Don't aim for pretty — aim for loose. 🖍️</p>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🎨 Palette generator</h2></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label class="art-chip">base <input type="color" id="artBase" value="${pBase}" style="width:34px;height:24px;border:none;background:none;padding:0;cursor:pointer"/></label>
+        <button class="btn" data-act="artPaletteRoll">🎲 random base</button>
+        <div class="seg" style="flex-wrap:wrap">${SCHEMES.map(([v,l])=>`<button data-act="artPaletteScheme" data-v="${v}" class="${pScheme===v?'on':''}">${l}</button>`).join("")}</div>
+      </div>
+      ${sw(pal)}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><span class="label">🃏 limited-palette challenge — draw with only these</span><button class="btn btn-pink" data-act="artLimited">🎲 roll 3</button></div>
+      ${A.limited?sw(A.limited):`<p class="soft" style="font-size:12px;margin:8px 0 0">Roll three random swatches and make something using <i>only</i> those. Great for learning colour mixing.</p>`}
+      <p class="soft" style="font-size:11px;margin:10px 0 0">Tap any swatch to copy its hex 💗</p>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📐 Perspective grid</h2><div class="seg">${gridSeg}</div></div>
+      <div class="art-grid-wrap">${artGridSVG(gridType)}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-act="artGridDownload">⤓ download SVG</button><span class="soft" style="font-size:11.5px;align-self:center">drop it under your canvas as a guide layer · pink dashes = horizon line</span></div>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🖼️ Reference board</h2></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="artRefUrl" placeholder="paste an image URL…" style="flex:1"/><button class="btn btn-pink" data-act="artRefAdd">＋ add</button></div>
+      ${refs.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">${refs.map(r=>`<div class="art-ref" style="background-image:url('${esc(r.url)}')"><button data-act="artRefDel" data-id="${r.id}">×</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Paste links to poses, colour refs, or art you love, and they'll live here as a little mood board. 🌸</p>`}
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📚 Tools & tutorials</h2><span class="label">your own library</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px">${res.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${resTags[r.tag]||"🔗"}</span><a href="${esc(r.url)}" target="_blank" rel="noopener" class="grow" style="font-size:13px;color:var(--lav-deep);text-decoration:none">${esc(r.title)} ↗</a><button class="ft-ic" data-act="artResDel" data-id="${r.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <input class="inp" id="artResTitle" placeholder="title" style="flex:1;min-width:120px"/>
+        <input class="inp" id="artResUrl" placeholder="https://…" style="flex:1;min-width:140px"/>
+        <select class="inp" id="artResTag" style="width:auto">${Object.keys(resTags).map(k=>`<option value="${k}">${resTags[k]} ${k}</option>`).join("")}</select>
+        <button class="btn btn-pink" data-act="artResAdd">＋ save</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* practice timer — global interval so it survives re-renders; updates the DOM by id */
+let _artInt=null;
+function artPickGesture(){ return ART_GESTURES[Math.floor(Math.random()*ART_GESTURES.length)]; }
+function artTimerStart(){ const t=state.art.timer=state.art.timer||{len:60,round:0,left:60}; t.on=true; t.left=t.len; t.round=(t.round||0)+1; t.subject=artPickGesture(); if(_artInt)clearInterval(_artInt); _artInt=setInterval(artTick,1000); render(); }
+function artTimerStop(){ const t=state.art&&state.art.timer; if(t)t.on=false; if(_artInt){clearInterval(_artInt);_artInt=null;} render(); }
+function artTimerSkip(){ const t=state.art&&state.art.timer; if(!t||!t.on)return; t.left=t.len; t.round=(t.round||0)+1; t.subject=artPickGesture(); artPaint(); }
+function fmtClock(s){ s=Math.max(0,s); return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
+function artPaint(){ const t=state.art&&state.art.timer; if(!t)return; const d=document.getElementById("artTimerDisp"); if(d)d.textContent=fmtClock(t.left); const s=document.getElementById("artTimerSub"); if(s)s.textContent=t.subject||""; const r=document.getElementById("artTimerRound"); if(r)r.textContent="round "+t.round; }
+function artTick(){ const t=state.art&&state.art.timer; if(!t||!t.on||state.tab!=="art"){ if(_artInt){clearInterval(_artInt);_artInt=null;} if(t)t.on=false; return; } t.left--; if(t.left<0){ t.round++; t.left=t.len-1; t.subject=artPickGesture(); const w=document.getElementById("artStage"); if(w){ w.style.background="#fdeaf3"; setTimeout(()=>{ w.style.background=""; },450); } } artPaint(); }
+
 /* ===================== ASK EUGENE (full-page chat) ===================== */
 const EUGENE_ASKS=[
   "What's trending for VTuber shorts right now?",
@@ -2221,6 +2413,26 @@ document.addEventListener("click",async(e)=>{
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
   if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
   if(act==="plannerView"){ state.plannerView=el.dataset.v; try{localStorage.setItem("eggie-planner-view",el.dataset.v);}catch(e){} render(); return; }
+  if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
+  if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
+  if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekText=txt;c.weekDone=false;c.week=mondayOf(TODAY);}else{c.dayText=txt;c.dayDone=false;c.day=TODAY;} return {...n,artChallenge:c};}); render(); return; }
+  if(act==="artChallengeDone"){ const sc=el.dataset.scope; await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week")c.weekDone=!c.weekDone; else c.dayDone=!c.dayDone; return {...n,artChallenge:c};}); render(); return; }
+  if(act==="artLogQuick"){ const m=parseInt(el.dataset.m)||0; if(m)await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m}]})); toast("Logged "+m+" min of play 🎨 proud of you"); render(); return; }
+  if(act==="artLog"){ const mi=document.getElementById("artMin"), ni=document.getElementById("artNote"); const m=parseInt(mi&&mi.value)||0; const note=(ni&&ni.value||"").trim(); if(!m){toast("How many minutes? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m,note:note||undefined}]})); toast("Logged "+m+" min 🎨"); render(); return; }
+  if(act==="artPromptRoll"){ state.art=state.art||{}; state.art.prompt={subject:artRand(ART_SUBJECTS),mood:artRand(ART_MOODS),constraint:artRand(ART_CONSTRAINTS)}; render(); return; }
+  if(act==="artPaletteRoll"){ state.art=state.art||{}; state.art.pBase=randHex(); render(); return; }
+  if(act==="artPaletteScheme"){ state.art=state.art||{}; state.art.pScheme=el.dataset.v; render(); return; }
+  if(act==="artLimited"){ state.art=state.art||{}; state.art.limited=[randHex(),randHex(),randHex()]; render(); return; }
+  if(act==="artTimerLen"){ state.art=state.art||{}; const t=state.art.timer=state.art.timer||{round:0}; t.len=parseInt(el.dataset.v)||60; t.left=t.len; render(); return; }
+  if(act==="artTimerStart"){ artTimerStart(); return; }
+  if(act==="artTimerStop"){ artTimerStop(); return; }
+  if(act==="artTimerSkip"){ artTimerSkip(); return; }
+  if(act==="artGridType"){ state.art=state.art||{}; state.art.gridType=el.dataset.v; render(); return; }
+  if(act==="artGridDownload"){ const s=document.getElementById("artGridSvg"); if(s){ const blob=new Blob([s.outerHTML],{type:"image/svg+xml"}); const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download="perspective-grid-"+(state.art.gridType||"1")+"pt.svg"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1000); toast("Grid saved 🎨"); } return; }
+  if(act==="artRefAdd"){ const i=document.getElementById("artRefUrl"); const u=(i&&i.value||"").trim(); if(!u){toast("Paste an image URL 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artRefs:[...(n.artRefs||[]),{id:uid(),url:u}]})); render(); return; }
+  if(act==="artRefDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artRefs:(n.artRefs||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="artResAdd"){ const ti=document.getElementById("artResTitle"), ui=document.getElementById("artResUrl"), tg=document.getElementById("artResTag"); const title=(ti&&ti.value||"").trim(), url=(ui&&ui.value||"").trim(); if(!title||!url){toast("Need a title and a link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artResources:[...((n.artResources)||DEFAULT_ART_RES),{id:uid(),title,url,tag:(tg&&tg.value)||"other"}]})); render(); return; }
+  if(act==="artResDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artResources:((n.artResources)||DEFAULT_ART_RES).filter(x=>x.id!==id)})); render(); return; }
   if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
   if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; render(); return; }
   if(act==="eugeneAsksToggle"){ state.eugeneShowAsks=!state.eugeneShowAsks; render(); return; }
@@ -2348,7 +2560,8 @@ document.addEventListener("click",async(e)=>{
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
   if(e.target&&e.target.id==="f_uploadFile"&&e.target.files&&e.target.files[0]){ const file=e.target.files[0], url=URL.createObjectURL(file), up=document.getElementById("f_upload"), prev=document.getElementById("f_uploadPrev"); if(up&&!up.value.trim())up.value=file.name; if(prev)prev.innerHTML=(file.type.indexOf("video")===0?`<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`:`<img src="${url}" style="max-width:170px;border-radius:10px" />`)+`<div class="soft" style="font-size:11px;margin-top:4px">preview only — paste a link above to keep it with the brief 🌸</div>`; }
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
-  if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); } });
+  if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
+  if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); } });
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
@@ -2453,7 +2666,7 @@ async function keywordAsk(raw,box){
 }
 
 /* boot */
-function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } }
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } if(state.tab==="art"&&state.art&&state.art.timer&&state.art.timer.on){ if(!_artInt)_artInt=setInterval(artTick,1000); artPaint(); } }
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
@@ -2744,6 +2957,12 @@ render();
       case "recoveryDay":
         await DB.saveDaily(TODAY,function(n){ return Object.assign({},n,{energy:"low",streamDay:false}); });
         return "🌙 set today as a recovery day — rest is productive too 💜";
+      case "logArt":
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artLog:(n.artLog||[]).concat([{date:TODAY,min:Number(a.minutes)||0,note:a.note||undefined}])}); });
+        return "🎨 logged "+(Number(a.minutes)||0)+" min of art — proud of you for making time 💗";
+      case "artChallengeDone":
+        await DB.saveDaily(SENTINEL,function(n){ var c=Object.assign({},n.artChallenge||{}); if(a.scope==="week")c.weekDone=(a.done!==false); else c.dayDone=(a.done!==false); return Object.assign({},n,{artChallenge:c}); });
+        return "🌷 marked your "+(a.scope==="week"?"weekly":"daily")+" art challenge done — yay you! ✨";
       default: return "";
     }
   }
