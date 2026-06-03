@@ -877,7 +877,7 @@ function modularPage(tab, labels, items, defCols){
   const sz=k=>{ const r=L.size[k]; return (typeof r==="number")?{c:r}:(r||{}); };
   const dc=defCols||(items.length<=2?12:6);
   const cells=order.filter(k=>!L.hidden[k]).map(k=>{ const s=sz(k), cols=Math.max(3,s.c||dc), min=!!L.min[k];
-    return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" style="grid-column:span ${cols}">
+    return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" data-c="${cols}" style="grid-column:span ${cols}">
       <div class="home-tools"><button class="home-grip" title="drag to move">⠿</button><button data-act="homeMin" data-w="${k}" title="${min?'expand':'minimize'}">${min?'＋':'–'}</button><button data-act="homeHide" data-w="${k}" title="remove">✕</button></div>
       <span class="home-resize" title="drag to resize ⤡">⤡</span>${map[k]}</div>`; }).join("");
   const hiddenN=Object.keys(L.hidden).filter(k=>L.hidden[k]&&map[k]).length;
@@ -887,6 +887,17 @@ function modularPage(tab, labels, items, defCols){
 function layoutHome(){
   const grid=document.querySelector(".grid-modular"); if(!grid)return;
   const rowH=8, gap=16;
+  /* responsive spans: clamp each card to the columns that actually exist on THIS screen;
+     a card too wide to share a row goes full-width — no more left-hugging rows on iPad portrait */
+  const colCount=(((getComputedStyle(grid).gridTemplateColumns)||"").match(/\S+/g)||[]).length||1;
+  grid.querySelectorAll(".home-widget").forEach(w=>{
+    if(w.classList.contains("resizing"))return;            // don't fight a live resize drag
+    const want=parseInt(w.dataset.c||"0")||colCount;
+    let span=Math.max(1,Math.min(want,colCount));
+    if(colCount<=9 && span>colCount/2) span=colCount;      // narrow screens only (iPad portrait ≈8 cols) — desktop keeps her exact sizes
+    const cur=/span (\d+)/.exec(w.style.gridColumn||"");
+    if(!cur||+cur[1]!==span) w.style.gridColumn="span "+span;
+  });
   grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return;
     let h;
     if(w.classList.contains("min")){ h=50; }
