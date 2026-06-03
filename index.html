@@ -270,6 +270,9 @@
   .mb-card:hover .mb-x{opacity:1;}
   .mb-card .mb-rz{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;color:#b9a9c8;font-size:11px;display:grid;place-items:center;}
   .mb-card .mb-hex{background:rgba(0,0,0,.4);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;margin-bottom:5px;}
+  .res-grip{cursor:grab;touch-action:none;color:var(--muted);font-size:14px;padding:0 2px;user-select:none;}
+  .res-grip:active{cursor:grabbing;}
+  [data-resid]{transition:box-shadow .12s;}
   /* teleprompter overlay */
   .tp-overlay{position:fixed;inset:0;z-index:10000;background:#0b0b12;display:flex;flex-direction:column;color:#fff;font-family:var(--display);}
   .tp-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#15151f;border-bottom:1px solid #2a2a3a;flex-wrap:wrap;}
@@ -1979,7 +1982,7 @@ async function renderArt(){
     </div>`}
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">📚 Tools & tutorials</h2><span class="label">your own library</span></div>
-      <div style="display:flex;flex-direction:column;gap:6px">${res.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${resTags[r.tag]||"🔗"}</span><a href="${esc(r.url)}" target="_blank" rel="noopener" class="grow" style="font-size:13px;color:var(--lav-deep);text-decoration:none">${esc(r.title)} ↗</a><button class="ft-ic" data-act="artResDel" data-id="${r.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>
+      <div id="artResList" style="display:flex;flex-direction:column;gap:6px">${res.map(r=>`<div data-resid="${r.id}" style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);background:#fff;border-radius:8px"><span class="res-grip" data-resgrip title="drag to reorder">⠿</span><span>${resTags[r.tag]||"🔗"}</span><a href="${esc(r.url)}" target="_blank" rel="noopener" class="grow" style="font-size:13px;color:var(--lav-deep);text-decoration:none">${esc(r.title)} ↗</a><button class="ft-ic" data-act="artResDel" data-id="${r.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <input class="inp" id="artResTitle" placeholder="title" style="flex:1;min-width:120px"/>
         <input class="inp" id="artResUrl" placeholder="https://…" style="flex:1;min-width:140px"/>
@@ -2664,6 +2667,27 @@ document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=re
   document.addEventListener("pointerup",async()=>{
     if(mbRz){ const id=mbRz.id,w=parseInt(mbRz.card.style.width)||mbRz.card.offsetWidth,h=parseInt(mbRz.card.style.height)||mbRz.card.offsetHeight; mbRz=null; try{await mbUpdate(id,{w,h});}catch(_){}; render(); return; }
     if(!mbDrag)return; const id=mbDrag.id,x=parseInt(mbDrag.card.style.left)||0,y=parseInt(mbDrag.card.style.top)||0; mbDrag=null; try{await mbUpdate(id,{x,y});}catch(_){}; render(); return;
+  },true);
+})();
+
+/* ===== resource center: drag rows to reorder ===== */
+(function(){
+  let rr=null;
+  document.addEventListener("pointerdown",e=>{
+    if(RO)return; const g=e.target.closest("[data-resgrip]"); if(!g)return;
+    const row=g.closest("[data-resid]"), list=document.getElementById("artResList"); if(!row||!list)return;
+    rr={row,list}; row.style.opacity=".55"; row.style.boxShadow="0 6px 18px rgba(120,90,140,.25)"; try{g.setPointerCapture(e.pointerId);}catch(_){}; e.preventDefault();
+  },true);
+  document.addEventListener("pointermove",e=>{
+    if(!rr)return; const rows=[...rr.list.querySelectorAll("[data-resid]")];
+    const after=rows.find(r=>{ if(r===rr.row)return false; const b=r.getBoundingClientRect(); return e.clientY < b.top+b.height/2; });
+    if(after){ if(after!==rr.row.nextSibling) rr.list.insertBefore(rr.row,after); }
+    else if(rr.list.lastElementChild!==rr.row){ rr.list.appendChild(rr.row); }
+  },true);
+  document.addEventListener("pointerup",async()=>{
+    if(!rr)return; rr.row.style.opacity=""; rr.row.style.boxShadow=""; const order=[...rr.list.querySelectorAll("[data-resid]")].map(r=>r.getAttribute("data-resid")); rr=null;
+    await DB.saveDaily(SENTINEL,n=>{ const cur=(n.artResources)||DEFAULT_ART_RES; const map=Object.fromEntries(cur.map(x=>[x.id,x])); const out=order.map(id=>map[id]).filter(Boolean); cur.forEach(x=>{ if(!order.includes(x.id))out.push(x); }); return {...n,artResources:out}; });
+    render();
   },true);
 })();
 
