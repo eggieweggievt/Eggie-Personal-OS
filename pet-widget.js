@@ -56,6 +56,11 @@
     .pet-input{display:flex;gap:6px;padding:10px;border-top:1px solid #e4e6f5;}
     .pet-input input{flex:1;border:1.5px solid #dde0f1;border-radius:12px;padding:9px 12px;font:inherit;font-size:13px;color:#3a3550;outline:none;}
     .pet-input button{border:none;border-radius:12px;padding:8px 14px;font:inherit;font-weight:700;font-size:13px;color:#fff;cursor:pointer;background:linear-gradient(135deg,${c.accentFrom},${c.accentTo});}
+    .pet-sugg-h{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#9b96b6;font-weight:700;margin:2px 1px 0;}
+    .pet-sugg{display:flex;flex-direction:column;gap:6px;margin-top:2px;}
+    .pet-chip{border:1px solid #e4e6f5;background:#f6f8ff;color:#5a5478;border-radius:12px;padding:7px 11px;font:inherit;font-size:12px;line-height:1.35;cursor:pointer;text-align:left;transition:background .12s;}
+    .pet-chip:hover{background:#eef1ff;}
+    .pet-sbtn{border:none;background:none;font-size:15px;cursor:pointer;line-height:1;padding:0 2px;}
     `;
     document.head.appendChild(s);
   }
@@ -98,6 +103,7 @@
       speed: 44, frameMs: 150,
       leftClear: 72, rightClear: 72,           // px kept clear of left/right edges (room for your corner buttons)
       greetings: ["Hi!"], greetEveryMs: 45000, greetDelayMs: 3000,
+      suggestions: [],                         // example prompts shown in the empty chat / via the 💡 button
       title: "Pet", subtitle: "your helper",
       accentFrom: "#758ac6", accentTo: "#ff9ed8",
       font: "system-ui,sans-serif",
@@ -119,7 +125,7 @@
     var chat = document.createElement("div"); chat.id = "petChat"; chat.className = "pet-hidden";
     document.body.appendChild(pet); document.body.appendChild(bubble); document.body.appendChild(chat);
 
-    var S = { open: false, busy: false, log: [], raf: null, x: null, y: 0, vx: 0, vy: 0, dir: 1, fi: 0, ft: 0, st: "walk", stt: 0, last: 0 };
+    var S = { open: false, busy: false, log: [], raf: null, x: null, y: 0, vx: 0, vy: 0, dir: 1, fi: 0, ft: 0, st: "walk", stt: 0, last: 0, showSugg: false };
 
     function setFrame(f) {
       var s = c.scale;
@@ -175,23 +181,38 @@
       positionUI(); S.raf = requestAnimationFrame(step);
     }
     function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[m]; }); }
+    function suggHtml() {
+      if (!c.suggestions || !c.suggestions.length) return "";
+      var showIt = (S.log.length === 0) || S.showSugg;
+      if (!showIt) return "";
+      return '<div class="pet-sugg-h">✨ try asking me:</div><div class="pet-sugg">' +
+        c.suggestions.map(function (q, i) { return '<button class="pet-chip" data-sugg-i="' + i + '">' + esc(q) + "</button>"; }).join("") + "</div>";
+    }
     function paintChat() {
       var logHtml = S.log.length
         ? S.log.map(function (m) { return '<div class="pet-msg ' + m.role + '">' + esc(m.text) + "</div>"; }).join("")
-        : '<div class="pet-msg pet">Hi! Ask me anything. ✨</div>';
+        : '<div class="pet-msg pet">Hi, I\'m ' + esc(c.title) + '! Ask me about your OS or send me to the web. 🐙</div>';
+      var hasSugg = c.suggestions && c.suggestions.length;
       chat.innerHTML =
-        '<div class="pet-head"><div class="pet-av"></div><div style="flex:1"><div class="pet-title">' + esc(c.title) + '</div><div class="pet-sub">' + esc(c.subtitle) + '</div></div><button class="pet-x" data-close>✕</button></div>' +
-        '<div class="pet-log" id="petLog">' + logHtml + (S.busy ? '<div class="pet-msg pet">…thinking</div>' : "") + "</div>" +
+        '<div class="pet-head"><div class="pet-av"></div><div style="flex:1"><div class="pet-title">' + esc(c.title) + '</div><div class="pet-sub">' + esc(c.subtitle) + '</div></div>' +
+        (hasSugg ? '<button class="pet-sbtn" data-sugg title="example questions">💡</button>' : "") +
+        '<button class="pet-x" data-close>✕</button></div>' +
+        '<div class="pet-log" id="petLog">' + logHtml + (S.busy ? '<div class="pet-msg pet">…thinking</div>' : "") + suggHtml() + "</div>" +
         '<div class="pet-input"><input id="petInput" placeholder="ask…" ' + (S.busy ? "disabled" : "") + '><button data-send ' + (S.busy ? "disabled" : "") + ">send</button></div>";
       chat.querySelector("[data-close]").onclick = toggle;
       chat.querySelector("[data-send]").onclick = send;
+      var sb = chat.querySelector("[data-sugg]"); if (sb) sb.onclick = function () { S.showSugg = !S.showSugg; paintChat(); };
+      chat.querySelectorAll("[data-sugg-i]").forEach(function (b) {
+        b.onclick = function () { if (S.busy) return; S.showSugg = false; send(c.suggestions[+b.getAttribute("data-sugg-i")]); };
+      });
       var input = chat.querySelector("#petInput");
       input.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); send(); } };
       var lg = chat.querySelector("#petLog"); if (lg) lg.scrollTop = lg.scrollHeight;
       if (!S.busy) try { input.focus(); } catch (e) { }
     }
-    async function send() {
-      var input = chat.querySelector("#petInput"); var q = (input ? input.value : "").trim();
+    async function send(preset) {
+      var input = chat.querySelector("#petInput");
+      var q = (typeof preset === "string" ? preset : (input ? input.value : "")).trim();
       if (!q || S.busy) return;
       S.log.push({ role: "me", text: q }); S.busy = true; paintChat();
       var ans;

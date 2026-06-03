@@ -2526,6 +2526,19 @@ render();
       default: return "";
     }
   }
+  /* Eugene speaks in plain text + emojis only — strip any markdown/asterisks/symbols a model might add */
+  function plainText(s){ return String(s==null?"":s)
+    .replace(/```[\s\S]*?```/g,"")        // code fences
+    .replace(/`([^`]*)`/g,"$1")            // inline code
+    .replace(/\*\*([^*]+)\*\*/g,"$1")      // **bold**
+    .replace(/(^|[^*])\*([^*\n]+)\*/g,"$1$2") // *italic*
+    .replace(/__([^_]+)__/g,"$1").replace(/(^|[^_])_([^_\n]+)_/g,"$1$2") // _underline_
+    .replace(/~~([^~]+)~~/g,"$1")          // ~~strike~~
+    .replace(/^\s{0,3}#{1,6}\s*/gm,"")     // # headings
+    .replace(/^\s*[-*•]\s+/gm,"")          // bullet markers
+    .replace(/[*_`#>~|]/g,"")              // any stray md symbols
+    .replace(/\n{3,}/g,"\n\n")
+    .trim(); }
   async function runAgent(q){
     var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET});
     if(r && r._needsBackend) return "I can actually run things once the analyze function is deployed + demo mode is off 🐙 — redeploy and I'll be your hands! 🌸";
@@ -2534,7 +2547,7 @@ render();
     var did=[];
     for(var i=0;i<acts.length;i++){ try{ var m=await execAgentAction(acts[i]); if(m) did.push(m); }catch(e){ console.error("agent action failed",acts[i],e); } }
     if(did.length){ try{ render(); }catch(e){} }
-    var reply = r.reply || (did.length? "done!" : "okay!");
+    var reply = plainText(r.reply) || (did.length? "done!" : "okay!");
     if(did.length) reply += "\n\n"+did.join("\n");
     return reply;
   }
@@ -2546,10 +2559,19 @@ render();
     scale:1.1, faces:"right", speed:42, frameMs:130,
     leftClear:86, rightClear:96,  // keep clear of the 🗒️+ (bottom-left) and focus timer (bottom-right)
     avatar:"pet-widget/Screenshot 2026-06-02 202234.png",   // round chat-header icon (the pet's face close-up)
-    title:"Eggie's pet", subtitle:"tap me — ask or tell me to do things 🐙",
+    title:"Eugene", subtitle:"your octopus helper — ask or search the web 🐙",
     accentFrom:"#ec7faf", accentTo:"#a98fe0",
     font:"inherit",
-    greetings:["pspsps… try \"add stream Friday 4pm\" 🐙","tell me to add a task or event 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
+    greetings:["pspsps… try \"add stream Friday 4pm\" 🐙","ask me to look something up on the web 🌐","tell me to add a task or event 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
+    suggestions:[
+      "What's trending for VTuber shorts right now?",
+      "Look up when Path of Exile 2 fully releases",
+      "How much money did I make this month?",
+      "How has my energy been the last 2 weeks?",
+      "Give me 3 cozy short ideas for this week",
+      "Add a stream this Friday at 4pm",
+      "What's on my calendar coming up?"
+    ],
     reduceMotion:function(){ try{ return document.body.classList.contains("calm") || matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } },
     ask: async function(q){
       try{ return await runAgent(q); }
