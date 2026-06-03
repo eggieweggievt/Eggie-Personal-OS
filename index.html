@@ -1860,6 +1860,13 @@ function mbCardHTML(c){
   return `<div class="mb-card swatch" data-mb="${c.id}" style="${pos};background:${esc(c.color||"#ec7faf")}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-hex" data-act="copyText" data-t="${esc(c.color||"")}">${esc(c.color||"")}</span><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
 }
 async function mbUpdate(id,patch){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===id?{...c,...patch}:c)})); }
+/* uploaded photos → downscaled data-URL so they persist in the DB and always export to PNG (no CORS) */
+function mbFileToDataURL(file){ return new Promise((res,rej)=>{ const img=new Image(); const u=URL.createObjectURL(file);
+  img.onload=()=>{ const MAX=900; let w=img.width,h=img.height; if(Math.max(w,h)>MAX){ const s=MAX/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").drawImage(img,0,0,w,h); URL.revokeObjectURL(u);
+    const png=(file.type==="image/png"); res({url:cv.toDataURL(png?"image/png":"image/jpeg",0.82), ar:w/h}); };
+  img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error("couldn't read image")); };
+  img.src=u; }); }
 function mbWrapText(ctx,text,x,y,maxW,lh){ let yy=y; String(text).split("\n").forEach(para=>{ const words=para.split(/\s+/); let line=""; words.forEach(w=>{ const test=line?line+" "+w:w; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,yy); line=w; yy+=lh; } else line=test; }); ctx.fillText(line,x,yy); yy+=lh; }); }
 /* rasterise the freeform mood board to a PNG (for importing into Clip Studio etc.). CORS-blocked
    images can't be read back by the browser, so those become placeholder boxes — layout is preserved. */
@@ -1918,6 +1925,8 @@ async function renderArt(){
   const boardCtrls=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input class="inp" id="mbImgUrl" placeholder="paste an image URL…" style="flex:1;min-width:140px"/>
       <button class="btn btn-pink" data-act="mbAddImage">🖼️ image</button>
+      <input type="file" id="mbFile" accept="image/*" multiple style="display:none"/>
+      <button class="btn" data-act="mbUpload">⤒ upload</button>
       <button class="btn" data-act="mbAddNote">📝 note</button>
       <button class="btn" data-act="mbAddColor">🎨 colour</button>
       <button class="btn" data-act="mbExport">⤓ PNG</button>
@@ -2531,6 +2540,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="mbAddNote"){ const ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"note",text:"",x:ox,y:oy,w:170,h:120}]})); render(); return; }
   if(act==="mbAddColor"){ const col=(state.art&&state.art.pBase)||randHex(); const ox=40+Math.floor(Math.random()*60), oy=40+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}]})); render(); return; }
   if(act==="mbDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).filter(c=>c.id!==id)})); render(); return; }
+  if(act==="mbUpload"){ const f=document.getElementById("mbFile"); if(f){ f.value=""; f.click(); } return; }
   if(act==="mbExport"){ try{ await exportMoodBoardPNG(); }catch(e){ toast("Export hiccuped 🌸"); } return; }
   if(act==="mbMax"){ state.art=state.art||{}; state.art.boardMax=!state.art.boardMax; render(); return; }
   if(act==="artResAdd"){ const ti=document.getElementById("artResTitle"), ui=document.getElementById("artResUrl"), tg=document.getElementById("artResTag"); const title=(ti&&ti.value||"").trim(), url=(ui&&ui.value||"").trim(); if(!title||!url){toast("Need a title and a link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artResources:[...((n.artResources)||DEFAULT_ART_RES),{id:uid(),title,url,tag:(tg&&tg.value)||"other"}]})); render(); return; }
@@ -2666,7 +2676,13 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
   if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
   if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
-  if(e.target&&e.target.dataset&&e.target.dataset.mbnote){ const idn=e.target.dataset.mbnote; DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===idn?{...c,text:e.target.value}:c)})).catch(()=>{}); } });
+  if(e.target&&e.target.dataset&&e.target.dataset.mbnote){ const idn=e.target.dataset.mbnote; DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===idn?{...c,text:e.target.value}:c)})).catch(()=>{}); }
+  if(e.target&&e.target.id==="mbFile"&&e.target.files&&e.target.files.length){ (async()=>{ const files=[...e.target.files]; let added=0;
+    for(const f of files){ try{ const {url,ar}=await mbFileToDataURL(f); const w=180, h=Math.max(100,Math.min(260,Math.round(180/ar)));
+      const ox=24+Math.floor(Math.random()*70)+added*16, oy=24+Math.floor(Math.random()*50)+added*16;
+      await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"img",url,x:ox,y:oy,w,h}]})); added++;
+    }catch(err){ console.error(err); } }
+    toast(added?("Added "+added+" photo"+(added>1?"s":"")+" 🖼️"):"Couldn't read that image 🌸"); render(); })(); } });
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
