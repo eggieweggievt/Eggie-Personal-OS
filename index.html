@@ -129,6 +129,9 @@
   /* ---- cursor petal trail ---- */
   .petal{position:fixed;pointer-events:none;z-index:9000;border-radius:150% 0 150% 0;will-change:transform,opacity;opacity:0;}
   @keyframes petalFloat{ 0%{opacity:0;transform:translate(0,0) rotate(0deg) scale(.55);} 18%{opacity:var(--o,.7);} 100%{opacity:0;transform:translate(var(--dx,12px),var(--dy,60px)) rotate(var(--dr,200deg)) scale(1);} }
+  /* ---- ambient rising bubbles ---- */
+  .bubble{position:fixed;bottom:-44px;pointer-events:none;z-index:8999;border-radius:50%;opacity:0;will-change:transform,opacity;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.9),rgba(193,226,255,.34) 46%,rgba(168,205,242,.1) 72%);box-shadow:0 0 8px rgba(150,200,240,.4),inset 0 0 6px rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.4);}
+  @keyframes bubbleRise{ 0%{opacity:0;transform:translate(0,0) scale(.6);} 12%{opacity:var(--o,.35);} 86%{opacity:var(--o,.35);} 100%{opacity:0;transform:translate(var(--dx,20px),calc(-100vh - 80px)) scale(1);} }
   .kanban{-webkit-overflow-scrolling:touch;}
   .cal-ev,.cc-chip,.citem,[data-act="dragSponsor"],.sticky-head,.sticky-resize{touch-action:none;}
   @media (hover:none){
@@ -2229,6 +2232,26 @@ render();
     p.addEventListener("animationend",()=>{ p.remove(); count--; });
   }
   window.addEventListener("pointermove",e=>{ if(e.pointerType==="touch")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
+})();
+/* ===== ambient rising bubbles (octopus vibes) 🐙 ===== */
+(function(){
+  const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
+  let count=0; const MAX=16;
+  function bubble(){
+    if(!reduce() && count<MAX){
+      const b=document.createElement("div"); b.className="bubble";
+      const size=(10+Math.random()*32).toFixed(0);
+      b.style.width=b.style.height=size+"px";
+      b.style.left=(Math.random()*100).toFixed(1)+"vw";
+      b.style.setProperty("--dx",(Math.random()*90-45).toFixed(0)+"px");
+      b.style.setProperty("--o",(0.16+Math.random()*0.28).toFixed(2));
+      b.style.animation=`bubbleRise ${(8+Math.random()*7).toFixed(1)}s linear forwards`;
+      document.body.appendChild(b); count++;
+      b.addEventListener("animationend",()=>{ b.remove(); count--; });
+    }
+    setTimeout(bubble, 700+Math.random()*1500);
+  }
+  setTimeout(bubble, 600);
 })();
 </script>
 <!-- ===================== AI PET WIDGET ===================== -->
