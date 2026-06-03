@@ -1622,6 +1622,7 @@ function settingsModal(){
       <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
     </div>
     <button class="btn" data-act="editConfig" style="margin-top:14px;width:100%">✏️ Your details & config</button>
+    <button class="btn" data-act="resetLayout" style="margin-top:8px;width:100%">↺ Reset layout (tabs + dashboard)</button>
     <button class="btn" data-act="exportData" style="margin-top:8px;width:100%">⬇️ Export all my data (backup)</button>
     <p class="soft" style="font-size:11.5px;margin-top:12px">Your device's "reduce motion" setting is always honoured too.</p>
   </div></div>`;
@@ -2074,6 +2075,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="editConfig")return configModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
+  if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,homeOrder:[],homeSize:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
   if(act==="openNote")return openNote(id);
   if(act==="noteToContent"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){await DB.addContent({title:c.raw_text.slice(0,120),stage:"idea",priority:60});} document.getElementById("modal").innerHTML=""; toast("Added to content 🎬"); render(); return; }
   if(act==="noteSticky"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c)addSticky(c.raw_text); document.getElementById("modal").innerHTML=""; toast("Pinned 📌"); return; }
