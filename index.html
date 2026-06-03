@@ -1175,6 +1175,31 @@ function taskRow(t){
     ${subs.length?`<div style="margin:6px 0 2px 27px;display:flex;flex-direction:column;gap:5px">${subs.map(s=>`<div style="display:flex;align-items:center;gap:8px"><button class="check ${s.done?'on':''}" data-act="subDone" data-id="${t.id}" data-sid="${s.id}" ${RO?"disabled":""} style="padding:0;width:15px;height:15px"></button><span style="font-size:12px;${s.done?'text-decoration:line-through;opacity:.55':''}">${esc(s.text)}</span><button class="ft-ic" data-act="delSub" data-id="${t.id}" data-sid="${s.id}" ${RO?"disabled":""} style="color:var(--rose);font-size:12px;padding:0 3px">×</button></div>`).join("")}</div>`:""}
   </div>`;
 }
+/* ---- Kanban board view (To do / Doing / Done) — same tasks as the list, just a different lens ---- */
+const TASK_STATUSES=[["todo","🌱 To do"],["doing","🔆 Doing"],["done","✅ Done"]];
+function taskStatus(t){ return t.status || (t.done?"done":"todo"); }
+function taskCard(t){
+  const subN=(t.sub||[]).length, subDone=(t.sub||[]).filter(s=>s.done).length;
+  return `<div class="citem" draggable="true" data-act="dragTask" data-id="${t.id}">
+    <div style="display:flex;align-items:flex-start;gap:6px">
+      <span class="grow" style="font-size:12.5px;${t.done?'text-decoration:line-through;opacity:.6':''}">${esc(t.text)}</span>
+      <button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="Focus on just this one">◎</button>
+      <button class="ft-ic" data-act="delTask" data-id="${t.id}" ${RO?"disabled":""} title="Remove" style="color:var(--rose)">🗑</button>
+    </div>
+    <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;align-items:center">
+      <span class="pill pill-lav">${bucketLabel(t.bucket)}</span>
+      <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
+      ${subN?`<span class="label" style="font-size:10.5px">▫ ${subDone}/${subN}</span>`:""}
+    </div>
+  </div>`;
+}
+function taskBoard(list){
+  return `<div class="kanban" style="grid-template-columns:repeat(3,minmax(160px,1fr))">${TASK_STATUSES.map(([key,lbl])=>{
+    const col=list.filter(t=>taskStatus(t)===key);
+    return `<div class="kcol" data-act="dropTaskStatus" data-status="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(taskCard).join("")||`<div class="label" style="padding:8px 6px;opacity:.55">${key==="done"?"nothing finished yet — that's fine 🌸":key==="doing"?"drag a card here when you start it":"all clear 🌙"}</div>`}</div>`;
+  }).join("")}</div>`;
+}
+async function setTaskStatus(id,status){ await taskMut(t=>t.map(x=>x.id===id?{...x,status,done:status==="done"}:x)); }
 async function renderPlanner(){
   const sent=await DB.daily(SENTINEL); const tasks=sent.tasks||[];
   /* focus-one-thing mode */
@@ -1189,6 +1214,8 @@ async function renderPlanner(){
     </div>`;
     state.focusTask=null;
   }
+  if(state.plannerView==null){ try{state.plannerView=localStorage.getItem("eggie-planner-view")||"list";}catch(e){state.plannerView="list";} }
+  const view=state.plannerView;
   const sf=state.taskSpoon||"all";
   const match=t=> sf==="all" || t.spoon===sf || (sf==="low" && !t.spoon);
   const groups=TASK_BUCKETS.map(([key,emoji,label])=>{
@@ -1198,13 +1225,15 @@ async function renderPlanner(){
     const body=list.length?list.map(taskRow).join(""):`<div class="soft" style="font-size:12px;padding:4px 2px">${key==="someday"?"a no-pressure parking lot — nothing in here is ever overdue 🌙":"nothing here right now 🌸"}</div>`;
     return `<div class="panel" style="margin-bottom:12px"><div class="card-head"><span class="label">${emoji} ${label}</span>${list.length?`<span class="pill pill-gray">${doneN}/${list.length}</span>`:""}</div>${body}</div>`;
   }).join("");
+  const board=taskBoard(tasks.filter(match));
   const buckOpts=TASK_BUCKETS.map(([k,e,l])=>`<option value="${k}" ${(state.addBucket||"personal")===k?"selected":""}>${e} ${l}</option>`).join("");
   const spoonOpts=TASK_SPOONS.map(([k,e,l])=>`<option value="${k}">${e} ${l}</option>`).join("");
   const fbtn=(v,l)=>`<button data-act="taskSpoonFilter" data-v="${v}" class="${sf===v?'on':''}">${l}</button>`;
+  const vbtn=(v,l)=>`<button data-act="plannerView" data-v="${v}" class="${view===v?'on':''}">${l}</button>`;
   return `<div>
     <div class="panel" style="margin-bottom:14px">
-      <div class="card-head"><h2 style="font-size:18px">🗒️ Planner</h2></div>
-      <p class="soft" style="font-size:12.5px;margin:0 0 12px">One calm list — nothing turns red, nothing nags. Break big things into a small step with ＋, and on a low-spoon day filter to just the gentle stuff. Tap ◎ to focus on a single task. 💗</p>
+      <div class="card-head"><h2 style="font-size:18px">🗒️ Planner</h2><div class="seg">${vbtn("list","☰ List")}${vbtn("board","▦ Board")}</div></div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">${view==="board"?"Drag a card from To do → Doing → Done as you go. Same tasks as your list — finishing one in Done checks it off too. 💗":"One calm list — nothing turns red, nothing nags. Break big things into a small step with ＋, and on a low-spoon day filter to just the gentle stuff. Tap ◎ to focus on a single task. 💗"}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
         <div class="grow" style="min-width:200px"><div class="label" style="margin-bottom:4px">New task</div><input class="inp" id="newTask" placeholder="e.g. reply to that email 🐙" ${RO?"disabled":""}/></div>
         <div><div class="label" style="margin-bottom:4px">Bucket</div><select class="inp" id="taskBucket" style="width:auto">${buckOpts}</select></div>
@@ -1214,7 +1243,7 @@ async function renderPlanner(){
       <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
         <span class="label">Show</span><div class="seg">${fbtn("all","Everything")}${fbtn("low","🌙 Low-spoon")}${fbtn("some","🌤 Some")}${fbtn("full","🌞 Full")}</div>
       </div>
-    </div>${groups}</div>`;
+    </div>${view==="board"?board:groups}</div>`;
 }
 
 /* ===================== CARE (self-care · DBT · mindfulness) ===================== */
@@ -2074,11 +2103,12 @@ document.addEventListener("click",async(e)=>{
 
   /* planner */
   if(act==="addTask"){ const i=document.getElementById("newTask"); const tx=(i.value||"").trim(); if(tx){ const bucket=document.getElementById("taskBucket").value, spoon=document.getElementById("taskSpoonSel").value; state.addBucket=bucket; await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:tx,bucket,spoon,done:false,sub:[],created_at:new Date().toISOString()}]); render(); } return; }
-  if(act==="taskDone"){ await taskMut(t=>t.map(x=>x.id===id?{...x,done:!x.done}:x)); render(); return; }
+  if(act==="taskDone"){ await taskMut(t=>t.map(x=>{ if(x.id!==id)return x; const nd=!x.done; let status=x.status; if(nd)status="done"; else if(!x.status||x.status==="done")status="todo"; return {...x,done:nd,status}; })); render(); return; }
   if(act==="delTask"){ await taskMut(t=>t.filter(x=>x.id!==id)); render(); return; }
   if(act==="focusTask"){ state.focusTask=id; render(); return; }
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
   if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
+  if(act==="plannerView"){ state.plannerView=el.dataset.v; try{localStorage.setItem("eggie-planner-view",el.dataset.v);}catch(e){} render(); return; }
   if(act==="addSubtask"){ const tx=prompt("Break it into a small step:"); if(tx&&tx.trim()){ await taskMut(t=>t.map(x=>x.id===id?{...x,sub:[...(x.sub||[]),{id:"s"+uid().slice(0,6),text:tx.trim(),done:false}]}:x)); render(); } return; }
   if(act==="subDone"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:x)); render(); return; }
   if(act==="delSub"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).filter(s=>s.id!==sid)}:x)); render(); return; }
@@ -2213,6 +2243,7 @@ document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=re
     let e=t.closest&&t.closest(".cal-ev"); if(e&&e.dataset.eid)return {kind:"event",id:e.dataset.eid,el:e};
     let c=t.closest&&t.closest('[data-act="dragContent"]'); if(c)return {kind:"content",id:c.dataset.id,el:c};
     let s=t.closest&&t.closest('[data-act="dragSponsor"]'); if(s)return {kind:"sponsor",id:s.dataset.id,el:s};
+    let k=t.closest&&t.closest('[data-act="dragTask"]'); if(k)return {kind:"task",id:k.dataset.id,el:k};
     return null;
   }
   function targetAt(x,y,kind){
@@ -2220,12 +2251,14 @@ document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=re
     if(kind==="event"){ const c=el.closest(".cal-cell[data-date]"); return c?{type:"calcell",el:c,date:c.dataset.date}:null; }
     if(kind==="content"){ let t=el.closest('[data-act="dropStage"]'); if(t)return{type:"stage",el:t,stage:t.dataset.stage}; t=el.closest('[data-act="ccDrop"]'); if(t)return{type:"ccdate",el:t,date:t.dataset.date}; t=el.closest('[data-act="ccUnschedule"]'); if(t)return{type:"ccun",el:t}; return null; }
     if(kind==="sponsor"){ const t=el.closest('[data-act="dropSponsor"]'); return t?{type:"sponsor",el:t,stage:t.dataset.stage}:null; }
+    if(kind==="task"){ const t=el.closest('[data-act="dropTaskStatus"]'); return t?{type:"taskstatus",el:t,status:t.dataset.status}:null; }
     return null;
   }
   async function applyDrop(d,tg){
     if(d.kind==="event"&&tg.type==="calcell"){ await DB.saveDaily(SENTINEL,n=>{const evs=(n.calendarEvents||[]).slice();const t=evs.find(x=>x.id===d.id);if(t){if(t.endDate&&t.endDate>t.date){const dur=calDiff(t.date,t.endDate);t.date=tg.date;t.endDate=calAdd(tg.date,dur);}else t.date=tg.date;}return{...n,calendarEvents:evs};}); render(); return; }
     if(d.kind==="content"){ if(tg.type==="stage"){const patch={stage:tg.stage};if(tg.stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(d.id,patch);}else if(tg.type==="ccdate"){await DB.updateContent(d.id,{scheduled_for:tg.date});}else if(tg.type==="ccun"){await DB.updateContent(d.id,{scheduled_for:null});} render(); return; }
     if(d.kind==="sponsor"&&tg.type==="sponsor"){ await DB.updateSponsor(d.id,{stage:tg.stage}); render(); return; }
+    if(d.kind==="task"&&tg.type==="taskstatus"){ await setTaskStatus(d.id,tg.status); render(); return; }
   }
   document.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse"||RO)return; const d=pick(e.target); if(!d)return; TD={...d,sx:e.clientX,sy:e.clientY,moved:false,ghost:null}; },true);
   document.addEventListener("pointermove",e=>{ if(!TD||e.pointerType==="mouse")return; const dx=e.clientX-TD.sx,dy=e.clientY-TD.sy; if(!TD.moved){ if(Math.abs(dx)+Math.abs(dy)<8)return; TD.moved=true; const r=TD.el.getBoundingClientRect(); const g=TD.el.cloneNode(true); g.classList.add("drag-ghost"); g.style.cssText="position:fixed;left:0;top:0;z-index:9998;pointer-events:none;opacity:.85;box-shadow:0 8px 22px rgba(80,70,110,.35);width:"+r.width+"px;"; TD.ox=e.clientX-r.left; TD.oy=e.clientY-r.top; document.body.appendChild(g); TD.ghost=g; try{TD.el.setPointerCapture(e.pointerId);}catch(er){} } e.preventDefault(); TD.ghost.style.transform="translate("+(e.clientX-TD.ox)+"px,"+(e.clientY-TD.oy)+"px)"; document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); const tg=targetAt(e.clientX,e.clientY,TD.kind); if(tg&&tg.el)tg.el.classList.add("drop-hot"); },true);
@@ -2246,13 +2279,14 @@ document.addEventListener("keydown",async(e)=>{
   if(t.dataset&&t.dataset.act==="goalAdd"&&t.value.trim()){const sc=t.dataset.scope,tx=t.value.trim();t.value="";await goalMut(sc,g=>[...g,{id:uid(),text:tx,done:false}]);render();}
 });
 let dragId=null,dragType=null;
-document.addEventListener("dragstart",e=>{const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}});
+document.addEventListener("dragstart",e=>{const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');const tc=e.target.closest('[data-act="dragTask"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}else if(tc){dragId=tc.dataset.id;dragType="task";}});
 document.addEventListener("drop",async e=>{
-  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');
+  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');const ts=e.target.closest('[data-act="dropTaskStatus"]');
   if(cd&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:cd.dataset.date});dragId=null;render();}
   else if(cu&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:null});dragId=null;render();}
   else if(cs&&dragType==="content"&&dragId){e.preventDefault();const stage=cs.dataset.stage;const patch={stage};if(stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(dragId,patch);dragId=null;render();}
   else if(ss&&dragType==="sponsor"&&dragId){e.preventDefault();await DB.updateSponsor(dragId,{stage:ss.dataset.stage});dragId=null;render();}
+  else if(ts&&dragType==="task"&&dragId){e.preventDefault();await setTaskStatus(dragId,ts.dataset.status);dragId=null;render();}
 });
 
 /* feature impls */
