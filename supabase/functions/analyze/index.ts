@@ -196,6 +196,45 @@ Deno.serve(async (req) => {
       return json({ answer });
     }
 
+    // --- agent: answer AND emit structured actions the front-end runs against the OS ---
+    if (mode === "agent") {
+      const q = (body.input?.question || "").toString().slice(0, 1000);
+      if (!q) return json({ error: "missing question" }, 400);
+      const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
+      const tz = (body.input?.tz || "America/New_York").toString();
+      const sys = BRAND + `
+
+You are also Eggie's hands inside the OS: you can DO things by emitting actions, not just talk. Today (her local date) is ${today}; her calendar timezone is ${tz}. Resolve relative dates ("tomorrow", "next Friday", "in 2 weeks") to absolute YYYY-MM-DD using that.
+
+Return ONLY JSON, no prose around it:
+{ "reply": string, "actions": [ { "type": string, ...args } ] }
+- "reply": one short, warm sentence in her voice confirming what you did (or just answering, if no action is needed). 🐙
+- "actions": the things to perform. Empty array for pure questions/chit-chat.
+
+Allowed action types and their args (use ONLY these; pick valid enum values):
+- addCalendarEvent: { title, date:"YYYY-MM-DD", endDate?:"YYYY-MM-DD" (multi-day), time?:"HH:MM" 24h, tz?:IANA zone (default ${tz}), note?, color?:"#hex" }
+- addTask: { text, bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full" }
+- addContent: { title, format?: "short"|"long"|"twitter", stage?: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published", pillar?: "growth"|"retention"|"experimental" }
+- addIncome: { kind: "in"|"out", source, amount:number, category?, note? }
+- addScheduleSlot: { day: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun", time?, title? }   // recurring stream day
+- setStreamDay: { on: boolean }        // marks TODAY a stream day or not
+- logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
+- addSticky: { text }
+- addCapture: { text }                  // a quick brain-dump capture
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"income"|"pitch"|"review" }
+
+Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
+      const raw = await claude(
+        sys,
+        `Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`,
+        1200,
+      );
+      const parsed = parseJSON(raw);
+      if (!parsed) return json({ reply: raw, actions: [] });
+      if (!Array.isArray(parsed.actions)) parsed.actions = [];
+      return json({ reply: parsed.reply || "okay!", actions: parsed.actions });
+    }
+
     if (mode === "thumbnail") {
       const img = (body.input?.image || "").toString();
       const m = img.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
