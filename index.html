@@ -841,7 +841,7 @@ async function render(){
 }
 /* ===================== HOME ===================== */
 async function renderHome(){
-  const [content,day,goals,sponsors,captures]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures()]);
+  const [content,day,goals,sponsors,captures,income]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures(),DB.income()]);
   if(state.focus){
     const energy=day.energy||"medium";
     const live=content.filter(c=>!c.parent_id&&c.stage!=="published").sort((a,b)=>b.priority-a.priority).slice(0,3);
@@ -859,13 +859,23 @@ async function renderHome(){
     </div>`;
   }
   const WIDGETS={
+    today:()=>cardToday(day,goals), mission:()=>cardContentMission(content), artcorner:()=>cardArtCorner(goals),
+    money:()=>cardMoneyPulse(income,sponsors),
     creator:()=>cardCreator(day), session:()=>cardSession(day,content), goals:()=>cardGoals(goals),
     channel:()=>cardChannel(day), habits:()=>cardHabits(day), journal:()=>cardJournal(day),
     schedule:()=>cardSchedule(goals.schedule), ship:()=>cardShipToday(content), sponsors:()=>cardSponsorsMini(sponsors),
     pipeline:()=>cardPipelineSnap(content), braindump:()=>cardBrainDump(captures),
   };
-  const DEF=["creator","session","goals","channel","habits","journal","schedule","ship","sponsors","pipeline","braindump"];
-  return modularPage("home", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), 4);
+  /* fresh "home2" layout slot for the revamp — legacy cards start hidden but live in ＋cards */
+  if(!(goals.layouts&&goals.layouts.home2)){
+    const hid={creator:true,session:true,habits:true,journal:true,schedule:true,ship:true,sponsors:true,pipeline:true};
+    const seed={order:[],size:{},min:{},hidden:hid};
+    goals.layouts=Object.assign({},goals.layouts||{},{home2:seed});
+    DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home2:seed})})).catch(()=>{});
+    SENT=goals;
+  }
+  const DEF=["today","mission","artcorner","goals","money","channel","braindump","creator","session","habits","journal","schedule","ship","sponsors","pipeline"];
+  return modularPage("home2", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {today:8,mission:8,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
 }
 /* ===== generic modular page: any page = a reorderable/resizable grid of keyed boxes ===== */
 function layoutFor(tab){ const L=(SENT.layouts&&SENT.layouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
@@ -875,8 +885,8 @@ function modularPage(tab, labels, items, defCols){
   let order=L.order.length?L.order.filter(k=>map[k]!=null):[];
   items.forEach(it=>{ if(!order.includes(it[0]))order.push(it[0]); });
   const sz=k=>{ const r=L.size[k]; return (typeof r==="number")?{c:r}:(r||{}); };
-  const dc=defCols||(items.length<=2?12:6);
-  const cells=order.filter(k=>!L.hidden[k]).map(k=>{ const s=sz(k), cols=Math.max(3,s.c||dc), min=!!L.min[k];
+  const dc=k=>{ if(defCols&&typeof defCols==="object") return defCols[k]||defCols._||6; return defCols||(items.length<=2?12:6); };
+  const cells=order.filter(k=>!L.hidden[k]).map(k=>{ const s=sz(k), cols=Math.max(3,s.c||dc(k)), min=!!L.min[k];
     return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" data-c="${cols}" style="grid-column:span ${cols}">
       <div class="home-tools"><button class="home-grip" title="drag to move">⠿</button><button data-act="homeMin" data-w="${k}" title="${min?'expand':'minimize'}">${min?'＋':'–'}</button><button data-act="homeHide" data-w="${k}" title="remove">✕</button></div>
       <span class="home-resize" title="drag to resize ⤡">⤡</span>${map[k]}</div>`; }).join("");
@@ -905,7 +915,7 @@ function layoutHome(){
     if(h>0)w.style.gridRowEnd="span "+Math.max(1,Math.ceil((h+gap)/(rowH+gap)));
   });
 }
-const WLABEL={creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
+const WLABEL={today:"Today at a glance",mission:"Content mission control",artcorner:"Art corner",money:"Money pulse",creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
 /* merge-update one page's layout block on the sentinel row */
 async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.layouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,layouts}; }); }
 let _mcTab="home", _mcLabels=WLABEL;
@@ -915,6 +925,60 @@ async function manageCardsModal(tab, labels){
     <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle which cards show here. You can also minimize, move or resize them right on the page. 🌸</p>
     ${Object.keys(_mcLabels).map(k=>`<button class="hbtn ${hidden[k]?'':'done'}" data-act="cardToggle" data-w="${k}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:6px"><span class="check ${hidden[k]?'':'on'}"></span><span class="grow" style="font-size:12.5px;text-align:left">${esc(_mcLabels[k])}</span></button>`).join("")}
   </div></div>`;
+}
+/* ---- revamped home cards ---- */
+function cardToday(day,sent){
+  const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+  const slot=(sent.schedule||[]).find(s=>(s.day||"").slice(0,3)===wd);
+  const evs=(sent.calendarEvents||[]).filter(e=>e.date===TODAY||(e.endDate&&e.date<=TODAY&&e.endDate>=TODAY)).slice(0,4);
+  const rems=(sent.reminders||[]).filter(r=>!r.done&&r.date<=TODAY).sort((a,b)=>String(a.date+(a.time||"")).localeCompare(String(b.date+(b.time||"")))).slice(0,4);
+  const energy=day.energy||"medium";
+  const eopt=(v,e,l)=>`<button data-act="energy" data-v="${v}" ${RO?"disabled":""} class="${energy===v?'on':''}">${e} ${l}</button>`;
+  return `<section class="panel">
+    <div class="card-head"><div><h2 style="font-size:19px">${greeting()}, ${CONFIG.creator.name} ${CONFIG.creator.emoji}</h2><div class="label" style="margin-top:2px">${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div></div><div class="seg">${eopt("low","🌙","Low")}${eopt("medium","🌤","Med")}${eopt("high","🌞","High")}</div></div>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      ${slot?`<div style="display:flex;gap:9px;align-items:center"><span class="pill pill-pink">🔴 stream day</span><span style="font-size:13px">${esc(slot.title||"Stream")}${slot.time?` · <span class="soft">${esc(slot.time)}</span>`:""}</span></div>`:`<div class="soft" style="font-size:12.5px">🌙 no stream today — rest or batch, both count</div>`}
+      ${evs.map(e=>`<div style="display:flex;gap:9px;align-items:center"><span class="pill pill-lav">📅${e.time?" "+esc((toET(e.date,e.time,e.tz)||{}).etTime||e.time):""}</span><span style="font-size:13px">${esc(e.title)}</span></div>`).join("")}
+      ${rems.map(r=>`<div style="display:flex;gap:9px;align-items:center"><span class="pill pill-peach">⏰ ${r.date<TODAY?"overdue":esc(r.time||"")}</span><span class="grow" style="font-size:13px">${esc(r.text)}</span><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button></div>`).join("")}
+      ${(!evs.length&&!rems.length&&!slot)?`<div class="soft" style="font-size:12.5px">nothing scheduled — the day is yours 🌸</div>`:""}
+    </div>
+    ${wd==="Sun"?`<button class="btn" data-act="goTab" data-tab="review" style="margin-top:10px">🌷 it's Sunday — seal your week</button>`:""}
+  </section>`;
+}
+function cardContentMission(content){
+  const live=content.filter(c=>!c.parent_id&&c.stage!=="published");
+  const dl=c=>(c.criteria&&c.criteria.deadline)||"";
+  const soon=d=>{ if(!d)return ""; const diff=Math.ceil((new Date(d+"T00:00")-new Date(TODAY+"T00:00"))/86400000); if(diff<0)return `<span class="pill" style="background:#fde4e4;color:#c0566a">due ${-diff}d ago</span>`; if(diff<=7)return `<span class="pill pill-peach">due in ${diff}d</span>`; return ""; };
+  const rows=live.slice().sort((a,b)=>{const da=dl(a),db2=dl(b); if(da&&db2)return da.localeCompare(db2); if(da)return -1; if(db2)return 1; return (b.priority||0)-(a.priority||0);}).slice(0,5);
+  return `<section class="panel"><div class="card-head"><span class="label">🎬 Content mission control</span><span class="pill pill-lav">${live.length} in flight</span></div>
+    ${rows.length?rows.map(c=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="pill pill-pink">${stageShort(c.stage)}</span><span class="grow" style="font-size:13px">${esc(c.title)}</span>${soon(dl(c))}</div>`).join(""):`<div class="soft" style="font-size:12.5px">nothing in flight — park ideas in 🎬 Content, rest is allowed 🌸</div>`}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" data-act="goTab" data-tab="content">open pipeline</button><button class="btn" data-act="goTab" data-tab="optimize">🎯 optimizer</button><button class="btn" data-act="goTab" data-tab="script">✍️ script</button></div>
+  </section>`;
+}
+function cardArtCorner(sent){
+  const ch=sent.artChallenge||{};
+  const wk=mondayOf(TODAY);
+  const min=(sent.artLog||[]).filter(e=>e.date>=wk).reduce((a,e)=>a+Number(e.min||0),0);
+  return `<section class="panel"><div class="card-head"><span class="label">🎨 Art corner</span><span class="pill pill-mint">${min} min this week</span></div>
+    ${ch.dayText?`<button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:12.5px">${esc(ch.dayText)}</span></button>`:""}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-pink" data-act="artStartNow">🎨 make art now</button><button class="btn" data-act="goTab" data-tab="art">open studio</button></div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">play feeds the well your content draws from 🌊</p>
+  </section>`;
+}
+function cardMoneyPulse(income,sponsors){
+  const mk=monthKey();
+  const inn=(income||[]).filter(e=>e.month===mk&&(e.kind||"in")==="in").reduce((a,e)=>a+Number(e.amount),0);
+  const out=(income||[]).filter(e=>e.month===mk&&e.kind==="out").reduce((a,e)=>a+Number(e.amount),0);
+  const net=inn-out;
+  const active=(sponsors||[]).filter(s=>s.stage!=="passed").length;
+  return `<section class="panel"><div class="card-head"><span class="label">💰 Money pulse</span><button class="btn" data-act="goTab" data-tab="income" style="padding:2px 10px">open</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="soft-card grow"><div class="label">in</div><div class="num mint" style="font-family:var(--display);font-size:17px">+$${inn.toLocaleString()}</div></div>
+      <div class="soft-card grow"><div class="label">out</div><div class="num" style="font-family:var(--display);font-size:17px;color:var(--rose)">−$${out.toLocaleString()}</div></div>
+      <div class="soft-card grow"><div class="label">net</div><div class="num" style="font-family:var(--display);font-size:17px;color:${net>=0?'var(--mint)':'var(--rose)'}">${net>=0?'+':'−'}$${Math.abs(net).toLocaleString()}</div></div>
+    </div>
+    <div class="label" style="margin-top:8px">💌 ${active} sponsor${active===1?"":"s"} in the pipeline</div>
+  </section>`;
 }
 function cardCreator(day){
   const energy=day.energy||"medium", streamDay=!!day.streamDay;
@@ -2591,7 +2655,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
-  if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
+  if(act==="goTab"){ if(el.dataset.tab&&TABS.some(t=>t[0]===el.dataset.tab)) setTab(el.dataset.tab); return; }
+  if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; if(state.tab!=="art")state.tab="art"; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
   if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekText=txt;c.weekDone=false;c.week=mondayOf(TODAY);}else{c.dayText=txt;c.dayDone=false;c.day=TODAY;} return {...n,artChallenge:c};}); render(); return; }
   if(act==="artChallengeDone"){ const sc=el.dataset.scope; await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week")c.weekDone=!c.weekDone; else c.dayDone=!c.dayDone; return {...n,artChallenge:c};}); render(); return; }
   if(act==="artLogQuick"){ const m=parseInt(el.dataset.m)||0; if(m)await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m}]})); toast("Logged "+m+" min of play 🎨 proud of you"); render(); return; }
