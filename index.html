@@ -3166,6 +3166,114 @@ render();
         setTab("art");
         return "📐 opened the "+state.art.gType+" guide — grab it as an SVG from the panel";
       }
+      case "delCalendarEvent": {
+        var nm=(a.title||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var evs=(n.calendarEvents||[]).filter(function(ev){ var match=(ev.title||"").toLowerCase().indexOf(nm)>=0 && (!a.date||ev.date===a.date); if(match&&!hit){hit=ev;return false;} return true; }); return Object.assign({},n,{calendarEvents:evs}); });
+        return hit? "🗑 removed “"+hit.title+"” ("+hit.date+")" : "couldn't find an event like “"+(a.title||"")+"” 🌸";
+      }
+      case "moveCalendarEvent": {
+        var nm=(a.title||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var evs=(n.calendarEvents||[]).slice(); var ev=evs.find(function(x){return (x.title||"").toLowerCase().indexOf(nm)>=0;}); if(ev&&a.date){ hit=ev; try{ if(ev.endDate&&ev.endDate>ev.date){ var dur=calDiff(ev.date,ev.endDate); ev.date=a.date; ev.endDate=calAdd(a.date,dur); } else ev.date=a.date; }catch(e){ ev.date=a.date; } } return Object.assign({},n,{calendarEvents:evs}); });
+        return hit? "📅 moved “"+hit.title+"” to "+a.date : "couldn't find an event like “"+(a.title||"")+"” 🌸";
+      }
+      case "delScheduleSlot": {
+        var dy=(a.day||"").slice(0,3).toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var sch=(n.schedule||[]).filter(function(s){ if(!hit&&(s.day||"").slice(0,3).toLowerCase()===dy){hit=s;return false;} return true; }); return Object.assign({},n,{schedule:sch}); });
+        return hit? "🗑 removed "+hit.day+" from your stream schedule" : "no "+(a.day||"")+" slot found 🌸";
+      }
+      case "delContent": {
+        var list=await DB.content(); var nm=(a.name||"").toLowerCase();
+        var ci=(list||[]).find(function(x){return !x.parent_id&&(x.title||"").toLowerCase().indexOf(nm)>=0;});
+        if(!ci) return "couldn't find content like “"+(a.name||"")+"” 🌸";
+        await DB.delContent(ci.id);
+        return "🗑 deleted “"+ci.title+"” from the pipeline";
+      }
+      case "setContentDeadline": {
+        var list=await DB.content(); var nm=(a.name||"").toLowerCase();
+        var ci=(list||[]).find(function(x){return !x.parent_id&&(x.title||"").toLowerCase().indexOf(nm)>=0;});
+        if(!ci) return "couldn't find content like “"+(a.name||"")+"” 🌸";
+        await DB.updateContent(ci.id,{criteria:Object.assign({},ci.criteria||{},{deadline:a.date||""})});
+        return "🗓️ deadline for “"+ci.title+"” set to "+(a.date||"none");
+      }
+      case "addSubtask": {
+        var nm=(a.task||"").toLowerCase(); var hit=null;
+        await taskMut(function(t){ return t.map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{sub:(x.sub||[]).concat([{id:"s"+uid().slice(0,8),text:a.text||"step",done:false}])}); } return x; }); });
+        return hit? "🪜 added a step to “"+hit.text+"”" : "couldn't find a task like “"+(a.task||"")+"” 🌸";
+      }
+      case "setTask": {
+        var nm=(a.name||"").toLowerCase(); var hit=null;
+        await taskMut(function(t){ return t.map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; var o=Object.assign({},x); if(a.bucket)o.bucket=a.bucket; if(a.spoon)o.spoon=a.spoon; return o; } return x; }); });
+        return hit? "🗂️ updated “"+hit.text+"”" : "couldn't find a task like “"+(a.name||"")+"” 🌸";
+      }
+      case "delHabit": {
+        var nm=(a.name||"").toLowerCase();
+        var hh=(state.lib||[]).find(function(x){return (x.label||"").toLowerCase().indexOf(nm)>=0;});
+        if(!hh) return "couldn't find a habit like “"+(a.name||"")+"” 🌸";
+        await saveLib((state.lib||[]).filter(function(x){return x.id!==hh.id;}));
+        return "🗑 removed the habit “"+hh.label+"”";
+      }
+      case "delMed": {
+        var meds=await loadMeds(); var nm=(a.name||"").toLowerCase();
+        var md=meds.find(function(x){return (x.name||"").toLowerCase().indexOf(nm)>=0;});
+        if(!md) return "couldn't find a med like “"+(a.name||"")+"” 🌸";
+        await saveMeds(meds.filter(function(x){return x.id!==md.id;}));
+        return "🗑 removed "+md.name+" from your meds list";
+      }
+      case "delLastIncome": {
+        var list=await DB.income(); if(!list||!list.length) return "no money entries yet 🌸";
+        var last=list.slice().sort(function(x,y){return String(y.created_at||"").localeCompare(String(x.created_at||""));})[0];
+        await DB.delIncome(last.id);
+        return "🗑 removed the latest money entry ("+(last.kind==="out"?"−":"+")+"$"+last.amount+" · "+(last.source||"")+")";
+      }
+      case "delSavingsGoal": {
+        var list=await DB.savings(); var nm=(a.name||"").toLowerCase();
+        var g=(list||[]).find(function(x){return (x.name||"").toLowerCase().indexOf(nm)>=0;});
+        if(!g) return "couldn't find a savings goal like “"+(a.name||"")+"” 🌸";
+        await DB.delGoal(g.id);
+        return "🗑 removed the “"+g.name+"” savings goal";
+      }
+      case "delJoy": {
+        var nm=(a.text||"").toLowerCase(); var hit=null;
+        await joyMut(function(j){ return j.filter(function(x){ if(!hit&&String(x).toLowerCase().indexOf(nm)>=0){hit=x;return false;} return true; }); });
+        return hit? "🗑 took “"+hit+"” out of the joy jar" : "couldn't find that in the jar 🌸";
+      }
+      case "delGoal": {
+        var nm=(a.name||"").toLowerCase(); var hit=null;
+        await goalMut(a.scope==="month"?"month":"week",function(g){ return g.filter(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){hit=x;return false;} return true; }); });
+        return hit? "🗑 removed the goal “"+hit.text+"”" : "couldn't find that goal 🌸";
+      }
+      case "setHealthNote":
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); if(a.note!=null)h.note=a.note; if(a.triggers!=null)h.triggers=a.triggers; return Object.assign({},n,{health:h}); });
+        return "📝 noted that in today's health log";
+      case "setTaxRate": {
+        var pct=Math.max(0,Math.min(90,Number(a.percent)||0));
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{taxRate:pct/100}); });
+        return "🏦 set-aside rate is now "+pct+"%";
+      }
+      case "setSetAside": {
+        var amt=Math.max(0,Number(a.amount)||0);
+        await DB.saveDaily(SENTINEL,function(n){ var sa=Object.assign({},n.setAside||{}); sa[monthKey()]=amt; return Object.assign({},n,{setAside:sa}); });
+        return "🏦 marked $"+amt+" as set aside this month";
+      }
+      case "loadScript": {
+        var sent2=await DB.daily(SENTINEL); var nm=(a.title||"").toLowerCase();
+        var d=(sent2.scripts||[]).slice().reverse().find(function(x){return (x.title||"").toLowerCase().indexOf(nm)>=0;});
+        if(!d) return "couldn't find a saved script like “"+(a.title||"")+"” 🌸";
+        await loadScriptDraft(d.id); setTab("script");
+        return "✍️ opened your draft “"+(d.title||"untitled")+"”";
+      }
+      case "delBoardCard": {
+        var nm=(a.text||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var b=(n.artBoard||[]).filter(function(c){ var m=(c.type==="note"&&(c.text||"").toLowerCase().indexOf(nm)>=0)||(c.type==="swatch"&&(c.color||"").toLowerCase()===nm); if(m&&!hit){hit=c;return false;} return true; }); return Object.assign({},n,{artBoard:b}); });
+        return hit? "🗑 removed that card from the mood board" : "couldn't find a matching note or colour on the board 🌸";
+      }
+      case "delSticky": {
+        var nm=(a.text||"").toLowerCase();
+        var st=(STICKIES||[]).find(function(s){return (s.text||"").toLowerCase().indexOf(nm)>=0;});
+        if(!st) return "couldn't find a sticky like that 🌸";
+        STICKIES=STICKIES.filter(function(s){return s.id!==st.id;}); saveStickies(); renderStickies();
+        return "🗑 peeled off that sticky note";
+      }
       default: return "";
     }
   }
