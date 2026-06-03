@@ -122,6 +122,20 @@
   .cal-content:hover,.cc-chip:hover{background:rgba(124,189,164,.34);}
   .cc-cell.drag-over{background:rgba(124,189,164,.18);border-color:#5cc6a3;}
   .cal-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;}
+  /* ---- touch / iPad ---- */
+  html{-webkit-text-size-adjust:100%;}
+  .drop-hot{outline:2px dashed var(--lav-deep);outline-offset:-2px;}
+  .drag-ghost{border-radius:8px;}
+  .kanban{-webkit-overflow-scrolling:touch;}
+  .cal-ev,.cc-chip,.citem,[data-act="dragSponsor"],.sticky-head,.sticky-resize{touch-action:none;}
+  @media (hover:none){
+    .inp,input,textarea,select{font-size:16px;}   /* ≥16px stops iOS zoom-on-focus */
+    .tab{padding:7px 13px;}
+    .seg button{padding:7px 11px;}
+    .check{min-width:20px;min-height:20px;}
+    .hbtn,.chiptog,.btn{min-height:34px;}
+    *{-webkit-tap-highlight-color:transparent;}
+  }
   /* ---- accessibility ---- */
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
   body.calm *{animation:none!important;transition:none!important;}
@@ -1963,14 +1977,43 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} } });
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
-document.addEventListener("mousedown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; e.preventDefault(); });
-document.addEventListener("mousemove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
-document.addEventListener("mouseup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
+document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
+document.addEventListener("pointermove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
+document.addEventListener("pointerup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
 /* sticky resize (drag the ◢ corner) */
 let resizeSticky=null,resizeStart=null;
-document.addEventListener("mousedown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; e.preventDefault(); e.stopPropagation(); });
-document.addEventListener("mousemove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
-document.addEventListener("mouseup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
+document.addEventListener("pointerdown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); e.stopPropagation(); });
+document.addEventListener("pointermove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
+document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
+
+/* ===== touch drag-and-drop (iPad/phone): HTML5 DnD doesn't fire on touch, so for touch
+   pointers we run a ghost + elementFromPoint drop. Desktop mouse keeps native DnD. ===== */
+(function(){
+  let TD=null, swallowClick=false;
+  function pick(t){
+    let e=t.closest&&t.closest(".cal-ev"); if(e&&e.dataset.eid)return {kind:"event",id:e.dataset.eid,el:e};
+    let c=t.closest&&t.closest('[data-act="dragContent"]'); if(c)return {kind:"content",id:c.dataset.id,el:c};
+    let s=t.closest&&t.closest('[data-act="dragSponsor"]'); if(s)return {kind:"sponsor",id:s.dataset.id,el:s};
+    return null;
+  }
+  function targetAt(x,y,kind){
+    const el=document.elementFromPoint(x,y); if(!el)return null;
+    if(kind==="event"){ const c=el.closest(".cal-cell[data-date]"); return c?{type:"calcell",el:c,date:c.dataset.date}:null; }
+    if(kind==="content"){ let t=el.closest('[data-act="dropStage"]'); if(t)return{type:"stage",el:t,stage:t.dataset.stage}; t=el.closest('[data-act="ccDrop"]'); if(t)return{type:"ccdate",el:t,date:t.dataset.date}; t=el.closest('[data-act="ccUnschedule"]'); if(t)return{type:"ccun",el:t}; return null; }
+    if(kind==="sponsor"){ const t=el.closest('[data-act="dropSponsor"]'); return t?{type:"sponsor",el:t,stage:t.dataset.stage}:null; }
+    return null;
+  }
+  async function applyDrop(d,tg){
+    if(d.kind==="event"&&tg.type==="calcell"){ await DB.saveDaily(SENTINEL,n=>{const evs=(n.calendarEvents||[]).slice();const t=evs.find(x=>x.id===d.id);if(t){if(t.endDate&&t.endDate>t.date){const dur=calDiff(t.date,t.endDate);t.date=tg.date;t.endDate=calAdd(tg.date,dur);}else t.date=tg.date;}return{...n,calendarEvents:evs};}); render(); return; }
+    if(d.kind==="content"){ if(tg.type==="stage"){const patch={stage:tg.stage};if(tg.stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(d.id,patch);}else if(tg.type==="ccdate"){await DB.updateContent(d.id,{scheduled_for:tg.date});}else if(tg.type==="ccun"){await DB.updateContent(d.id,{scheduled_for:null});} render(); return; }
+    if(d.kind==="sponsor"&&tg.type==="sponsor"){ await DB.updateSponsor(d.id,{stage:tg.stage}); render(); return; }
+  }
+  document.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse"||RO)return; const d=pick(e.target); if(!d)return; TD={...d,sx:e.clientX,sy:e.clientY,moved:false,ghost:null}; },true);
+  document.addEventListener("pointermove",e=>{ if(!TD||e.pointerType==="mouse")return; const dx=e.clientX-TD.sx,dy=e.clientY-TD.sy; if(!TD.moved){ if(Math.abs(dx)+Math.abs(dy)<8)return; TD.moved=true; const r=TD.el.getBoundingClientRect(); const g=TD.el.cloneNode(true); g.classList.add("drag-ghost"); g.style.cssText="position:fixed;left:0;top:0;z-index:9998;pointer-events:none;opacity:.85;box-shadow:0 8px 22px rgba(80,70,110,.35);width:"+r.width+"px;"; TD.ox=e.clientX-r.left; TD.oy=e.clientY-r.top; document.body.appendChild(g); TD.ghost=g; try{TD.el.setPointerCapture(e.pointerId);}catch(er){} } e.preventDefault(); TD.ghost.style.transform="translate("+(e.clientX-TD.ox)+"px,"+(e.clientY-TD.oy)+"px)"; document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); const tg=targetAt(e.clientX,e.clientY,TD.kind); if(tg&&tg.el)tg.el.classList.add("drop-hot"); },true);
+  document.addEventListener("pointerup",async e=>{ if(!TD||e.pointerType==="mouse")return; const d=TD; TD=null; if(d.ghost)d.ghost.remove(); document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); if(!d.moved)return; swallowClick=true; setTimeout(()=>swallowClick=false,350); const tg=targetAt(e.clientX,e.clientY,d.kind); if(tg)try{await applyDrop(d,tg);}catch(er){console.error(er);} },true);
+  document.addEventListener("pointercancel",()=>{ if(!TD)return; if(TD.ghost)TD.ghost.remove(); document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); TD=null; },true);
+  document.addEventListener("click",e=>{ if(swallowClick){ e.stopPropagation(); e.preventDefault(); swallowClick=false; } },true);
+})();
 document.addEventListener("keydown",async(e)=>{
   if(e.key!=="Enter")return; const t=e.target;
   if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
