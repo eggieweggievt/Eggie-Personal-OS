@@ -256,6 +256,20 @@
   .art-grid-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
   .art-ref{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);aspect-ratio:1;background:#faf6fb center/cover no-repeat;}
   .art-ref button{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:8px;width:22px;height:22px;cursor:pointer;font-size:12px;}
+  /* milanote-style mood board */
+  .mb-board{position:relative;background:#faf7fc;border:1px solid var(--line);border-radius:14px;overflow:hidden;height:520px;background-image:radial-gradient(#e7daf0 1px,transparent 1px);background-size:22px 22px;}
+  .mb-board.max{height:auto;flex:1;width:100%;border-radius:12px;}
+  .mb-full{position:fixed;inset:0;z-index:9993;background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:10px;}
+  .mb-card{position:absolute;border-radius:12px;box-shadow:0 4px 14px rgba(120,90,140,.18);border:1px solid var(--line);background:#fff;touch-action:none;cursor:grab;overflow:hidden;}
+  .mb-card:active{cursor:grabbing;}
+  .mb-card.img{background-size:cover;background-position:center;}
+  .mb-card.note{background:#fff7da;border-color:#f0e3a8;}
+  .mb-card.note textarea{width:100%;height:100%;border:none;background:none;resize:none;outline:none;padding:9px;font:inherit;font-size:12.5px;color:#5a5230;cursor:text;}
+  .mb-card.swatch{display:flex;align-items:flex-end;justify-content:center;}
+  .mb-card .mb-x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:7px;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:0;transition:opacity .12s;}
+  .mb-card:hover .mb-x{opacity:1;}
+  .mb-card .mb-rz{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;color:#b9a9c8;font-size:11px;display:grid;place-items:center;}
+  .mb-card .mb-hex{background:rgba(0,0,0,.4);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;margin-bottom:5px;}
   /* teleprompter overlay */
   .tp-overlay{position:fixed;inset:0;z-index:10000;background:#0b0b12;display:flex;flex-direction:column;color:#fff;font-family:var(--display);}
   .tp-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#15151f;border-bottom:1px solid #2a2a3a;flex-wrap:wrap;}
@@ -1798,14 +1812,48 @@ function genPalette(base,scheme){ const {h,s,l}=hex2hsl(base); const mk=(dh,dl,d
   }
 }
 function randHex(){ return hsl2hex(Math.random()*360, 42+Math.random()*42, 44+Math.random()*26); }
-function artGridSVG(type){
-  const W=800,H=600,hy=H*0.5,vx=W/2; const sk='stroke="#cdb1de" stroke-width="1"'; let L="";
-  if(type==="1"){ for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${hy}" ${sk}/><line x1="${x}" y1="${H}" x2="${vx}" y2="${hy}" ${sk}/>`; } for(let i=1;i<8;i++){ const r=i*42; L+=`<rect x="${vx-r*1.33}" y="${hy-r}" width="${r*2.66}" height="${r*2}" fill="none" ${sk}/>`; } }
-  else if(type==="2"){ const v1=-W*0.45,v2=W*1.45; for(let i=-8;i<=32;i++){ const y=(H/24)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk}/>`; } for(let i=2;i<=22;i+=2){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#e6d3ef" stroke-width="1"/>`; } }
-  else { const v1=-W*0.35,v2=W*1.35,v3y=H*1.7; for(let i=-6;i<=28;i++){ const y=(H/22)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk}/>`; } for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${v3y}" ${sk}/>`; } }
-  const horizon = type!=="3" ? `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="#ec7faf" stroke-width="1.5" stroke-dasharray="7 5"/>` : `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="#ec7faf" stroke-width="1.5" stroke-dasharray="7 5"/>`;
-  return `<svg id="artGridSvg" viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#fff;max-height:380px">${L}${horizon}</svg>`;
+/* clip an infinite line (point + direction) to the WxH box → two edge points */
+function clipSeg(px,py,vx,vy,W,H){ const ts=[]; const E=0.001;
+  if(Math.abs(vx)>E){ let t=(0-px)/vx,y=py+t*vy; if(y>=-E&&y<=H+E)ts.push([0,y]); t=(W-px)/vx; y=py+t*vy; if(y>=-E&&y<=H+E)ts.push([W,y]); }
+  if(Math.abs(vy)>E){ let t=(0-py)/vy,x=px+t*vx; if(x>=-E&&x<=W+E)ts.push([x,0]); t=(H-py)/vy; x=px+t*vx; if(x>=-E&&x<=W+E)ts.push([x,H]); }
+  return ts.slice(0,2);
 }
+function goldenSpiralPath(w,h){
+  const k=Math.log(1.6180339887)/(Math.PI/2); const thetaMax=4*Math.PI/2, steps=260, pts=[];
+  for(let i=0;i<=steps;i++){ const th=(i/steps)*thetaMax; const r=Math.exp(k*th); pts.push([r*Math.cos(th), r*Math.sin(th)]); }
+  let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9; pts.forEach(p=>{mnx=Math.min(mnx,p[0]);mny=Math.min(mny,p[1]);mxx=Math.max(mxx,p[0]);mxy=Math.max(mxy,p[1]);});
+  const sw=mxx-mnx, sh=mxy-mny, sc=Math.min(w/sw,h/sh)*0.98, ox=(w-sw*sc)/2-mnx*sc, oy=(h-sh*sc)/2-mny*sc;
+  return "M "+pts.map(p=>(p[0]*sc+ox).toFixed(1)+" "+(p[1]*sc+oy).toFixed(1)).join(" L ");
+}
+/* unified drawing-guide / composition-overlay SVG. type: thirds, phi, spiral, armature, radial, iso, persp1/2/3 */
+function artGuideSVG(type,W,H,opt){
+  opt=opt||{}; const sk='stroke="#b89ad0" stroke-width="1.1"', sk2='stroke="#dcc8ef" stroke-width="1"', accent='stroke="#ec7faf" stroke-width="1.6"'; let L="";
+  const phi1=0.381966, phi2=0.618034;
+  if(type==="thirds"){ [W/3,2*W/3].forEach(x=>L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" ${sk}/>`); [H/3,2*H/3].forEach(y=>L+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" ${sk}/>`); }
+  else if(type==="phi"){ [phi1*W,phi2*W].forEach(x=>L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" ${sk}/>`); [phi1*H,phi2*H].forEach(y=>L+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" ${sk}/>`); }
+  else if(type==="spiral"){ const o=opt.orient||0, fx=(o===1||o===3)?-1:1, fy=(o===2||o===3)?-1:1; const tx=fx<0?W:0, ty=fy<0?H:0; L+=`<rect x="0" y="0" width="${W}" height="${H}" fill="none" ${sk2}/><g transform="translate(${tx} ${ty}) scale(${fx} ${fy})"><path d="${goldenSpiralPath(W,H)}" fill="none" ${accent}/></g>`; [phi1*W,phi2*W].forEach(x=>L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" ${sk2}/>`); [phi1*H,phi2*H].forEach(y=>L+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" ${sk2}/>`); }
+  else if(type==="armature"){ L+=`<line x1="0" y1="0" x2="${W}" y2="${H}" ${sk}/><line x1="${W}" y1="0" x2="0" y2="${H}" ${sk}/>`;
+    const recip=(qx,qy,dx,dy)=>{ const v=[dy,-dx]; const s=clipSeg(qx,qy,v[0],v[1],W,H); if(s.length===2)L+=`<line x1="${s[0][0].toFixed(1)}" y1="${s[0][1].toFixed(1)}" x2="${s[1][0].toFixed(1)}" y2="${s[1][1].toFixed(1)}" ${sk2}/>`; };
+    recip(W,0,W,H); recip(0,H,W,H); recip(0,0,-W,H); recip(W,H,-W,H);
+    L+=`<line x1="${W/2}" y1="0" x2="${W/2}" y2="${H}" ${sk2}/><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" ${sk2}/>`; }
+  else if(type==="radial"){ const n=Math.max(4,Math.min(24,opt.spokes||12)), cx=W/2, cy=H/2; for(let i=0;i<n;i++){ const a=(i/n)*Math.PI*2, s=clipSeg(cx,cy,Math.cos(a),Math.sin(a),W,H); if(s.length===2)L+=`<line x1="${s[0][0].toFixed(1)}" y1="${s[0][1].toFixed(1)}" x2="${s[1][0].toFixed(1)}" y2="${s[1][1].toFixed(1)}" ${i%((n/4)|0||1)===0?sk:sk2}/>`; } const rr=Math.min(W,H)/2; for(let j=1;j<=3;j++)L+=`<circle cx="${cx}" cy="${cy}" r="${(rr/3)*j}" fill="none" ${sk2}/>`; L+=`<line x1="${cx}" y1="0" x2="${cx}" y2="${H}" ${accent}/><line x1="0" y1="${cy}" x2="${W}" y2="${cy}" ${accent}/>`; }
+  else if(type==="iso"){ const g=opt.gap||38, dx=H/Math.tan(Math.PI/6); // 30° isometric lines
+    for(let x=-Math.ceil(dx/g)*g;x<=W+dx;x+=g){ L+=`<line x1="${x}" y1="0" x2="${x+dx}" y2="${H}" ${sk2}/>`; L+=`<line x1="${x+dx}" y1="0" x2="${x}" y2="${H}" ${sk2}/>`; }
+    for(let x=0;x<=W;x+=g)L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#ecdff6" stroke-width="1"/>`; }
+  else if(type==="persp1"||type==="persp2"||type==="persp3"){ const hy=H*0.5,vx=W/2;
+    if(type==="persp1"){ for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${hy}" ${sk2}/><line x1="${x}" y1="${H}" x2="${vx}" y2="${hy}" ${sk2}/>`; } }
+    else if(type==="persp2"){ const v1=-W*0.45,v2=W*1.45; for(let i=-8;i<=32;i++){ const y=(H/24)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk2}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk2}/>`; } for(let i=2;i<=22;i+=2){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#ead7f2" stroke-width="1"/>`; } }
+    else { const v1=-W*0.35,v2=W*1.35,v3y=H*1.7; for(let i=-6;i<=28;i++){ const y=(H/22)*i; L+=`<line x1="${v1}" y1="${hy}" x2="${W}" y2="${y}" ${sk2}/><line x1="${v2}" y1="${hy}" x2="0" y2="${y}" ${sk2}/>`; } for(let i=0;i<=24;i++){ const x=(W/24)*i; L+=`<line x1="${x}" y1="0" x2="${vx}" y2="${v3y}" ${sk2}/>`; } }
+    L+=`<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" ${accent} stroke-dasharray="7 5"/>`; }
+  return `<svg id="artGridSvg" viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="display:block;background:#fff;max-height:420px;margin:0 auto">${L}<rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" fill="none" stroke="#d9c6ec" stroke-width="1"/></svg>`;
+}
+function mbCardHTML(c){
+  const pos=`left:${c.x||0}px;top:${c.y||0}px;width:${c.w||160}px;height:${c.h||160}px`;
+  if(c.type==="img") return `<div class="mb-card img" data-mb="${c.id}" style="${pos};background-image:url('${esc(c.url)}')"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+  if(c.type==="note") return `<div class="mb-card note" data-mb="${c.id}" style="${pos}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><textarea data-mbnote="${c.id}" placeholder="jot a note…">${esc(c.text||"")}</textarea><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+  return `<div class="mb-card swatch" data-mb="${c.id}" style="${pos};background:${esc(c.color||"#ec7faf")}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-hex" data-act="copyText" data-t="${esc(c.color||"")}">${esc(c.color||"")}</span><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+}
+async function mbUpdate(id,patch){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===id?{...c,...patch}:c)})); }
 async function renderArt(){
   const sent=await DB.daily(SENTINEL);
   if(!state.art)state.art={};
@@ -1830,9 +1878,18 @@ async function renderArt(){
   const sw=arr=>`<div class="art-sw">${arr.map(c=>`<button style="background:${c}" data-act="copyText" data-t="${c}">${c}</button>`).join("")}</div>`;
   const t=A.timer||{len:60,round:0,left:60}; const tLen=t.len||60;
   const lenSeg=[[30,"30s"],[60,"1m"],[120,"2m"],[300,"5m"]].map(([v,l])=>`<button data-act="artTimerLen" data-v="${v}" class="${tLen===v?'on':''}" ${t.on?'disabled':''}>${l}</button>`).join("");
-  const gridType=A.gridType||"1";
-  const gridSeg=[["1","1-point"],["2","2-point"],["3","3-point"]].map(([v,l])=>`<button data-act="artGridType" data-v="${v}" class="${gridType===v?'on':''}">${l}</button>`).join("");
-  const refs=sent.artRefs||[];
+  const GUIDES=[["thirds","Rule of thirds"],["phi","Phi grid · golden"],["spiral","Golden spiral 🐚"],["armature","Dynamic symmetry"],["radial","Radial / mirror"],["iso","Isometric"],["persp1","1-pt perspective"],["persp2","2-pt perspective"],["persp3","3-pt perspective"]];
+  const GHINT={thirds:"subject on the lines, interest at the crossings",phi:"like thirds but at the golden ratio — gentler, more natural",spiral:"lead the eye along the curl; the tightest curl is your focal point 🐚",armature:"classical 'sacred geometry' — place subjects on the diagonals & their crossings",radial:"for mandalas & symmetry — pink lines are your mirror axes",iso:"true isometric grid for pixel art, rooms & objects",persp1:"one vanishing point — hallways, roads, head-on rooms",persp2:"two vanishing points — corners of buildings & objects",persp3:"three points — dramatic up/down hero shots"};
+  const RATIOS=[["3:2",900,600],["1:1",720,720],["4:5",600,750],["16:9",960,540],["9:16",506,900]];
+  const gType=A.gType||"thirds", gRatio=A.gRatio||"3:2", rd=RATIOS.find(r=>r[0]===gRatio)||RATIOS[0], GW=rd[1], GH=rd[2], gOrient=A.gOrient||0, gSpokes=A.gSpokes||12;
+  const board=sent.artBoard||[], boardMax=!!A.boardMax;
+  const boardCtrls=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input class="inp" id="mbImgUrl" placeholder="paste an image URL…" style="flex:1;min-width:140px"/>
+      <button class="btn btn-pink" data-act="mbAddImage">🖼️ image</button>
+      <button class="btn" data-act="mbAddNote">📝 note</button>
+      <button class="btn" data-act="mbAddColor">🎨 colour</button>
+      <button class="btn" data-act="mbMax">${boardMax?'⤡ minimize':'⤢ expand'}</button></div>`;
+  const boardInner=`<div class="mb-board ${boardMax?'max':''}" id="moodBoard">${board.length?board.map(mbCardHTML).join(""):`<div class="label" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;opacity:.65;width:80%">your canvas is empty 🌸<br>add an image, note, or colour below — then drag things anywhere</div>`}</div>`;
   const res=sent.artResources||DEFAULT_ART_RES;
   const resTags={reference:"🧍",colour:"🎨",perspective:"📐",learn:"📚",other:"🔗"};
   return `<div style="max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
@@ -1904,15 +1961,22 @@ async function renderArt(){
       <p class="soft" style="font-size:11px;margin:10px 0 0">Tap any swatch to copy its hex 💗</p>
     </div>
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📐 Perspective grid</h2><div class="seg">${gridSeg}</div></div>
-      <div class="art-grid-wrap">${artGridSVG(gridType)}</div>
-      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-act="artGridDownload">⤓ download SVG</button><span class="soft" style="font-size:11.5px;align-self:center">drop it under your canvas as a guide layer · pink dashes = horizon line</span></div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📐 Drawing guides & overlays</h2></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <select class="inp" id="artGType" style="width:auto">${GUIDES.map(([v,l])=>`<option value="${v}" ${gType===v?'selected':''}>${l}</option>`).join("")}</select>
+        <span class="label">canvas</span><div class="seg">${RATIOS.map(r=>`<button data-act="artGRatio" data-v="${r[0]}" class="${gRatio===r[0]?'on':''}">${r[0]}</button>`).join("")}</div>
+        ${gType==="spiral"?`<button class="btn" data-act="artGOrient">↻ flip</button>`:""}
+        ${gType==="radial"?`<label class="art-chip">spokes <input type="range" id="artSpokes" min="4" max="24" value="${gSpokes}" style="width:84px"></label>`:""}
+      </div>
+      <div class="art-grid-wrap">${artGuideSVG(gType,GW,GH,{orient:gOrient,spokes:gSpokes})}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" data-act="artGridDownload">⤓ download SVG</button><span class="soft" style="font-size:11.5px;align-self:center">${GHINT[gType]||"drop it under your canvas as a guide layer"}</span></div>
     </div>
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🖼️ Reference board</h2></div>
-      <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="artRefUrl" placeholder="paste an image URL…" style="flex:1"/><button class="btn btn-pink" data-act="artRefAdd">＋ add</button></div>
-      ${refs.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">${refs.map(r=>`<div class="art-ref" style="background-image:url('${esc(r.url)}')"><button data-act="artRefDel" data-id="${r.id}">×</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Paste links to poses, colour refs, or art you love, and they'll live here as a little mood board. 🌸</p>`}
-    </div>
+    ${boardMax?`<div class="mb-full"><div style="display:flex;align-items:center;gap:8px"><h2 style="font-size:17px;font-family:var(--display);flex:1">🖼️ Mood board</h2></div>${boardCtrls}<div style="flex:1;min-height:0;display:flex">${boardInner}</div></div>`:`<div class="panel"><div class="card-head"><h2 style="font-size:17px">🖼️ Mood board</h2><span class="label">drag anything anywhere · auto-saves</span></div>
+      ${boardCtrls}
+      ${boardInner}
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Paste image links, jot notes, drop colour chips — then drag them into a layout. Grab the ◢ corner to resize. 🌸</p>
+    </div>`}
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">📚 Tools & tutorials</h2><span class="label">your own library</span></div>
       <div style="display:flex;flex-direction:column;gap:6px">${res.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${resTags[r.tag]||"🔗"}</span><a href="${esc(r.url)}" target="_blank" rel="noopener" class="grow" style="font-size:13px;color:var(--lav-deep);text-decoration:none">${esc(r.title)} ↗</a><button class="ft-ic" data-act="artResDel" data-id="${r.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>
@@ -2427,10 +2491,14 @@ document.addEventListener("click",async(e)=>{
   if(act==="artTimerStart"){ artTimerStart(); return; }
   if(act==="artTimerStop"){ artTimerStop(); return; }
   if(act==="artTimerSkip"){ artTimerSkip(); return; }
-  if(act==="artGridType"){ state.art=state.art||{}; state.art.gridType=el.dataset.v; render(); return; }
-  if(act==="artGridDownload"){ const s=document.getElementById("artGridSvg"); if(s){ const blob=new Blob([s.outerHTML],{type:"image/svg+xml"}); const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download="perspective-grid-"+(state.art.gridType||"1")+"pt.svg"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1000); toast("Grid saved 🎨"); } return; }
-  if(act==="artRefAdd"){ const i=document.getElementById("artRefUrl"); const u=(i&&i.value||"").trim(); if(!u){toast("Paste an image URL 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artRefs:[...(n.artRefs||[]),{id:uid(),url:u}]})); render(); return; }
-  if(act==="artRefDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artRefs:(n.artRefs||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="artGRatio"){ state.art=state.art||{}; state.art.gRatio=el.dataset.v; render(); return; }
+  if(act==="artGOrient"){ state.art=state.art||{}; state.art.gOrient=((state.art.gOrient||0)+1)%4; render(); return; }
+  if(act==="artGridDownload"){ const s=document.getElementById("artGridSvg"); if(s){ const blob=new Blob([s.outerHTML],{type:"image/svg+xml"}); const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download="guide-"+((state.art&&state.art.gType)||"thirds")+".svg"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1000); toast("Guide saved 🎨"); } return; }
+  if(act==="mbAddImage"){ const i=document.getElementById("mbImgUrl"); const u=(i&&i.value||"").trim(); if(!u){toast("Paste an image URL 🌸");return;} const ox=24+Math.floor(Math.random()*60), oy=24+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"img",url:u,x:ox,y:oy,w:180,h:180}]})); render(); return; }
+  if(act==="mbAddNote"){ const ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"note",text:"",x:ox,y:oy,w:170,h:120}]})); render(); return; }
+  if(act==="mbAddColor"){ const col=(state.art&&state.art.pBase)||randHex(); const ox=40+Math.floor(Math.random()*60), oy=40+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}]})); render(); return; }
+  if(act==="mbDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).filter(c=>c.id!==id)})); render(); return; }
+  if(act==="mbMax"){ state.art=state.art||{}; state.art.boardMax=!state.art.boardMax; render(); return; }
   if(act==="artResAdd"){ const ti=document.getElementById("artResTitle"), ui=document.getElementById("artResUrl"), tg=document.getElementById("artResTag"); const title=(ti&&ti.value||"").trim(), url=(ui&&ui.value||"").trim(); if(!title||!url){toast("Need a title and a link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artResources:[...((n.artResources)||DEFAULT_ART_RES),{id:uid(),title,url,tag:(tg&&tg.value)||"other"}]})); render(); return; }
   if(act==="artResDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artResources:((n.artResources)||DEFAULT_ART_RES).filter(x=>x.id!==id)})); render(); return; }
   if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
@@ -2561,7 +2629,10 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.id==="f_uploadFile"&&e.target.files&&e.target.files[0]){ const file=e.target.files[0], url=URL.createObjectURL(file), up=document.getElementById("f_upload"), prev=document.getElementById("f_uploadPrev"); if(up&&!up.value.trim())up.value=file.name; if(prev)prev.innerHTML=(file.type.indexOf("video")===0?`<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`:`<img src="${url}" style="max-width:170px;border-radius:10px" />`)+`<div class="soft" style="font-size:11px;margin-top:4px">preview only — paste a link above to keep it with the brief 🌸</div>`; }
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
-  if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); } });
+  if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
+  if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
+  if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
+  if(e.target&&e.target.dataset&&e.target.dataset.mbnote){ const idn=e.target.dataset.mbnote; DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===idn?{...c,text:e.target.value}:c)})).catch(()=>{}); } });
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
@@ -2572,6 +2643,29 @@ let resizeSticky=null,resizeStart=null;
 document.addEventListener("pointerdown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); e.stopPropagation(); });
 document.addEventListener("pointermove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
 document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
+
+/* ===== mood-board: freeform drag + resize of cards (Milanote-style) ===== */
+(function(){
+  let mbDrag=null, mbRz=null;
+  document.addEventListener("pointerdown",e=>{
+    if(RO)return;
+    const rzh=e.target.closest("[data-mbrz]");
+    if(rzh){ const card=rzh.closest(".mb-card"); if(!card)return; mbRz={id:rzh.getAttribute("data-mbrz"),card,sx:e.clientX,sy:e.clientY,w:card.offsetWidth,h:card.offsetHeight}; try{rzh.setPointerCapture(e.pointerId);}catch(_){}; e.preventDefault(); e.stopPropagation(); return; }
+    if(e.target.closest("textarea,button,.mb-hex"))return;
+    const card=e.target.closest(".mb-card"); if(!card)return;
+    const board=document.getElementById("moodBoard"); if(!board)return; const br=board.getBoundingClientRect(), cr=card.getBoundingClientRect();
+    mbDrag={id:card.getAttribute("data-mb"),card,br,ox:e.clientX-cr.left,oy:e.clientY-cr.top};
+    card.style.zIndex=60; try{card.setPointerCapture(e.pointerId);}catch(_){}; e.preventDefault();
+  },true);
+  document.addEventListener("pointermove",e=>{
+    if(mbRz){ const w=Math.max(56,mbRz.w+(e.clientX-mbRz.sx)), h=Math.max(44,mbRz.h+(e.clientY-mbRz.sy)); mbRz.card.style.width=w+"px"; mbRz.card.style.height=h+"px"; return; }
+    if(!mbDrag)return; let x=e.clientX-mbDrag.br.left-mbDrag.ox, y=e.clientY-mbDrag.br.top-mbDrag.oy; x=Math.max(0,Math.min(x,mbDrag.br.width-28)); y=Math.max(0,Math.min(y,mbDrag.br.height-18)); mbDrag.card.style.left=x+"px"; mbDrag.card.style.top=y+"px";
+  },true);
+  document.addEventListener("pointerup",async()=>{
+    if(mbRz){ const id=mbRz.id,w=parseInt(mbRz.card.style.width)||mbRz.card.offsetWidth,h=parseInt(mbRz.card.style.height)||mbRz.card.offsetHeight; mbRz=null; try{await mbUpdate(id,{w,h});}catch(_){}; render(); return; }
+    if(!mbDrag)return; const id=mbDrag.id,x=parseInt(mbDrag.card.style.left)||0,y=parseInt(mbDrag.card.style.top)||0; mbDrag=null; try{await mbUpdate(id,{x,y});}catch(_){}; render(); return;
+  },true);
+})();
 
 /* ===== touch drag-and-drop (iPad/phone): HTML5 DnD doesn't fire on touch, so for touch
    pointers we run a ghost + elementFromPoint drop. Desktop mouse keeps native DnD. ===== */
