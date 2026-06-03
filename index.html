@@ -62,16 +62,22 @@
   main{padding:18px;max-width:1380px;margin:0 auto;}
   .grid-home{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;}
   /* ---- modular dashboard ---- */
-  .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:16px;}
+  .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:16px;}
   .home-widget{position:relative;transition:transform .24s cubic-bezier(.2,.8,.25,1);}
+  .home-widget.resizing{transition:none;}
   #nav .tab{transition:transform .2s cubic-bezier(.2,.8,.25,1);}
   .drag-clone{position:fixed;left:0;top:0;z-index:9999;pointer-events:none;border-radius:18px;box-shadow:0 16px 38px rgba(120,80,120,.34);opacity:.97;}
   .home-widget.dragsrc,#nav .tab.dragsrc{visibility:hidden;}
   .home-widget.reordering{outline:2px dashed var(--lav);outline-offset:3px;border-radius:18px;}
   .home-widget.resizing{outline:2px dashed var(--pink);outline-offset:3px;border-radius:18px;}
-  .home-grip{position:absolute;top:9px;right:36px;z-index:6;border:none;background:rgba(255,255,255,.55);border-radius:8px;font-size:13px;line-height:1;color:#b3a6c0;cursor:grab;padding:3px 7px;opacity:.45;touch-action:none;user-select:none;}
-  .home-resize{position:absolute;top:9px;right:9px;z-index:6;border:none;background:rgba(255,255,255,.55);border-radius:8px;font-size:12px;line-height:1;color:#b3a6c0;cursor:ew-resize;padding:3px 6px;opacity:.45;touch-action:none;user-select:none;}
-  .home-grip:hover,.home-resize:hover,.home-widget:hover .home-grip,.home-widget:hover .home-resize{opacity:.95;}
+  .home-widget.min .panel,.home-widget.min section{max-height:50px;overflow:hidden;}
+  .home-tools{position:absolute;top:9px;right:9px;z-index:6;display:flex;gap:3px;}
+  .home-tools button{border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:11px;line-height:1;color:#9b8fae;cursor:pointer;padding:4px 6px;opacity:.4;touch-action:none;user-select:none;}
+  .home-tools .home-grip{cursor:grab;}
+  .home-widget:hover .home-tools button,.home-tools button:hover{opacity:.95;}
+  .home-resize{position:absolute;right:3px;bottom:3px;z-index:6;border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:12px;line-height:1;color:#9b8fae;cursor:nwse-resize;padding:2px 5px;opacity:.4;touch-action:none;user-select:none;}
+  .home-widget:hover .home-resize,.home-resize:hover{opacity:.95;}
+  .home-add{border:2px dashed var(--line);border-radius:16px;background:rgba(255,255,255,.4);color:var(--lav-deep);font-size:13px;cursor:pointer;min-height:80px;grid-column:span 4;grid-row:span 4;}
   #nav .tab{touch-action:none;user-select:none;-webkit-user-select:none;}
   #nav .tab.reordering{opacity:.55;}
   .col{display:flex;flex-direction:column;gap:16px;}
@@ -798,14 +804,34 @@ async function renderHome(){
   const DEF=["creator","session","goals","channel","habits","journal","schedule","ship","sponsors","pipeline","braindump"];
   let order=(goals.homeOrder&&goals.homeOrder.length)?goals.homeOrder.filter(k=>WIDGETS[k]):[];
   DEF.forEach(k=>{ if(!order.includes(k))order.push(k); });
-  const sizes=goals.homeSize||{};
-  return `<div class="grid-modular">${order.map(k=>{ const cols=Math.max(1,Math.min(3,sizes[k]||1)); return `<div class="home-widget" data-w="${k}" style="grid-column:span ${cols}"><span class="home-grip" title="drag to rearrange">⠿</span><span class="home-resize" title="drag to resize ↔">⇲</span>${WIDGETS[k]()}</div>`; }).join("")}</div>`;
+  const sizes=goals.homeSize||{}, mins=goals.homeMin||{}, hidden=goals.homeHidden||{};
+  const sz=k=>{ const r=sizes[k]; return (typeof r==="number")?{c:r}:(r||{}); };
+  const cells=order.filter(k=>!hidden[k]).map(k=>{ const s=sz(k); const cols=Math.max(3,s.c||4); const min=!!mins[k];
+    return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" style="grid-column:span ${cols}">
+      <div class="home-tools"><button class="home-grip" title="drag to move">⠿</button><button data-act="homeMin" data-w="${k}" title="${min?'expand':'minimize'}">${min?'＋':'–'}</button><button data-act="homeHide" data-w="${k}" title="remove">✕</button></div>
+      <span class="home-resize" title="drag to resize ⤡">⤡</span>
+      ${WIDGETS[k]()}</div>`; }).join("");
+  const hiddenN=Object.keys(hidden).filter(k=>hidden[k]&&WIDGETS[k]).length;
+  return `<div class="grid-modular">${cells}<button class="home-add" data-act="manageCards">＋ cards${hiddenN?` · ${hiddenN} hidden`:""}</button></div>`;
 }
-/* JS masonry: pack each widget's row-span to its content height so there are no gaps */
+/* JS masonry: pack each widget's row-span to its content (or its set/min height) so there are no gaps */
 function layoutHome(){
   const grid=document.querySelector(".grid-modular"); if(!grid)return;
   const rowH=8, gap=16;
-  grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return; const h=panel.getBoundingClientRect().height; if(h>0)w.style.gridRowEnd="span "+Math.max(1,Math.ceil((h+gap)/(rowH+gap))); });
+  grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return;
+    let h;
+    if(w.classList.contains("min")){ h=50; }
+    else { const sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; h=panel.getBoundingClientRect().height; }
+    if(h>0)w.style.gridRowEnd="span "+Math.max(1,Math.ceil((h+gap)/(rowH+gap)));
+  });
+}
+const WLABEL={creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
+async function manageCardsModal(){
+  const sent=await DB.daily(SENTINEL); const hidden=sent.homeHidden||{};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🧩 Dashboard cards</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle which cards show on your Home. You can also minimize or move them right on the dashboard. 🌸</p>
+    ${Object.keys(WLABEL).map(k=>`<button class="hbtn ${hidden[k]?'':'done'}" data-act="cardToggle" data-w="${k}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:6px"><span class="check ${hidden[k]?'':'on'}"></span><span class="grow" style="font-size:12.5px;text-align:left">${WLABEL[k]}</span></button>`).join("")}
+  </div></div>`;
 }
 function cardCreator(day){
   const energy=day.energy||"medium", streamDay=!!day.streamDay;
@@ -1975,7 +2001,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -2078,7 +2104,11 @@ document.addEventListener("click",async(e)=>{
   if(act==="editConfig")return configModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
-  if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,homeOrder:[],homeSize:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
+  if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
+  if(act==="homeMin"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeMin:Object.assign({},n.homeMin||{},{[k]:!((n.homeMin||{})[k])})})); render(); return; }
+  if(act==="homeHide"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeHidden:Object.assign({},n.homeHidden||{},{[k]:true})})); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
+  if(act==="manageCards")return manageCardsModal();
+  if(act==="cardToggle"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>{const hid=Object.assign({},n.homeHidden||{}); hid[k]=!hid[k]; const o=(n.homeOrder||[]).slice(); if(!hid[k]&&!o.includes(k))o.push(k); return {...n,homeHidden:hid,homeOrder:o};}); manageCardsModal(); render(); return; }
   if(act==="openNote")return openNote(id);
   if(act==="noteToContent"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){await DB.addContent({title:c.raw_text.slice(0,120),stage:"idea",priority:60});} document.getElementById("modal").innerHTML=""; toast("Added to content 🎬"); render(); return; }
   if(act==="noteSticky"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c)addSticky(c.raw_text); document.getElementById("modal").innerHTML=""; toast("Pinned 📌"); return; }
@@ -2319,12 +2349,13 @@ render();
 })();
 /* ===== modular drag-reorder + resize: iOS-style lift, follow, slide, settle ===== */
 (function(){
-  let d=null, sc=false;
+  let d=null, sc=false, rafL=0;
   const gridEl=()=>document.querySelector(".grid-modular");
-  function maxCols(){ const g=gridEl(); return g?Math.max(1,Math.min(3,Math.floor(g.clientWidth/290))):1; }
+  function maxCols(){ const g=gridEl(); return g?Math.max(3,Math.min(16,Math.floor(g.clientWidth/88))):3; }
+  function relayoutSoon(){ if(rafL)return; rafL=requestAnimationFrame(()=>{ rafL=0; try{layoutHome();}catch(_){} }); }
   function commitTabs(order){ try{ localStorage.setItem("tab-order",JSON.stringify(order)); }catch(e){} }
   function commitHomeOrder(order){ DB.saveDaily(SENTINEL,n=>({...n,homeOrder:order})).catch(()=>{}); }
-  function commitHomeSize(key,cols){ DB.saveDaily(SENTINEL,n=>({...n,homeSize:Object.assign({},n.homeSize||{},{[key]:cols})})).catch(()=>{}); }
+  function commitHomeSize(key,val){ DB.saveDaily(SENTINEL,n=>({...n,homeSize:Object.assign({},n.homeSize||{},{[key]:val})})).catch(()=>{}); }
   function moveGhost(x,y,scale){ if(d&&d.ghost)d.ghost.style.transform="translate("+(x-d.gx)+"px,"+(y-d.gy)+"px) scale("+(scale||1.04)+")"; }
   /* FLIP: smoothly slide siblings into their new spots after a DOM reorder */
   function flipReorder(c, mutate){
@@ -2335,7 +2366,7 @@ render();
   document.addEventListener("pointerdown",e=>{
     if(RO)return;
     const rez=e.target.closest(".home-resize");
-    if(rez){ const item=rez.closest(".home-widget"); if(item){ const r=item.getBoundingClientRect(), cur=parseInt(((item.style.gridColumn||"").match(/span (\d+)/)||[])[1]||"1"); d={mode:"resize",item,key:item.getAttribute("data-w"),startW:r.width,startCols:cur,cols:cur,sx:e.clientX,sy:e.clientY,moved:false,cap:rez,pid:e.pointerId}; try{rez.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
+    if(rez){ const item=rez.closest(".home-widget"); if(item){ const r=item.getBoundingClientRect(), cur=parseInt(((item.style.gridColumn||"").match(/span (\d+)/)||[])[1]||"1"), panel=item.querySelector(".panel,section"), startH=panel?panel.getBoundingClientRect().height:160; d={mode:"resize",item,panel,key:item.getAttribute("data-w"),startW:r.width,startCols:cur,cols:cur,startH,h:startH,sx:e.clientX,sy:e.clientY,moved:false,cap:rez,pid:e.pointerId}; try{rez.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
     const grip=e.target.closest(".home-grip");
     if(grip){ const item=grip.closest(".home-widget"), c=item&&item.parentElement; if(item&&c){ d={mode:"order",item,c,itemSel:".home-widget",key:"data-w",commit:commitHomeOrder,horiz:false,sx:e.clientX,sy:e.clientY,moved:false,cap:grip,pid:e.pointerId}; try{grip.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
     const tab=e.target.closest("#nav .tab");
@@ -2345,10 +2376,10 @@ render();
     if(!d)return;
     if(!d.moved){ if(Math.abs(e.clientX-d.sx)+Math.abs(e.clientY-d.sy)<6)return; d.moved=true;
       if(d.mode==="resize"){ d.item.classList.add("resizing"); }
-      else { const r=d.item.getBoundingClientRect(); d.gx=d.sx-r.left; d.gy=d.sy-r.top; const g=d.item.cloneNode(true); g.classList.add("drag-clone"); g.classList.remove("reordering","dragsrc"); g.style.width=r.width+"px"; g.style.height=r.height+"px"; g.querySelectorAll(".home-grip,.home-resize").forEach(x=>x.remove()); document.body.appendChild(g); d.ghost=g; d.item.classList.add("dragsrc"); moveGhost(d.sx,d.sy); }
+      else { const r=d.item.getBoundingClientRect(); d.gx=d.sx-r.left; d.gy=d.sy-r.top; const g=d.item.cloneNode(true); g.classList.add("drag-clone"); g.classList.remove("reordering","dragsrc"); g.style.width=r.width+"px"; g.style.height=r.height+"px"; g.querySelectorAll(".home-tools,.home-resize").forEach(x=>x.remove()); document.body.appendChild(g); d.ghost=g; d.item.classList.add("dragsrc"); moveGhost(d.sx,d.sy); }
     }
     e.preventDefault();
-    if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(1,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; try{layoutHome();}catch(_){} } return; }
+    if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(3,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; } const nh=Math.max(120,Math.round(d.startH+(e.clientY-d.sy))); d.h=nh; if(d.panel)d.panel.style.minHeight=nh+"px"; d.item.dataset.h=nh; relayoutSoon(); return; }
     moveGhost(e.clientX,e.clientY);
     const el=document.elementFromPoint(e.clientX,e.clientY), over=el&&el.closest(d.itemSel);
     if(over&&over!==d.item&&over.parentElement===d.c){ const r=over.getBoundingClientRect(), before=d.horiz?(e.clientX<r.left+r.width/2):(e.clientY<r.top+r.height/2); const ref=before?over:over.nextSibling; if(ref!==d.item){ flipReorder(d.c, ()=>d.c.insertBefore(d.item, ref)); } }
@@ -2356,7 +2387,7 @@ render();
   document.addEventListener("pointerup",()=>{
     if(!d)return; const x=d; d=null;
     try{x.cap.releasePointerCapture(x.pid);}catch(_){}
-    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitHomeSize(x.key,x.cols); try{layoutHome();}catch(_){} } return; }
+    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitHomeSize(x.key,{c:x.cols,h:Math.round(x.h)}); try{layoutHome();}catch(_){} } return; }
     if(!x.moved){ return; }
     sc=true; setTimeout(()=>sc=false,350);
     // settle the floating clone into the placeholder's final spot, then reveal
