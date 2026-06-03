@@ -643,7 +643,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
@@ -833,6 +833,7 @@ async function render(){
     else if(state.tab==="pitch") html=await renderPitch();
     else if(state.tab==="review") html=await renderReview();
     else if(state.tab==="eugene") html=renderEugene();
+    else if(state.tab==="settings") html=await renderSettings();
     view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
@@ -1822,20 +1823,72 @@ async function medsModal(){
 }
 async function saveMed(){ const name=document.getElementById("mName").value.trim(); if(!name)return; const meds=await loadMeds(); meds.push({id:"m"+uid().slice(0,8),name,dose:document.getElementById("mDose").value.trim(),time:document.getElementById("mTime").value.trim()}); await saveMeds(meds); medsModal(); }
 async function delMed(id){ const meds=(await loadMeds()).filter(m=>m.id!==id); await saveMeds(meds); medsModal(); }
-function settingsModal(){
+function settingsModal(){ setTab("settings"); }   // the old modal grew up into a full page
+async function renderSettings(){
+  const sent=await DB.daily(SENTINEL);
+  const c=CONFIG.creator;
   const calm=localStorage.getItem("eggie-calm")==="1", big=localStorage.getItem("eggie-text")==="1", foc=localStorage.getItem("eggie-focus")==="1";
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%"><div class="card-head"><h3 style="font-size:16px">⚙️ Comfort + display</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <p class="soft" style="font-size:12px;margin:0 0 12px">Set it up so it feels calm for your brain. These stay on this device. 🌸</p>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="chiptog ${calm?'on':''}" data-act="setCalm"><span class="check ${calm?'on':''}"></span>🌙 Calm mode — stop motion + soften colours</button>
-      <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
-      <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
+  const locked=localStorage.getItem("layout-locked")==="1", speak=localStorage.getItem("eugene-speak")==="1";
+  const facts=sent.eugeneFacts||[];
+  const rc=Object.entries(CONFIG.rateCard).map(([k,v])=>`${k} = ${v}`).join("\n");
+  const needPerm=(window.Notification&&Notification.permission!=="granted");
+  return `<div style="max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2 style="font-size:22px;font-family:var(--display)">⚙️ Settings</h2><span class="label">everything in one cozy place 🌸</span></div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🌙 Comfort & display</h2><span class="label">stays on this device</span></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="chiptog ${calm?'on':''}" data-act="setCalm"><span class="check ${calm?'on':''}"></span>🌙 Calm mode — stop motion + soften colours</button>
+        <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
+        <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Your device's "reduce motion" setting is always honoured too.</p>
     </div>
-    <button class="btn" data-act="editConfig" style="margin-top:14px;width:100%">✏️ Your details & config</button>
-    <button class="btn" data-act="resetLayout" style="margin-top:8px;width:100%">↺ Reset layout (tabs + dashboard)</button>
-    <button class="btn" data-act="exportData" style="margin-top:8px;width:100%">⬇️ Export all my data (backup)</button>
-    <p class="soft" style="font-size:11.5px;margin-top:12px">Your device's "reduce motion" setting is always honoured too.</p>
-  </div></div>`;
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🐙 You & your brand</h2><span class="label">saved to your account</span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:140px"><div class="label">Name</div><input class="inp" id="cf_name" value="${esc(c.name)}"/></div><div class="grow" style="min-width:140px"><div class="label">Handle</div><input class="inp" id="cf_handle" value="${esc(c.handle)}"/></div></div>
+      <div class="label" style="margin-top:8px">Niche (one sentence)</div><input class="inp" id="cf_niche" value="${esc(c.niche||"")}"/>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:140px"><div class="label">Email</div><input class="inp" id="cf_email" value="${esc(c.email||"")}"/></div><div style="width:100px"><div class="label">Region</div><input class="inp" id="cf_region" value="${esc(c.region||"")}"/></div></div>
+      <button class="btn btn-pink" data-act="saveConfig" style="margin-top:12px">💾 save</button>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📺 Channels & money</h2></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><div style="width:80px"><div class="label">Tax %</div><input class="inp num" id="cf_tax" type="number" value="${Math.round((CONFIG.taxRate||0)*100)}"/></div><div class="grow" style="min-width:120px"><div class="label">Twitch handle</div><input class="inp" id="cf_twitch" value="${esc(CONFIG.twitchHandle||"")}"/></div><div class="grow" style="min-width:120px"><div class="label">Discord invite</div><input class="inp" id="cf_discord" value="${esc(CONFIG.discordInvite||"")}"/></div></div>
+      <div class="label" style="margin-top:8px">YouTube channel ID</div><input class="inp" id="cf_yt" value="${esc(CONFIG.youtubeChannelId||"")}"/>
+      <div class="label" style="margin-top:8px">Rate card (one per line: Name = price)</div><textarea class="inp mono" id="cf_rate" rows="4">${esc(rc)}</textarea>
+      <div class="label" style="margin-top:8px">Links / sponsor footer (used in descriptions)</div><textarea class="inp" id="cf_footer" rows="5">${esc(CONFIG.descFooter||"")}</textarea>
+      <button class="btn btn-pink" data-act="saveConfig" style="margin-top:12px">💾 save</button>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🐙 Eugene</h2><span class="label">your assistant</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="chiptog ${speak?'on':''}" data-act="euSpeak"><span class="check ${speak?'on':''}"></span>🔊 read replies aloud</button>
+        <button class="btn" data-act="eugeneClear">🧹 clear conversation memory</button>
+      </div>
+      <div class="label" style="margin:12px 0 6px">🧠 remembered facts</div>
+      ${facts.length?facts.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(f)}</span><button class="ft-ic" data-act="factDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">Nothing yet — tell Eugene "remember that…" and it'll live here.</p>`}
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏰ Notifications</h2></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable browser pings</button>`:`<span class="chip on">🔔 pings enabled</span>`}
+        <button class="btn" data-act="pushSub">📲 push to this device</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Pings fire while the OS is open · 📲 push and 💌 email reach you even when it's closed. Reminders live on the Planner tab.</p>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🧩 Layout</h2></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="chiptog ${locked?'on':''}" data-act="toggleLock"><span class="check ${locked?'on':''}"></span>${locked?'🔒 layout locked':'🔓 layout unlocked'}</button>
+        <button class="btn" data-act="resetLayout">↺ reset layout (tabs + cards)</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Lock keeps cards from wiggling while you tap · reset puts every page back to its defaults.</p>
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">💾 Data</h2><span class="chip ${DEMO?'demo':'on'}">${DEMO?'demo data':'● live · synced'}</span></div>
+      <button class="btn" data-act="exportData">⬇️ export all my data (backup)</button>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Connected to ${esc(CONFIG.url)}${RO?" · read-only right now":""}.</p>
+    </div>
+  </div>`;
 }
 
 /* ===================== WEEKLY REVIEW ===================== */
@@ -2200,6 +2253,35 @@ async function pushSubscribe(){
     render();
   }catch(e){ console.error(e); toast("Push setup hiccuped: "+(e.message||e)+" 🌸"); }
 }
+
+/* auto-maintain push: if this device has EVER granted notifications, silently (re)subscribe on boot —
+   push is effectively on by default once permission exists. Browsers forbid asking without a tap,
+   so brand-new devices get one gentle nudge toward the 📲 button instead. */
+async function pushAutoSubscribe(){
+  try{
+    if(DEMO||!SB||!("serviceWorker" in navigator)||!("PushManager" in window)||!window.Notification) return;
+    if(Notification.permission!=="granted"){
+      if(Notification.permission==="default" && !localStorage.getItem("push-nudged")){
+        localStorage.setItem("push-nudged","1");
+        setTimeout(function(){ try{ window.showPetBubble&&showPetBubble("⏰ want reminders even when this tab is closed? ⚙️ Settings → 📲 push to this device 💗",16000); }catch(e){} },9000);
+      }
+      return;
+    }
+    const reg=await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      let pub=""; try{ const r=await fetch(CONFIG.url+"/functions/v1/reminders",{headers:{apikey:CONFIG.anonKey}}); pub=(await r.json()).publicKey||""; }catch(e){}
+      if(!pub) return;
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pub)});
+    }
+    const j=sub.toJSON();
+    const sent=await DB.daily(SENTINEL);
+    if(!(sent.pushSubs||[]).some(s=>s.endpoint===j.endpoint)){
+      await DB.saveDaily(SENTINEL,n=>{ const subs=(n.pushSubs||[]).filter(s=>s.endpoint!==j.endpoint); subs.push({endpoint:j.endpoint,keys:j.keys,ua:(navigator.userAgent||"").slice(0,90),added:TODAY}); return {...n,pushSubs:subs}; });
+    }
+  }catch(e){}
+}
+setTimeout(pushAutoSubscribe, 3500);
 
 /* Eugene voice input — separate recognizer so it never clashes with the Script Writer's */
 let EUREC=null, euRecOn=false;
@@ -2740,7 +2822,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,layouts:{},homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
   if(act==="homeMin"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.min=Object.assign({},L.min,{[k]:!L.min[k]});}); render(); return; }
   if(act==="homeHide"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.hidden=Object.assign({},L.hidden,{[k]:true});}); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
-  if(act==="toggleLock"){ localStorage.setItem("layout-locked",localStorage.getItem("layout-locked")==="1"?"0":"1"); applySettings(); toast(localStorage.getItem("layout-locked")==="1"?"Layout locked 🔒":"Layout unlocked 🔓"); return; }
+  if(act==="toggleLock"){ localStorage.setItem("layout-locked",localStorage.getItem("layout-locked")==="1"?"0":"1"); applySettings(); toast(localStorage.getItem("layout-locked")==="1"?"Layout locked 🔒":"Layout unlocked 🔓"); if(state.tab==="settings")render(); return; }
   if(act==="manageCards"){ const g=el.closest(".grid-modular"); let labels=WLABEL; try{labels=JSON.parse(g.dataset.labels);}catch(e){} return manageCardsModal(g?g.dataset.tab:"home", labels); }
   if(act==="cardToggle"){ const k=el.dataset.w; await setLayout(_mcTab,L=>{ L.hidden=Object.assign({},L.hidden); L.hidden[k]=!L.hidden[k]; if(!L.hidden[k]&&!L.order.includes(k))L.order=[...L.order,k]; }); SENT=await DB.daily(SENTINEL); manageCardsModal(_mcTab,_mcLabels); render(); return; }
   if(act==="openNote")return openNote(id);
@@ -2765,9 +2847,10 @@ document.addEventListener("click",async(e)=>{
   if(act==="addSlot")return addSlot();
   if(act==="delSlot")return delSlot(id);
   if(act==="saveJournal"){ const v=document.getElementById("journalBox").value; await DB.saveDaily(TODAY,n=>({...n,journal:v})); toast("Journaled 🌙"); return; }
-  if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); settingsModal(); return; }
-  if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); settingsModal(); return; }
-  if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); settingsModal(); render(); return; }
+  if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); render(); return; }
+  if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
+  if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); render(); return; }
+  if(act==="factDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:(n.eugeneFacts||[]).filter((_,i2)=>i2!==ix)})); render(); return; }
   if(act==="exitFocus"){ localStorage.setItem("eggie-focus","0"); applySettings(); render(); return; }
   if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=v; return {...n,health:h};}); render(); }
   if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=Math.max(0,(Number(h[f])||0)+d); return {...n,health:h};}); render(); }

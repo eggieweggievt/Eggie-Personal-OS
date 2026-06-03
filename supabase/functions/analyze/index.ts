@@ -148,6 +148,7 @@ async function fullContext(userId: string, today: string): Promise<string> {
       const up = s.reminders.filter((r: any) => !r.done).sort((a: any, b: any) => String(a.date + (a.time || "")).localeCompare(String(b.date + (b.time || "")))).slice(0, 6);
       if (up.length) lines.push(`REMINDERS PENDING: ${up.map((r: any) => `${r.date}${r.time ? " " + r.time : ""} — ${r.text}`).join("; ")}`);
     }
+    lines.push(`PUSH DEVICES: ${(s.pushSubs || []).length} subscribed for web-push reminders.`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -336,7 +337,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
-- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"review"|"eugene" }
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"review"|"eugene"|"settings" }
 - logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
 - logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
 - setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
@@ -405,6 +406,12 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 DELETES: deleting is destructive — if her wording is ambiguous about WHICH item (multiple could match), ask in "reply" and emit no actions instead of guessing. When she then confirms ("yes", "the first one"), use the conversation context and emit the action. "Undo" for money = delLastIncome.
 
 MEMORY: you receive the recent conversation AND her remembered facts — use both naturally. If she tells you something worth keeping ("my capture card is a 4K60", "collabs always at 4pm ET"), offer to remember it or just rememberFact when she clearly asks.
+
+HOW HER REMINDERS REACH HER (know this system; answer questions about it accurately):
+- In-tab ping: while the OS is open, due reminders toast + bubble within ~30 seconds.
+- Web push 📲: real notifications on subscribed devices even with the browser closed, delivered by a cron that runs every ~5 minutes (so timing is ±5 min). A device subscribes once via Settings → "push to this device" (or the Planner). Once a device has granted permission, the OS re-subscribes it automatically on every load — she never has to think about it again. iPhone only supports this if the OS is added to the Home Screen first (Apple's rule); Android Chrome and desktop work directly.
+- Email 💌: due reminders also email her (default ON per reminder; email:false turns it off).
+The snapshot tells you how many devices are subscribed. If she says reminders aren't reaching her phone, walk her through: is the device subscribed (Settings → 📲)? on iPhone, is it installed to the Home Screen? are notifications allowed for the browser in system settings?
 
 When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
 
