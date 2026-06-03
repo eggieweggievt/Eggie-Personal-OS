@@ -2066,6 +2066,7 @@ function renderEugene(){
       <div class="eu-head">
         <div class="eu-av"></div>
         <div style="flex:1"><div style="font-family:var(--display);font-size:17px">Eugene</div><div class="label" style="margin-top:1px">your octopus helper · web-connected 🌐</div></div>
+        <button class="btn" data-act="euSpeak" title="read replies aloud">${(function(){try{return localStorage.getItem("eugene-speak")==="1"}catch(e){return false}})()?'🔊':'🔇'}</button>
         <button class="btn" data-act="eugeneAsksToggle" title="example questions">💡</button>
         <button class="btn" data-act="eugeneClear" title="clear chat">🧹</button>
         <button class="btn btn-pink" data-act="eugeneMax" title="${max?'minimize':'maximize'}">${max?'⤡ minimize':'⤢ maximize'}</button>
@@ -2074,6 +2075,7 @@ function renderEugene(){
       ${showAsks?asks:""}
       <div class="eu-input">
         <input class="inp" id="euInput" placeholder="ask Eugene anything…" ${state.eugeneBusy?"disabled":""} />
+        <button class="btn" id="euMicBtn" data-act="euMic" title="talk instead of type">${euRecOn?'⏹':'🎙️'}</button>
         <button class="btn btn-pink" data-act="eugeneSend" ${state.eugeneBusy?"disabled":""}>send</button>
       </div>
     </div>`;
@@ -2084,6 +2086,21 @@ function renderEugene(){
       <span class="label">plain talk · no asterisks · web + your whole OS</span>
     </div>
     ${card}</div>`;
+}
+
+/* Eugene voice input — separate recognizer so it never clashes with the Script Writer's */
+let EUREC=null, euRecOn=false;
+function euMicToggle(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast("Voice needs Chrome or Edge on desktop 🌸"); return; }
+  const btn=document.getElementById("euMicBtn");
+  if(euRecOn){ euRecOn=false; try{EUREC&&EUREC.stop();}catch(e){} if(btn)btn.textContent="🎙️"; return; }
+  try{ EUREC=new SR(); }catch(e){ toast("Couldn't start the mic 🌸"); return; }
+  EUREC.lang="en-US"; EUREC.continuous=true; EUREC.interimResults=true; EUREC._fin="";
+  EUREC.onresult=function(e){ let interim="",fin=""; for(let i=e.resultIndex;i<e.results.length;i++){ const tx=e.results[i][0].transcript; if(e.results[i].isFinal)fin+=tx; else interim+=tx; } if(fin)EUREC._fin=(EUREC._fin+" "+fin).trim(); const inp=document.getElementById("euInput"); if(inp)inp.value=(EUREC._fin+(interim?" "+interim:"")).trim(); };
+  EUREC.onerror=function(e){ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ toast("Let the browser use your mic 🌸"); euRecOn=false; const b=document.getElementById("euMicBtn"); if(b)b.textContent="🎙️"; } };
+  EUREC.onend=function(){ if(euRecOn){ try{EUREC.start();}catch(e){} } };
+  try{ EUREC.start(); euRecOn=true; if(btn)btn.textContent="⏹"; }catch(e){ toast("Mic busy — try again 🌸"); }
 }
 
 /* ===================== TELEPROMPTER ===================== */
@@ -2548,8 +2565,11 @@ document.addEventListener("click",async(e)=>{
   if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
   if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; render(); return; }
   if(act==="eugeneAsksToggle"){ state.eugeneShowAsks=!state.eugeneShowAsks; render(); return; }
+  if(act==="euMic"){ euMicToggle(); return; }
+  if(act==="euSpeak"){ let on=false; try{ on=localStorage.getItem("eugene-speak")==="1"; localStorage.setItem("eugene-speak",on?"0":"1"); }catch(e){} if(!on){ try{ const u=new SpeechSynthesisUtterance("Hi! I'll read my replies out loud now."); u.pitch=1.1; speechSynthesis.speak(u); }catch(e){} } else { try{speechSynthesis.cancel();}catch(e){} } render(); return; }
   if(act==="eugeneSend"||act==="eugeneAsk"){
     if(state.eugeneBusy) return;
+    if(euRecOn) euMicToggle();
     const q = act==="eugeneAsk" ? (el.dataset.q||"") : ((document.getElementById("euInput")||{}).value||"").trim();
     if(!q) return;
     state.eugeneLog=[...(state.eugeneLog||[]),{role:"me",text:q}]; state.eugeneBusy=true; state.eugeneShowAsks=false; render();
@@ -3274,6 +3294,26 @@ render();
         STICKIES=STICKIES.filter(function(s){return s.id!==st.id;}); saveStickies(); renderStickies();
         return "🗑 peeled off that sticky note";
       }
+      case "rememberFact":
+        if(!a.fact) return "";
+        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push(String(a.fact).slice(0,300)); if(f.length>40)f=f.slice(-40); return Object.assign({},n,{eugeneFacts:f}); });
+        return "🧠 got it — I'll remember that";
+      case "forgetFact": {
+        var nm=(a.hint||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).filter(function(x){ if(!hit&&String(x).toLowerCase().indexOf(nm)>=0){hit=x;return false;} return true; }); return Object.assign({},n,{eugeneFacts:f}); });
+        return hit? "🧠 forgotten" : "I don't have a memory like that 🌸";
+      }
+      case "optimizeTitle": {
+        try{
+          var r2=await aiCall("optimize",{kind:"video",title:a.title||"",topic:a.topic||"",format:a.format||"long",platform:a.platform||"youtube",footer:(CONFIG.descFooter||"")});
+          if(r2&&r2._needsBackend) return "the optimizer needs the backend deployed first 🌸";
+          if(r2&&r2.error) return "optimizer hiccuped: "+r2.error;
+          var lines=["🎯 title score: "+(r2.titleScore!=null?r2.titleScore+"/100":"—")+(r2.titleWhy?" — "+r2.titleWhy:"")];
+          (r2.titles||[]).slice(0,4).forEach(function(t,ix){ lines.push((ix+1)+". "+t); });
+          if(r2.hashtags&&r2.hashtags.length) lines.push("tags: "+r2.hashtags.join(" "));
+          return lines.join("\n");
+        }catch(e){ return "optimizer hiccuped: "+(e.message||e); }
+      }
       default: return "";
     }
   }
@@ -3290,8 +3330,17 @@ render();
     .replace(/[*_`#>~|]/g,"")              // any stray md symbols
     .replace(/\n{3,}/g,"\n\n")
     .trim(); }
+  window.EUGENE_HIST = window.EUGENE_HIST || [];   // rolling conversation memory shared by the bubble chat + the Ask tab
+  function eugeneSpeak(text){
+    try{ if(localStorage.getItem("eugene-speak")!=="1"||!window.speechSynthesis) return;
+      var clean=String(text).replace(/[\u{1F000}-\u{1FAFF}]|[☀-➿]|[←-⇿]/gu,"").replace(/\s+/g," ").trim();
+      if(!clean) return; var u=new SpeechSynthesisUtterance(clean.slice(0,500)); u.rate=1.04; u.pitch=1.1;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    }catch(e){}
+  }
   async function runAgent(q){
-    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET});
+    var hist=window.EUGENE_HIST.slice(-10);
+    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist});
     if(r && r._needsBackend) return "I can actually run things once the analyze function is deployed + demo mode is off 🐙 — redeploy and I'll be your hands! 🌸";
     if(r && r.error) throw new Error(r.error);
     var acts = Array.isArray(r.actions)? r.actions : [];
@@ -3300,6 +3349,9 @@ render();
     if(did.length){ try{ render(); }catch(e){} }
     var reply = plainText(r.reply) || (did.length? "done!" : "okay!");
     if(did.length) reply += "\n\n"+did.join("\n");
+    window.EUGENE_HIST.push({role:"me",text:q},{role:"pet",text:reply});
+    if(window.EUGENE_HIST.length>24) window.EUGENE_HIST=window.EUGENE_HIST.slice(-24);
+    eugeneSpeak(reply);
     return reply;
   }
   window.eugeneAsk = function(q){ return runAgent(q); };   // lets the 🐙 Ask Eugene tab share the same brain
@@ -3330,6 +3382,27 @@ render();
       catch(e){ throw new Error(e.message||"couldn't reach the OS brain"); }
     }
   });
+  /* ---- Eugene's once-a-day check-in: a bubble with today's shape, built from her own data ---- */
+  function showPetBubble(text,ms){ var b=document.getElementById("petBubble"); if(!b)return; b.textContent=text; b.classList.remove("pet-hidden"); clearTimeout(b._h); b._h=setTimeout(function(){ b.classList.add("pet-hidden"); },ms||9000); }
+  async function eugeneDailyBrief(){
+    try{
+      var key="eugene-brief"; if(localStorage.getItem(key)===TODAY) return;
+      var sent=await DB.daily(SENTINEL);
+      var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+      var evs=(sent.calendarEvents||[]).filter(function(e){ return e.date===TODAY||(e.endDate&&e.date<=TODAY&&e.endDate>=TODAY); });
+      var slot=(sent.schedule||[]).find(function(s){ return (s.day||"").slice(0,3)===wd; });
+      var openT=(sent.tasks||[]).filter(function(t){ return !t.done; }).length;
+      var ch=sent.artChallenge||{};
+      var bits=[];
+      if(slot) bits.push("stream day 🔴 "+(slot.time||""));
+      if(evs.length) bits.push(evs.map(function(e){return e.title;}).slice(0,2).join(" + ")+(evs.length>2?" +"+(evs.length-2):""));
+      if(openT) bits.push(openT+" open task"+(openT>1?"s":""));
+      if(ch.dayText&&!ch.dayDone) bits.push("art: "+ch.dayText);
+      showPetBubble("hi! 🐙 today: "+(bits.length?bits.join(" · "):"a clear slate — spend a spoon on something fun 🌸"),15000);
+      localStorage.setItem(key,TODAY);
+    }catch(e){}
+  }
+  setTimeout(eugeneDailyBrief, 6500);
 })();
 </script>
 </body>

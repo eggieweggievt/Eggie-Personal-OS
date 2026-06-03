@@ -143,6 +143,7 @@ async function fullContext(userId: string, today: string): Promise<string> {
       lines.push(`ART: ${am} min of art/play this week${s.artChallenge?.dayText ? `; today's challenge: ${s.artChallenge.dayText}${s.artChallenge.dayDone ? " ✓" : ""}` : ""}${s.artChallenge?.weekText ? `; week challenge: ${s.artChallenge.weekText}${s.artChallenge.weekDone ? " ✓" : ""}` : ""}.`);
     }
     if (s.artBoard?.length || s.artResources?.length) lines.push(`ART STUDIO: mood board has ${s.artBoard?.length || 0} card(s); art library has ${s.artResources?.length || 0} saved link(s).`);
+    if (s.eugeneFacts?.length) lines.push(`REMEMBERED FACTS (she told you to keep these): ${s.eugeneFacts.slice(-20).join(" | ")}`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -295,6 +296,11 @@ Deno.serve(async (req) => {
       if (!q) return json({ error: "missing question" }, 400);
       const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
       const tz = (body.input?.tz || "America/New_York").toString();
+      const hist = Array.isArray(body.input?.history) ? body.input.history.slice(-10) : [];
+      const convo = hist.length
+        ? "Recent conversation (oldest first — use it to resolve follow-ups like \"yes\", \"the second one\", \"actually 5pm\"):\n" +
+          hist.map((m: any) => (m.role === "me" ? "Her: " : "You: ") + String(m.text || "").slice(0, 300)).join("\n") + "\n\n"
+        : "";
       const ctx = await fullContext(userId, today);
       const sys = BRAND + `
 
@@ -385,7 +391,13 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delBoardCard: { text }              // remove a mood-board NOTE matching the text, or a SWATCH by exact "#hex"
 - delSticky: { text (fuzzy) }         // peel a sticky note off the screen
 
-DELETES: deleting is destructive — if her wording is ambiguous about WHICH item (multiple could match), ask in "reply" and emit no actions instead of guessing. "Undo" for money = delLastIncome.
+- rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep
+- forgetFact: { hint }                // remove a remembered fact matching the hint
+- optimizeTitle: { title, topic?, format?: "short"|"long", platform? }   // "score/optimize this title: …" — runs her real optimizer and returns the score + better titles in chat
+
+DELETES: deleting is destructive — if her wording is ambiguous about WHICH item (multiple could match), ask in "reply" and emit no actions instead of guessing. When she then confirms ("yes", "the first one"), use the conversation context and emit the action. "Undo" for money = delLastIncome.
+
+MEMORY: you receive the recent conversation AND her remembered facts — use both naturally. If she tells you something worth keeping ("my capture card is a 4K60", "collabs always at 4pm ET"), offer to remember it or just rememberFact when she clearly asks.
 
 When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
 
@@ -399,7 +411,7 @@ Stream schedule vs. event — keep these straight:
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
       const raw = await claudeWeb(
         sys,
-        `Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`,
+        `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`,
         1400,
       );
       const parsed = parseJSON(raw);
