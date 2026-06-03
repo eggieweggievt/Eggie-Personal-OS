@@ -591,6 +591,7 @@ async function aiCall(mode,input,vidiq){
 /* ===================== STATE + ROUTER ===================== */
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
+let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
 function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
@@ -755,7 +756,8 @@ async function render(){
   const _sent = await DB.daily(SENTINEL);
   state.lib = (_sent.habitsLib && _sent.habitsLib.length) ? _sent.habitsLib : CONFIG.defaultHabits.map(h=>({...h}));
   HABIT_CATS = (_sent.habitCats && _sent.habitCats.length) ? _sent.habitCats : DEFAULT_CATS.slice();
-  mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || [];
+  mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || []; SENT=_sent;
+  if(_sent.homeOrder && !(_sent.layouts&&_sent.layouts.home)){ const home={order:_sent.homeOrder||[],size:_sent.homeSize||{},min:_sent.homeMin||{},hidden:_sent.homeHidden||{}}; _sent.layouts=Object.assign({},_sent.layouts||{},{home}); DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home})})).catch(()=>{}); }
   const view=document.getElementById("view");
   const tabChanged=state._animTab!==state.tab;
   if(!tabChanged) view.classList.remove("view-enter");      // no entrance animation on in-place updates (toggles/edits)
@@ -807,17 +809,23 @@ async function renderHome(){
     pipeline:()=>cardPipelineSnap(content), braindump:()=>cardBrainDump(captures),
   };
   const DEF=["creator","session","goals","channel","habits","journal","schedule","ship","sponsors","pipeline","braindump"];
-  let order=(goals.homeOrder&&goals.homeOrder.length)?goals.homeOrder.filter(k=>WIDGETS[k]):[];
-  DEF.forEach(k=>{ if(!order.includes(k))order.push(k); });
-  const sizes=goals.homeSize||{}, mins=goals.homeMin||{}, hidden=goals.homeHidden||{};
-  const sz=k=>{ const r=sizes[k]; return (typeof r==="number")?{c:r}:(r||{}); };
-  const cells=order.filter(k=>!hidden[k]).map(k=>{ const s=sz(k); const cols=Math.max(3,s.c||4); const min=!!mins[k];
+  return modularPage("home", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), 4);
+}
+/* ===== generic modular page: any page = a reorderable/resizable grid of keyed boxes ===== */
+function layoutFor(tab){ const L=(SENT.layouts&&SENT.layouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
+/* items = [[key, html], ...]; defCols = default column span per card (4≈3-up, 6≈2-up, 12≈full) */
+function modularPage(tab, labels, items, defCols){
+  const L=layoutFor(tab), map=Object.fromEntries(items);
+  let order=L.order.length?L.order.filter(k=>map[k]!=null):[];
+  items.forEach(it=>{ if(!order.includes(it[0]))order.push(it[0]); });
+  const sz=k=>{ const r=L.size[k]; return (typeof r==="number")?{c:r}:(r||{}); };
+  const dc=defCols||(items.length<=2?12:6);
+  const cells=order.filter(k=>!L.hidden[k]).map(k=>{ const s=sz(k), cols=Math.max(3,s.c||dc), min=!!L.min[k];
     return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" style="grid-column:span ${cols}">
       <div class="home-tools"><button class="home-grip" title="drag to move">⠿</button><button data-act="homeMin" data-w="${k}" title="${min?'expand':'minimize'}">${min?'＋':'–'}</button><button data-act="homeHide" data-w="${k}" title="remove">✕</button></div>
-      <span class="home-resize" title="drag to resize ⤡">⤡</span>
-      ${WIDGETS[k]()}</div>`; }).join("");
-  const hiddenN=Object.keys(hidden).filter(k=>hidden[k]&&WIDGETS[k]).length;
-  return `<div class="grid-modular">${cells}<button class="home-add" data-act="manageCards">＋ cards${hiddenN?` · ${hiddenN} hidden`:""}</button></div>`;
+      <span class="home-resize" title="drag to resize ⤡">⤡</span>${map[k]}</div>`; }).join("");
+  const hiddenN=Object.keys(L.hidden).filter(k=>L.hidden[k]&&map[k]).length;
+  return `<div class="grid-modular" data-tab="${tab}" data-labels="${esc(JSON.stringify(labels))}">${cells}<button class="home-add" data-act="manageCards">＋ cards${hiddenN?` · ${hiddenN} hidden`:""}</button></div>`;
 }
 /* JS masonry: pack each widget's row-span to its content (or its set/min height) so there are no gaps */
 function layoutHome(){
@@ -831,11 +839,14 @@ function layoutHome(){
   });
 }
 const WLABEL={creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
-async function manageCardsModal(){
-  const sent=await DB.daily(SENTINEL); const hidden=sent.homeHidden||{};
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🧩 Dashboard cards</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle which cards show on your Home. You can also minimize or move them right on the dashboard. 🌸</p>
-    ${Object.keys(WLABEL).map(k=>`<button class="hbtn ${hidden[k]?'':'done'}" data-act="cardToggle" data-w="${k}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:6px"><span class="check ${hidden[k]?'':'on'}"></span><span class="grow" style="font-size:12.5px;text-align:left">${WLABEL[k]}</span></button>`).join("")}
+/* merge-update one page's layout block on the sentinel row */
+async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.layouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,layouts}; }); }
+let _mcTab="home", _mcLabels=WLABEL;
+async function manageCardsModal(tab, labels){
+  _mcTab=tab||"home"; _mcLabels=labels||WLABEL; const L=layoutFor(_mcTab), hidden=L.hidden||{};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🧩 Cards on this page</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle which cards show here. You can also minimize, move or resize them right on the page. 🌸</p>
+    ${Object.keys(_mcLabels).map(k=>`<button class="hbtn ${hidden[k]?'':'done'}" data-act="cardToggle" data-w="${k}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:6px"><span class="check ${hidden[k]?'':'on'}"></span><span class="grow" style="font-size:12.5px;text-align:left">${esc(_mcLabels[k])}</span></button>`).join("")}
   </div></div>`;
 }
 function cardCreator(day){
@@ -1234,29 +1245,28 @@ async function renderCare(){
   const slip=PERMISSION_SLIPS[new Date().getDate()%PERMISSION_SLIPS.length];
   const jarBubs=[["#ec7faf",42,70,0],["#a98fe0",62,84,.6],["#f3a978",54,100,1.2],["#5cc6a3",74,64,1.8],["#db5e98",48,52,2.4]]
     .map(([c,x,y,d])=>`<circle class="jar-bub" cx="${x}" cy="${y}" r="6.5" fill="${c}" opacity=".85" style="animation-delay:${d}s"/>`).join("");
-  return `<div>
-    <div class="panel" style="margin-bottom:14px;text-align:center;background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
+  const CP={};
+  CP.slip=`<div class="panel" style="text-align:center;background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
       <div class="label">today's permission slip 🐙</div>
       <div id="slipText" style="font-family:var(--display);font-size:19px;margin:12px 0 14px;color:var(--pink-deep)">${esc(slip)}</div>
       <button class="chiptog ${care.joy?'on':''}" data-act="careJoy" ${RO?"disabled":""}>${care.joy?'💗 you did something for you today':'I did something just for me today'}</button>
       <div><button class="btn" data-act="slipNext" style="margin-top:10px">↻ another reminder</button></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:14px;text-align:center">
+    </div>`;
+  CP.breath=`<div class="panel" style="text-align:center">
       <div class="card-head" style="justify-content:center"><span class="label">🫧 breathing bubble</span></div>
       <div class="breath-wrap"><div id="breathBubble" class="breath-bubble"></div><div id="breathLabel" class="breath-label">tap start</div></div>
       <button class="btn btn-pink" id="breathBtn" data-act="breathToggle" style="margin-top:8px">▶ start</button>
       <p class="soft" style="font-size:11.5px;margin:10px auto 0;max-width:340px">4 in · 2 hold · 6 out. A longer out-breath gently tells your body you're safe.</p>
-    </div>
-
-    <div style="margin-bottom:4px"><span class="label">🧰 skills & tools — tap a header to open, tap a card to flip</span></div>
+    </div>`;
+  CP.skills=`<div class="panel">
+    <div style="margin-bottom:8px"><span class="label">🧰 skills & tools — tap a header to open, tap a card to flip</span></div>
     <details class="acc" open><summary>🧰 DBT skills</summary><div class="acc-body">${flipDeck(DBT_SKILLS)}</div></details>
     <details class="acc"><summary>🆘 Emotion first-aid</summary><div class="acc-body">${flipDeck(EMOTION_FIRSTAID)}</div></details>
     <details class="acc"><summary>🚀 Executive-function helpers</summary><div class="acc-body">${flipDeck(EXEC_HELPERS)}</div></details>
     <details class="acc"><summary>🗣️ Hard conversations & rejection</summary><div class="acc-body">${flipDeck(INTERPERSONAL)}</div></details>
     <details class="acc"><summary>🎧 Sensory & overwhelm</summary><div class="acc-body">${flipDeck(SENSORY)}</div></details>
-
-    <div class="panel" style="margin-bottom:14px">
+    </div>`;
+  CP.creative=`<div class="panel">
       <div class="card-head"><span class="label">🎨 creative goals — gently</span></div>
       <p class="soft" style="font-size:12.5px;margin:0 0 10px">Not a deadline machine — just the one thing you're playing with and the next tiny step. Done beats perfect, and joy counts as a reason. 💗</p>
       <div class="label" style="margin-bottom:4px">What I'm playing with</div>
@@ -1265,9 +1275,8 @@ async function renderCare(){
       <input class="inp" id="cfStep" value="${esc(cf.step||"")}" placeholder="e.g. just open the project file" ${RO?"disabled":""}/>
       <button class="btn btn-pink" data-act="saveCreative" style="margin-top:10px" ${RO?"disabled":""}>💾 save</button>
       <details class="acc" style="margin-top:12px"><summary>🌱 stuck or spiralling? open a reframe</summary><div class="acc-body">${flipDeck(CREATIVE_REFRAMES)}</div></details>
-    </div>
-
-    <div class="panel" style="margin-bottom:14px">
+    </div>`;
+  CP.joy=`<div class="panel">
       <div class="card-head"><span class="label">🫙 joy jar</span><button class="btn btn-pink" data-act="joyPull">🎲 pull one</button></div>
       <div class="jar-stage">
         <svg viewBox="0 0 120 132" width="118" height="130" aria-hidden="true">
@@ -1281,16 +1290,14 @@ async function renderCare(){
       <p class="soft" style="font-size:12px;margin:6px 0 0">Stuck on what to do for fun? Pull one — or add your own little joys.</p>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${joy.map((j,i)=>`<span class="note" style="cursor:default">${esc(j)} <button class="ft-ic" data-act="joyDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose);font-size:12px;padding:0 2px">×</button></span>`).join("")}</div>
       <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="joyInput" placeholder="add a little joy…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="joyAdd" ${RO?"disabled":""}>+ add</button></div>
-    </div>
-
-    <div class="panel">
+    </div>`;
+  CP.checkin=`<div class="panel">
       <div class="card-head"><span class="label">🌈 gentle check-in</span></div>
       <div class="soft" style="font-size:12.5px;margin-bottom:8px">How's the weather inside today? There's no wrong answer.</div>
       <div class="scale">${["🌧️","🌥️","⛅","🌤️","🌞"].map((e,i)=>`<button data-act="careMood" data-v="${i+1}" class="${care.mood===i+1?'on':''}" ${RO?"disabled":""} style="font-size:18px">${e}</button>`).join("")}</div>
       <button class="chiptog ${care.skill?'on':''}" data-act="careSkill" style="margin-top:12px" ${RO?"disabled":""}>${care.skill?'🧰 used a skill today — proud of you':'I used a DBT skill today'}</button>
-    </div>
-
-    <div class="panel" style="margin-top:14px">
+    </div>`;
+  CP.emotion=`<div class="panel">
       <div class="card-head"><span class="label">🩷 emotion check-in</span><span class="label">naming it = calming it</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 8px">Putting a <b>precise</b> word to a feeling actually helps your brain settle it (that's "name it to tame it"). Tap what fits — a couple is plenty.</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${EMO_FEELINGS.map(f=>`<button class="chiptog ${feels.includes(f)?'on':''}" data-act="careFeel" data-f="${f}" ${RO?"disabled":""}>${f}</button>`).join("")}</div>
@@ -1306,9 +1313,8 @@ async function renderCare(){
         <b>Longer exhale</b> — 4 in · 6 out a few times tells your body you're safe. (Try the bubble above. 🫧)
         <div class="soft" style="margin-top:8px">Your own tracking, not medical advice — patterns to notice, never a diagnosis. 🐙</div>
       </div></details>
-    </div>
-
-    <div class="panel" style="margin-top:14px">
+    </div>`;
+  CP.ef=`<div class="panel">
       <div class="card-head"><span class="label">🚀 getting-started check-in</span><span class="label">executive function</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 4px">Starting is the hard part — that's the brain, not a character flaw. Tick what you reached for; each one is a real win. 💜</p>
       ${cScale("efInit",care.efInit,"😌 easy to start","🧱 stuck / can't start")}
@@ -1326,17 +1332,16 @@ async function renderCare(){
         <b>Externalise it</b> — brain-dump every loose thread onto a sticky so it's out of your head.<br>
         <b>One thing</b> — hide the rest; a short list is lighter than seeing everything at once. 🌸
       </div></details>
-    </div>
-
-    <div class="panel" style="margin-top:14px">
+    </div>`;
+  CP.patterns=`<div class="panel">
       <div class="card-head"><span class="label">🔎 gentle patterns</span><span class="label">from your own check-ins</span></div>
       ${cpat.days<5
         ? `<p class="soft" style="font-size:12.5px;margin:0">Keep checking in when you can — once there's about a week, I'll gently notice what helps your starts and your mood. No streaks, no pressure. 🌸</p>`
         : (cpat.items.length
           ? `<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px">${cpat.items.map(t=>`<li style="font-size:12.5px;line-height:1.55">${t}</li>`).join("")}</ul><p class="soft" style="font-size:11px;margin:12px 0 0">Gentle observations from your own check-ins — patterns, not proof. 💗</p>`
           : `<p class="soft" style="font-size:12.5px;margin:0">Nothing jumping out yet — I'll keep quietly watching as you log. 💗</p>`)}
-    </div>
-  </div>`;
+    </div>`;
+  return modularPage("care",{slip:"Permission slip",breath:"Breathing bubble",skills:"Skills & tools",creative:"Creative goals",joy:"Joy jar",checkin:"Gentle check-in",emotion:"Emotion check-in",ef:"Getting-started",patterns:"Gentle patterns"},[["slip",CP.slip],["breath",CP.breath],["skills",CP.skills],["creative",CP.creative],["joy",CP.joy],["checkin",CP.checkin],["emotion",CP.emotion],["ef",CP.ef],["patterns",CP.patterns]],6);
 }
 /* gentle, non-punitive pattern spotter for the Care center (emotion + executive function) */
 function carePatterns(rows){
@@ -1385,16 +1390,16 @@ async function renderIncome(){
     return `<div class="kcol" data-act="dropSponsor" data-stage="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(s=>`<div class="citem" draggable="true" data-act="dragSponsor" data-id="${s.id}"><div style="font-size:12.5px">${esc(s.brand)}</div><div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap">${s.deal_type?`<span class="pill pill-lav">${esc(s.deal_type)}</span>`:""}${s.value?`<span class="pill pill-mint">$${Number(s.value).toLocaleString()}</span>`:""}</div>${s.note?`<div class="soft" style="font-size:11px;margin-top:5px">${esc(s.note)}</div>`:""}</div>`).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;}).join("");
   const viewSeg=`<div class="seg">${[["month","This month"],["year","This year"]].map(([k,l])=>`<button data-act="moneyView" data-v="${k}" class="${view===k?'on':''}">${l}</button>`).join("")}</div>`;
   const kind=state.ledgerKind||"in";
-  return `<div style="display:flex;flex-direction:column;gap:16px">
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💰 Money ${view==="year"?"· this year":"· this month"}</h2>${viewSeg}</div>
+  const MP={};
+  MP.overview=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💰 Money ${view==="year"?"· this year":"· this month"}</h2>${viewSeg}</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
         <div class="soft-card"><div class="label">Money in</div><div class="num mint" style="font-size:20px;font-family:var(--display)">+$${totalIn.toLocaleString()}</div></div>
         <div class="soft-card"><div class="label">Money out</div><div class="num" style="font-size:20px;font-family:var(--display);color:var(--rose)">−$${totalOut.toLocaleString()}</div></div>
         <div class="soft-card"><div class="label">Net</div><div class="num" style="font-size:20px;font-family:var(--display);color:${net>=0?'var(--mint)':'var(--rose)'}">${net>=0?'+':'−'}$${Math.abs(net).toLocaleString()}</div></div>
       </div>${chart}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px"><div>${breakdown(byIn,totalIn,"Money in · by source")}</div><div>${breakdown(byOut,totalOut,"Money out · by category")}</div></div>
-    </div>
-    <div class="panel"><div class="card-head"><span class="label">Log money in / out</span></div>
+    </div>`;
+  MP.log=`<div class="panel"><div class="card-head"><span class="label">Log money in / out</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <div class="seg"><button data-act="ledgerKind" data-v="in" class="${kind!=='out'?'on':''}">＋ In</button><button data-act="ledgerKind" data-v="out" class="${kind==='out'?'on':''}">－ Out</button></div>
         <select class="inp" id="ledSource" style="width:150px" ${RO?"disabled":""}>${(kind==="out"?EXPENSE_CATS:INCOME_SOURCES).map(s=>`<option value="${s}">${esc(sourceLabel(s))}</option>`).join("")}</select>
@@ -1403,8 +1408,8 @@ async function renderIncome(){
         <button class="btn btn-pink" data-act="addLedger" ${RO?"disabled":""}>+ log</button>
       </div>
       <div style="margin-top:12px">${ledgerList}</div>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🏦 Set aside for taxes + slow months</h2></div>
+    </div>`;
+  MP.setaside=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🏦 Set aside for taxes + slow months</h2></div>
       <p class="soft" style="font-size:12px;margin:0 0 10px">VTubing is a job — future-you will thank you. Save a slice of every good month for taxes, sub refunds, and quiet months. (Not tax advice — talk to an accountant for your country.)</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">
         <div class="soft-card"><div class="label">Set-aside rate</div><div style="display:flex;align-items:center;gap:4px;margin-top:4px"><input class="inp num" id="taxRate" type="number" min="0" max="90" value="${Math.round(rate*100)}" style="width:64px;padding:5px 8px" ${RO?"disabled":""} /><span class="soft">%</span></div></div>
@@ -1413,15 +1418,15 @@ async function renderIncome(){
         <div class="soft-card"><div class="label">Still to save</div><div class="num ${remaining>0?'':'mint'}" style="font-size:18px;font-family:var(--display);margin-top:4px">$${remaining.toLocaleString()}</div></div>
       </div>
       <button class="btn btn-pink" data-act="saveSetAside" ${RO?"disabled":""} style="margin-top:10px">💾 save set-aside</button>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🐖 Savings goals</h2><div style="display:flex;gap:10px;align-items:center"><span class="label">saved $${totSaved.toLocaleString()}${totTarget?` / $${totTarget.toLocaleString()}`:""}</span><button class="btn btn-pink" data-act="addGoal" ${RO?"disabled":""}>+ goal</button></div></div>
+    </div>`;
+  MP.savings=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🐖 Savings goals</h2><div style="display:flex;gap:10px;align-items:center"><span class="label">saved $${totSaved.toLocaleString()}${totTarget?` / $${totTarget.toLocaleString()}`:""}</span><button class="btn btn-pink" data-act="addGoal" ${RO?"disabled":""}>+ goal</button></div></div>
       <p class="soft" style="font-size:12px;margin:0 0 10px">Give every saved dollar a job — a sinking fund for the mic, the trip, the tax pot. Allot money toward each as good months come in. 🌸</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${goalCards||`<div class="soft" style="font-size:12.5px">No goals yet — add one to start saving toward it.</div>`}</div>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Sponsor pipeline</h2><div style="display:flex;gap:8px"><input class="inp" id="sponsorBrand" placeholder="Brand name…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addSponsor" ${RO?"disabled":""}>+ pitch</button></div></div>
+    </div>`;
+  MP.sponsor=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Sponsor pipeline</h2><div style="display:flex;gap:8px"><input class="inp" id="sponsorBrand" placeholder="Brand name…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addSponsor" ${RO?"disabled":""}>+ pitch</button></div></div>
       <div class="kanban" style="grid-template-columns:repeat(5,minmax(150px,1fr))">${pipeline}</div>
-      <div class="label" style="margin-top:8px">Drag a brand across stages as the deal moves · build a tailored pitch in the 💌 Pitch tab.</div></div>
-  </div>`;
+      <div class="label" style="margin-top:8px">Drag a brand across stages as the deal moves · build a tailored pitch in the 💌 Pitch tab.</div></div>`;
+  return modularPage("money",{overview:"Overview",log:"Log in / out",setaside:"Set aside",savings:"Savings goals",sponsor:"Sponsor pipeline"},[["overview",MP.overview],["log",MP.log],["setaside",MP.setaside],["savings",MP.savings],["sponsor",MP.sponsor]],12);
 }
 function goalModal(g){
   const isNew=!g; g=g||{name:"",emoji:"",target:""};
@@ -1441,8 +1446,8 @@ async function saveGoal(id){
 async function renderPitch(){
   const day=await DB.daily(TODAY); state._ch=day.channel||{}; const c=CONFIG.creator;
   const rate=Object.entries(CONFIG.rateCard).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span class="soft">${esc(k)}</span><span class="num">${v?("$"+Number(v).toLocaleString()):"let's talk"}</span></div>`).join("");
-  return `<div style="display:flex;flex-direction:column;gap:16px;max-width:860px;margin:0 auto">
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Pitch Builder</h2><span class="label">tailored to you · ${esc(c.handle)}</span></div>
+  const PP={};
+  PP.builder=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Pitch Builder</h2><span class="label">tailored to you · ${esc(c.handle)}</span></div>
       <p class="soft" style="font-size:12.5px;margin:0 0 12px">Tell me about the brand once — I'll draft a cold email, DMs, and a rate snapshot in your voice, pulling your real channel stats. You're a virtual busker; entertainment has value. 💗</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><div class="label">Brand</div><input class="inp" id="pBrand" placeholder="e.g. GamerSupps" /></div>
@@ -1454,9 +1459,9 @@ async function renderPitch(){
       <textarea class="inp" id="pAngle" rows="2" placeholder="I've used X for months / my cozy horror streams match your vibe…"></textarea>
       <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-pink" data-act="genPitch">✨ generate</button><button class="btn" data-act="savePitch">+ save to pipeline</button></div>
     </div>
-    <div id="pitchOut"></div>
-    <div class="panel"><div class="card-head"><span class="label">Your rate card</span><span class="label">edit in CONFIG.rateCard</span></div>${rate}</div>
-  </div>`;
+    <div id="pitchOut"></div>`;
+  PP.ratecard=`<div class="panel"><div class="card-head"><span class="label">Your rate card</span><span class="label">edit in CONFIG.rateCard</span></div>${rate}</div>`;
+  return modularPage("pitch",{builder:"Pitch builder",ratecard:"Rate card"},[["builder",PP.builder],["ratecard",PP.ratecard]],12);
 }
 function pitchVal(id){const e=document.getElementById(id);return e?e.value.trim():"";}
 function genPitch(){
@@ -1556,8 +1561,8 @@ async function renderHealth(){
   const series=f=>rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-14).map(r=>(r.notes.health&&r.notes.health[f]!=null)?Number(r.notes.health[f]):null);
   const spark=(f,max,shift)=>{const s=series(f);return `<div class="spark">${s.map(v=>{if(v==null)return `<span style="height:2px;opacity:.25"></span>`;const hh=4+(((v+(shift||0))/max)*28);return `<span style="height:${Math.max(2,hh)}px" title="${v}"></span>`;}).join("")}</div>`;};
   const flares=rows.filter(r=>r.notes.health&&r.notes.health.flare).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
-  return `<div style="display:flex;flex-direction:column;gap:16px;max-width:760px;margin:0 auto">
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💗 How are you today?</h2><span class="label">private · your own tracking 🌸</span></div>
+  const HP={};
+  HP.today=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💗 How are you today?</h2><span class="label">private · your own tracking 🌸</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 8px">Tap what fits — no need to fill everything. Some days a couple of taps is plenty. This is for spotting your own patterns, not medical advice.</p>
       ${hint}
       ${hscale("Pain","pain",h.pain,"0 none → 5 severe")}
@@ -1572,8 +1577,8 @@ async function renderHealth(){
         <div><div class="label" style="margin-bottom:4px">Sleep (hours)</div><input class="inp num" id="hSleepH" type="number" step="0.5" value="${h.sleepH??""}" style="width:90px" /></div>
         <div><div class="label" style="margin-bottom:4px">Sleep quality</div><div class="scale">${[1,2,3,4,5].map(i=>`<button data-act="healthSet" data-f="sleepQ" data-v="${i}" class="${h.sleepQ===i?'on':''}">${i}</button>`).join("")}</div></div>
       </div>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🫀 POTS care today</h2><span class="label">hydrate · salt · compress</span></div>
+    </div>`;
+  HP.pots=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🫀 POTS care today</h2><span class="label">hydrate · salt · compress</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 10px">Little things that help blood volume and standing. Tap as you go — no targets to fail, just a gentle count. 💧</p>
       <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
         ${hcounter("💧 Water","water",h.water,"cups · many aim ~8–12")}
@@ -1591,8 +1596,8 @@ async function renderHealth(){
         <b>Buy time:</b> get low before you fall — sitting on the floor is a smart win, not a defeat. 🐙
         <div class="soft" style="margin-top:8px">General comfort tips, not medical advice — your care team's plan always comes first.</div>
       </div></details>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🦴 Joints & pacing</h2><span class="label">EDS care</span></div>
+    </div>`;
+  HP.joints=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🦴 Joints & pacing</h2><span class="label">EDS care</span></div>
       <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
         ${hcounter("🩹 Joint slips / subluxations","slips",h.slips,"just a tally — no judgment")}
       </div>
@@ -1607,16 +1612,16 @@ async function renderHealth(){
         <b>Pace</b> — break tasks up, rest in the middle, and stop while you've still got a spoon left.<br>
         <span class="pink">Mind the boom-bust trap:</span> a good day tempts you to do everything, then you pay for it for days. Staying inside your energy envelope keeps more good days in the month. 🥄
       </div></details>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">💊 Meds today</h2><button class="btn" data-act="editMeds">edit list</button></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${medRows}</div></div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🌶️ Flare + notes</h2></div>
+    </div>`;
+  HP.meds=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💊 Meds today</h2><button class="btn" data-act="editMeds">edit list</button></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${medRows}</div></div>`;
+  HP.flare=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🌶️ Flare + notes</h2></div>
       <button class="hbtn ${h.flare?'done':''}" data-act="healthFlare" style="display:inline-flex;gap:8px;align-items:center"><span class="check ${h.flare?'on':''}"></span>I'm in a flare today</button>
       <div class="label" style="margin:10px 0 4px">Possible triggers</div><input class="inp" id="hTriggers" value="${esc(h.triggers||"")}" placeholder="weather, overdid it, stress, missed meds…" />
       <div class="label" style="margin:10px 0 4px">Notes</div><textarea class="inp" id="hNote" rows="2">${esc(h.note||"")}</textarea>
       <button class="btn btn-pink" data-act="saveHealthNotes" style="margin-top:10px">💾 save notes + sleep</button>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div>
+    </div>`;
+  HP.trends=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">${HMETRICS.map(m=>`<button class="chiptog ${selKeys.includes(m[0])?'on':''}" data-act="healthMetric" data-f="${m[0]}" style="font-size:11px">${m[4]} ${m[1]}</button>`).join("")}</div>
       <p class="soft" style="font-size:11px;margin:0 0 8px">tap to add or remove metrics — overlay a few to cross-reference your feelings + symptoms 🌸</p>
       <div style="background:linear-gradient(135deg,#fef5fb,#f4eefc);border:1px solid #f0e4f3;border-radius:16px;padding:12px 10px 6px">
@@ -1624,16 +1629,16 @@ async function renderHealth(){
       </div>
       ${flares.length?`<div class="label" style="margin-top:12px">recent flares 🌶️</div>${flares.map(r=>`<div style="font-size:12px;margin-top:3px" class="soft">🌶️ ${r.date}${r.notes.health.triggers?` · ${esc(r.notes.health.triggers)}`:""}</div>`).join("")}`:""}
       <p class="soft" style="font-size:11.5px;margin-top:12px">Tap a chip to switch what you're seeing. Gaps just mean a rest day from tracking — that's allowed. 💗</p>
-    </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">🔎 Gentle patterns</h2><span class="label">from your own logs</span></div>
+    </div>`;
+  HP.patterns=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🔎 Gentle patterns</h2><span class="label">from your own logs</span></div>
       ${pat.days<5
         ? `<p class="soft" style="font-size:12.5px;margin:0">Keep tapping in how you feel — once there's about a week of days here, I'll start gently noticing patterns for you (like water vs. lightheadedness, or sleep vs. fog). No pressure, no streaks to keep. 🌸</p>`
         : (pat.items.length
           ? `<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px">${pat.items.map(t=>`<li style="font-size:12.5px;line-height:1.55">${t}</li>`).join("")}</ul>
              <p class="soft" style="font-size:11px;margin:12px 0 0">These are gentle observations from your own tracking — patterns, not proof, and never a diagnosis. Worth a mention to your care team if something rings true. 🐙</p>`
           : `<p class="soft" style="font-size:12.5px;margin:0">Nothing's jumping out across your recent days — which is honestly a fine thing. I'll keep quietly watching as you log. 💗</p>`)}
-    </div>
-  </div>`;
+    </div>`;
+  return modularPage("health",{today:"How are you today",pots:"POTS care",joints:"Joints & pacing",meds:"Meds today",flare:"Flare + notes",trends:"Trends",patterns:"Gentle patterns"},[["today",HP.today],["pots",HP.pots],["joints",HP.joints],["meds",HP.meds],["flare",HP.flare],["trends",HP.trends],["patterns",HP.patterns]],6);
 }
 async function medsModal(){
   const meds=await loadMeds();
@@ -1668,10 +1673,13 @@ async function renderReview(){
   const rv=wk.review||{}; const weekAgo=isoAgo(-7);
   const shipped=content.filter(c=>c.stage==="published"&&c.published_at&&c.published_at>weekAgo);
   const fields=[["wins","🏆 Wins this week"],["slipped","💭 What slipped (gently)"],["loops","🔁 Open loops"],["followups","💌 Follow up with"],["notes","🎬 Content notes"],["spoons","🥄 Spoons check — how was your energy?"]];
-  return `<div class="panel"><div class="card-head"><div><h2 style="font-size:18px">🌷 Weekly review</h2><div class="label" style="margin-top:2px">a gentle retro · seal the week to keep your streak</div></div><button class="btn btn-pink" data-act="saveReview" ${RO?"disabled":""}>✓ seal week</button></div>
-    <div class="soft-card" style="margin-bottom:14px"><div class="label">📦 Shipped this week (auto)</div>${shipped.length?`<div style="margin-top:6px">${shipped.map(c=>`<span class="pill pill-mint" style="margin:2px">${esc(c.title)}</span>`).join("")}</div>`:`<div class="soft" style="font-size:12.5px;margin-top:4px">Nothing marked live this week — and that's okay. Rest weeks count.</div>`}</div>
+  const RP={};
+  RP.summary=`<div class="panel"><div class="card-head"><div><h2 style="font-size:18px">🌷 Weekly review</h2><div class="label" style="margin-top:2px">a gentle retro · seal the week to keep your streak</div></div><button class="btn btn-pink" data-act="saveReview" ${RO?"disabled":""}>✓ seal week</button></div>
+    <div class="soft-card"><div class="label">📦 Shipped this week (auto)</div>${shipped.length?`<div style="margin-top:6px">${shipped.map(c=>`<span class="pill pill-mint" style="margin:2px">${esc(c.title)}</span>`).join("")}</div>`:`<div class="soft" style="font-size:12.5px;margin-top:4px">Nothing marked live this week — and that's okay. Rest weeks count.</div>`}</div></div>`;
+  RP.reflect=`<div class="panel"><div class="card-head"><span class="label">🌸 this week's reflection</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${fields.map(([k,l])=>`<div><div class="label" style="margin-bottom:5px">${l}</div><textarea class="inp" data-rv="${k}" rows="3" ${RO?"disabled":""}>${esc(rv[k]||"")}</textarea></div>`).join("")}</div>
     <div style="margin-top:12px"><div class="label" style="margin-bottom:5px">✨ Next week — top 3 that actually matter</div><input class="inp" data-rv="top3" value="${esc(rv.top3||"")}" ${RO?"disabled":""} placeholder="1) …  2) …  3) …" /></div></div>`;
+  return modularPage("review",{summary:"Shipped + seal week",reflect:"Reflection"},[["summary",RP.summary],["reflect",RP.reflect]],12);
 }
 
 /* ===================== ASK ===================== */
@@ -2109,12 +2117,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="editConfig")return configModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
-  if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
-  if(act==="homeMin"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeMin:Object.assign({},n.homeMin||{},{[k]:!((n.homeMin||{})[k])})})); render(); return; }
-  if(act==="homeHide"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>({...n,homeHidden:Object.assign({},n.homeHidden||{},{[k]:true})})); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
+  if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,layouts:{},homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
+  if(act==="homeMin"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.min=Object.assign({},L.min,{[k]:!L.min[k]});}); render(); return; }
+  if(act==="homeHide"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.hidden=Object.assign({},L.hidden,{[k]:true});}); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
   if(act==="toggleLock"){ localStorage.setItem("layout-locked",localStorage.getItem("layout-locked")==="1"?"0":"1"); applySettings(); toast(localStorage.getItem("layout-locked")==="1"?"Layout locked 🔒":"Layout unlocked 🔓"); return; }
-  if(act==="manageCards")return manageCardsModal();
-  if(act==="cardToggle"){ const k=el.dataset.w; await DB.saveDaily(SENTINEL,n=>{const hid=Object.assign({},n.homeHidden||{}); hid[k]=!hid[k]; const o=(n.homeOrder||[]).slice(); if(!hid[k]&&!o.includes(k))o.push(k); return {...n,homeHidden:hid,homeOrder:o};}); manageCardsModal(); render(); return; }
+  if(act==="manageCards"){ const g=el.closest(".grid-modular"); let labels=WLABEL; try{labels=JSON.parse(g.dataset.labels);}catch(e){} return manageCardsModal(g?g.dataset.tab:"home", labels); }
+  if(act==="cardToggle"){ const k=el.dataset.w; await setLayout(_mcTab,L=>{ L.hidden=Object.assign({},L.hidden); L.hidden[k]=!L.hidden[k]; if(!L.hidden[k]&&!L.order.includes(k))L.order=[...L.order,k]; }); SENT=await DB.daily(SENTINEL); manageCardsModal(_mcTab,_mcLabels); render(); return; }
   if(act==="openNote")return openNote(id);
   if(act==="noteToContent"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){await DB.addContent({title:c.raw_text.slice(0,120),stage:"idea",priority:60});} document.getElementById("modal").innerHTML=""; toast("Added to content 🎬"); render(); return; }
   if(act==="noteSticky"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c)addSticky(c.raw_text); document.getElementById("modal").innerHTML=""; toast("Pinned 📌"); return; }
@@ -2285,8 +2293,8 @@ async function keywordAsk(raw,box){
 }
 
 /* boot */
-function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(state.tab==="home"){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } }
-addEventListener("resize",()=>{ if(state.tab==="home"){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } }
+addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
 render();
@@ -2360,8 +2368,9 @@ render();
   function maxCols(){ const g=gridEl(); return g?Math.max(3,Math.min(16,Math.floor(g.clientWidth/88))):3; }
   function relayoutSoon(){ if(rafL)return; rafL=requestAnimationFrame(()=>{ rafL=0; try{layoutHome();}catch(_){} }); }
   function commitTabs(order){ try{ localStorage.setItem("tab-order",JSON.stringify(order)); }catch(e){} }
-  function commitHomeOrder(order){ DB.saveDaily(SENTINEL,n=>({...n,homeOrder:order})).catch(()=>{}); }
-  function commitHomeSize(key,val){ DB.saveDaily(SENTINEL,n=>({...n,homeSize:Object.assign({},n.homeSize||{},{[key]:val})})).catch(()=>{}); }
+  function gtab(el){ const g=el&&el.closest&&el.closest(".grid-modular"); return g?g.dataset.tab:"home"; }
+  function commitWidgetOrder(c,order){ setLayout(c.dataset.tab||"home",L=>{L.order=order;}).catch(()=>{}); }
+  function commitWidgetSize(item,key,val){ setLayout(gtab(item),L=>{L.size=Object.assign({},L.size,{[key]:val});}).catch(()=>{}); }
   function moveGhost(x,y,scale){ if(d&&d.ghost)d.ghost.style.transform="translate("+(x-d.gx)+"px,"+(y-d.gy)+"px) scale("+(scale||1.04)+")"; }
   /* FLIP: smoothly slide siblings into their new spots after a DOM reorder */
   function flipReorder(c, mutate){
@@ -2374,7 +2383,7 @@ render();
     const rez=e.target.closest(".home-resize");
     if(rez){ const item=rez.closest(".home-widget"); if(item){ const r=item.getBoundingClientRect(), cur=parseInt(((item.style.gridColumn||"").match(/span (\d+)/)||[])[1]||"1"), panel=item.querySelector(".panel,section"), startH=panel?panel.getBoundingClientRect().height:160; d={mode:"resize",item,panel,key:item.getAttribute("data-w"),startW:r.width,startCols:cur,cols:cur,startH,h:startH,sx:e.clientX,sy:e.clientY,moved:false,cap:rez,pid:e.pointerId}; try{rez.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
     const grip=e.target.closest(".home-grip");
-    if(grip){ const item=grip.closest(".home-widget"), c=item&&item.parentElement; if(item&&c){ d={mode:"order",item,c,itemSel:".home-widget",key:"data-w",commit:commitHomeOrder,horiz:false,sx:e.clientX,sy:e.clientY,moved:false,cap:grip,pid:e.pointerId}; try{grip.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
+    if(grip){ const item=grip.closest(".home-widget"), c=item&&item.parentElement; if(item&&c){ d={mode:"order",item,c,itemSel:".home-widget",key:"data-w",horiz:false,sx:e.clientX,sy:e.clientY,moved:false,cap:grip,pid:e.pointerId}; try{grip.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
     const tab=e.target.closest("#nav .tab");
     if(tab){ const c=tab.parentElement; d={mode:"order",item:tab,c,itemSel:".tab",key:"data-tab",commit:commitTabs,horiz:true,sx:e.clientX,sy:e.clientY,moved:false,cap:tab,pid:e.pointerId}; try{tab.setPointerCapture(e.pointerId);}catch(_){} }
   },true);
@@ -2393,15 +2402,15 @@ render();
   document.addEventListener("pointerup",()=>{
     if(!d)return; const x=d; d=null;
     try{x.cap.releasePointerCapture(x.pid);}catch(_){}
-    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitHomeSize(x.key,{c:x.cols,h:Math.round(x.h)}); try{layoutHome();}catch(_){} } return; }
+    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitWidgetSize(x.item,x.key,{c:x.cols,h:Math.round(x.h)}); try{layoutHome();}catch(_){} } return; }
     if(!x.moved){ return; }
     sc=true; setTimeout(()=>sc=false,350);
     // settle the floating clone into the placeholder's final spot, then reveal
     const fr=x.item.getBoundingClientRect();
     if(x.ghost){ x.ghost.style.transition="transform .2s cubic-bezier(.2,.8,.25,1),opacity .2s"; x.ghost.style.transform="translate("+fr.left+"px,"+fr.top+"px) scale(1)"; x.ghost.style.opacity="0"; const gh=x.ghost; setTimeout(()=>{ gh&&gh.remove(); },220); }
     x.item.classList.remove("dragsrc");
-    x.commit([...x.c.querySelectorAll(x.itemSel)].map(it=>it.getAttribute(x.key)));
-    if(x.itemSel===".home-widget"){ try{layoutHome();}catch(_){} }
+    const ord=[...x.c.querySelectorAll(x.itemSel)].map(it=>it.getAttribute(x.key));
+    if(x.itemSel===".tab"){ commitTabs(ord); } else { commitWidgetOrder(x.c,ord); try{layoutHome();}catch(_){} }
   },true);
   document.addEventListener("pointercancel",()=>{ if(!d)return; if(d.ghost)d.ghost.remove(); if(d.item){d.item.classList.remove("dragsrc","resizing","reordering");} d=null; },true);
   document.addEventListener("click",e=>{ if(sc){ e.stopPropagation(); e.preventDefault(); sc=false; } },true);

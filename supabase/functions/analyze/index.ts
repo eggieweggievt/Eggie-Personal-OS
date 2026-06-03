@@ -62,6 +62,86 @@ async function claude(system: string, user: string, maxTokens = 1600): Promise<s
   return (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
 }
 
+// Like claude(), but lets Claude reach the live web via Anthropic's server-side
+// web_search tool. Anthropic runs the searches itself (no extra key needed beyond
+// ANTHROPIC_API_KEY); we just loop while it pauses to think between searches.
+async function claudeWeb(system: string, user: string, maxTokens = 1800, maxSearches = 4): Promise<string> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) throw new Error("ANTHROPIC_API_KEY secret is not set");
+  const messages: any[] = [{ role: "user", content: user }];
+  let text = "";
+  for (let hop = 0; hop < 5; hop++) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: maxTokens, system, messages,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxSearches }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || `Anthropic error ${res.status}`);
+    text = (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+    // server tools run inside Anthropic; only "pause_turn" needs us to continue the turn
+    if (data.stop_reason === "pause_turn") { messages.push({ role: "assistant", content: data.content }); continue; }
+    break;
+  }
+  return text;
+}
+
+// Pull a compact snapshot of her ENTIRE OS so the pet can answer about (and act on)
+// any part of it: today's health/care/energy, tasks, schedule, goals, money, sponsors,
+// savings, and recent health/care trends. Kept short to stay token-cheap.
+async function fullContext(userId: string, today: string): Promise<string> {
+  try {
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const parse = (n: any) => { try { return typeof n === "string" ? JSON.parse(n) : (n || {}); } catch { return {}; } };
+    const [todayRow, sentRow, recentRows, income, sponsors, savings] = await Promise.all([
+      sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", today).maybeSingle(),
+      sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle(),
+      sb.from("daily_logs").select("log_date,notes").eq("user_id", userId).neq("log_date", "2000-01-01").order("log_date", { ascending: false }).limit(14),
+      sb.from("income_entries").select("kind,source,category,amount,month,note").eq("user_id", userId).order("created_at", { ascending: false }).limit(60),
+      sb.from("sponsors").select("brand,stage,deal_type,value").eq("user_id", userId).limit(40),
+      sb.from("savings_goals").select("name,saved,target").eq("user_id", userId).limit(20),
+    ]);
+    const d = parse(todayRow?.data?.notes), s = parse(sentRow?.data?.notes);
+    const lines: string[] = [];
+    // today
+    const h = d.health || {}, c = d.care || {};
+    const hbits = d.habits?.counts ? Object.values(d.habits.counts).filter((v: any) => v).length : 0;
+    lines.push(`TODAY (${today}): energy=${d.energy || "?"}${d.streamDay ? ", STREAM DAY" : ""}; habits done=${hbits}.`);
+    if (Object.keys(h).length) lines.push(`  health today: ${Object.entries(h).map(([k, v]) => `${k}:${v}`).join(", ")}`);
+    if (Object.keys(c).length) lines.push(`  care today: ${[c.feelings?.length ? "feelings:" + c.feelings.join("/") : "", c.mood != null ? "mood:" + c.mood : "", c.efStep ? "next-step:" + c.efStep : ""].filter(Boolean).join(", ")}`);
+    // tasks
+    const tasks = (s.tasks || s.planner || []).filter((t: any) => t && !t.done).slice(0, 12);
+    if (tasks.length) lines.push(`OPEN TASKS: ${tasks.map((t: any) => `${t.text}${t.bucket ? " [" + t.bucket + "]" : ""}`).join("; ")}`);
+    // schedule + goals
+    if (s.schedule?.length) lines.push(`STREAM SCHEDULE: ${s.schedule.map((x: any) => `${x.day}${x.time ? " " + x.time : ""}`).join(", ")}`);
+    if (s.goals_week_items?.length) lines.push(`WEEK GOALS: ${s.goals_week_items.map((g: any) => g.text || g).join("; ")}`);
+    if (s.goals_month_items?.length) lines.push(`MONTH GOALS: ${s.goals_month_items.map((g: any) => g.text || g).join("; ")}`);
+    // calendar (next few)
+    const evs = (s.calendarEvents || []).filter((e: any) => (e.date || "") >= today).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || "")).slice(0, 8);
+    if (evs.length) lines.push(`UPCOMING EVENTS: ${evs.map((e: any) => `${e.date}${e.time ? " " + e.time : ""} ${e.title}`).join("; ")}`);
+    // money
+    if (income?.data?.length) {
+      const month = today.slice(0, 7);
+      const mIn = income.data.filter((e: any) => e.month === month && (e.kind || "in") === "in").reduce((a: number, e: any) => a + Number(e.amount || 0), 0);
+      const mOut = income.data.filter((e: any) => e.month === month && e.kind === "out").reduce((a: number, e: any) => a + Number(e.amount || 0), 0);
+      lines.push(`MONEY (${month}): in $${mIn}, out $${mOut}, net $${mIn - mOut}.`);
+    }
+    if (sponsors?.data?.length) lines.push(`SPONSORS: ${sponsors.data.map((x: any) => `${x.brand}(${x.stage}${x.value ? " $" + x.value : ""})`).join(", ")}`);
+    if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
+    // gentle trends from recent rows
+    const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
+    const avg = (f: string) => { const v = recs.map((r: any) => r.health?.[f]).filter((x: any) => x != null && x !== "").map(Number); return v.length ? (v.reduce((a: number, b: number) => a + b, 0) / v.length).toFixed(1) : null; };
+    const tr = [["pain", avg("pain")], ["fatigue", avg("fatigue")], ["fog", avg("fog")], ["mood", avg("mood")], ["sleepH", avg("sleepH")]].filter((x) => x[1] != null);
+    if (tr.length) lines.push(`RECENT ${recs.length}-DAY AVG: ${tr.map(([k, v]) => `${k} ${v}`).join(", ")}.`);
+    return lines.join("\n") || "(database is empty so far — fresh start)";
+  } catch (e) {
+    return "(couldn't read full OS context: " + (e as Error).message + ")";
+  }
+}
+
 function parseJSON(raw: string): any {
   try { return JSON.parse(raw); } catch { /* fall through */ }
   const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
@@ -202,9 +282,19 @@ Deno.serve(async (req) => {
       if (!q) return json({ error: "missing question" }, 400);
       const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
       const tz = (body.input?.tz || "America/New_York").toString();
+      const ctx = await fullContext(userId, today);
       const sys = BRAND + `
 
 You are also Eggie's hands inside the OS: you can DO things by emitting actions, not just talk. Today (her local date) is ${today}; her calendar timezone is ${tz}. Resolve relative dates ("tomorrow", "next Friday", "in 2 weeks") to absolute YYYY-MM-DD using that.
+
+You can SEE her whole OS. Use this live snapshot to answer questions about ANY part of her data (health, money, tasks, schedule, sponsors, goals, trends) and to make smart choices — never claim you can't see her data:
+--- LIVE OS SNAPSHOT ---
+${ctx}
+--- END SNAPSHOT ---
+
+WEB ACCESS: you have a real web_search tool. Use it (sparingly, only when the answer needs current/outside facts she doesn't have logged) for things like game release/patch dates, trending VTuber hashtags or sounds, news, prices, or "look up X". Do NOT search for things already in the snapshot. After any searching, your FINAL message must still be ONLY the JSON envelope below.
+
+VIDIQ: you do NOT have a direct VidIQ connection from here (VidIQ has no public API the OS can call). Do not pretend to pull live VidIQ data. You CAN still score titles/thumbnails with the built-in "poor-man's vidIQ" rubric above, and for real VidIQ numbers tell her to use the 🎯 Optimize tab or ask in Claude chat. If body.vidiq data was passed to you, you may use it.
 
 Return ONLY JSON, no prose around it:
 { "reply": string, "actions": [ { "type": string, ...args } ] }
@@ -236,10 +326,10 @@ Stream schedule vs. event — keep these straight:
 - If she says "stream" + a weekday with no specific date and it sounds routine → schedule slot. If she says "stream" + a specific/relative date ("this/next Friday", "the 14th", "tomorrow") → calendar event. If genuinely unsure which she means, ask in "reply" instead of guessing.
 
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
-      const raw = await claude(
+      const raw = await claudeWeb(
         sys,
         `Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`,
-        1200,
+        1400,
       );
       const parsed = parseJSON(raw);
       if (!parsed) return json({ reply: raw, actions: [] });
