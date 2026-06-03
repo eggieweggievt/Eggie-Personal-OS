@@ -1402,6 +1402,8 @@ function pitchBlock(title,text,id,rows){return `<div style="margin-bottom:14px">
 /* ===================== HEALTH ===================== */
 const JOINTS=["jaw","shoulders","wrists","fingers","hips","knees","ankles","spine"];
 function hscale(label,f,cur,hint){ let b=""; for(let i=0;i<=5;i++)b+=`<button data-act="healthSet" data-f="${f}" data-v="${i}" class="${(cur??-1)===i?'on':''}">${i}</button>`; return `<div style="margin:10px 0"><div class="label" style="margin-bottom:4px">${label}${hint?` <span class="muted">· ${hint}</span>`:""}</div><div class="scale">${b}</div></div>`; }
+/* preserve the typed sleep/trigger/note inputs on any health save, so re-rendering never drops them */
+function grabHealthInputs(base){ let h={...(base||{})}; const sl=document.getElementById("hSleepH"); if(sl)h.sleepH=(sl.value===""?null:parseFloat(sl.value)); const tr=document.getElementById("hTriggers"); if(tr)h.triggers=tr.value; const nt=document.getElementById("hNote"); if(nt)h.note=nt.value; return h; }
 function hcounter(label,f,cur,hint){ return `<div><div class="label" style="margin-bottom:4px">${label}${hint?` <span class="muted">· ${hint}</span>`:""}</div><div class="hcount"><button class="btn" data-act="healthCounter" data-f="${f}" data-d="-1" ${RO?"disabled":""} style="width:34px;padding:6px 0">−</button><span class="num">${Number(cur)||0}</span><button class="btn" data-act="healthCounter" data-f="${f}" data-d="1" ${RO?"disabled":""} style="width:34px;padding:6px 0">+</button></div></div>`; }
 function median(a){ if(!a.length)return null; const s=a.map(Number).sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
 /* gentle, non-punitive pattern spotter over recent daily logs — correlations, never claims */
@@ -1426,10 +1428,29 @@ function healthPatterns(rows){
   if(days>=5&&joyN>=1) out.push(`💗 You did something <b>just for you</b> on ${joyN} of the last ${days} tracked days. That counts.`);
   return { days, items:out.slice(0,5) };
 }
+/* metrics for the Trends graph: [key,label,max,offset,emoji,colour] (offset shifts e.g. mood -3..3 → 0..6) */
+const HMETRICS=[["mood","Mood",6,3,"🌈","#a98fe0"],["pain","Pain",5,0,"🩹","#ec7faf"],["fatigue","Fatigue",5,0,"🔋","#f3a978"],["fog","Brain fog",5,0,"🌫️","#8fb8f0"],["anxiety","Anxiety",5,0,"🌧️","#b58fe0"],["focus","Focus",5,0,"🎯","#5cc6a3"],["lighthead","Lightheaded",5,0,"🫧","#8fb8f0"],["palp","Palpitations",5,0,"🫀","#ec7faf"],["dizziness","Dizziness",5,0,"💫","#a98fe0"],["water","Water",12,0,"💧","#5cc6a3"],["salt","Salt",6,0,"🧂","#f3a978"],["slips","Joint slips",6,0,"🦴","#ec7faf"],["sleepH","Sleep hrs",12,0,"🌙","#a98fe0"],["sleepQ","Sleep quality",5,0,"😴","#8fb8f0"]];
+function healthChartSVG(rows,key,max,offset,color,days){
+  const sorted=rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-days);
+  const pts=sorted.map(r=>{ const hv=(r.notes&&r.notes.health)||{}; let raw=hv[key]; const has=raw!=null&&raw!==""; return {date:r.date, raw:has?Number(raw):null, v:has?Number(raw)+(offset||0):null}; });
+  const W=680,H=168,padL=26,padR=12,padT=14,padB=22, n=pts.length, innerW=W-padL-padR, innerH=H-padT-padB;
+  const X=i=> padL+(n<=1?innerW/2:i*innerW/(n-1)), Y=v=> padT+innerH*(1-Math.max(0,Math.min(1,v/max)));
+  let grid=""; [0,0.5,1].forEach(g=>{ const yy=padT+innerH*(1-g); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#efe6f2" stroke-width="1"/><text x="${padL-5}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#b3a6c0">${Math.round(max*g-(offset||0))}</text>`; });
+  let areas="",lines="",dots="",seg=[];
+  const flush=()=>{ if(seg.length){ const lp=seg.map((p,i)=>(i?"L":"M")+X(p.i).toFixed(1)+" "+Y(p.v).toFixed(1)).join(" "); lines+=`<path d="${lp}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`; if(seg.length>1)areas+=`<path d="${lp} L${X(seg[seg.length-1].i).toFixed(1)} ${padT+innerH} L${X(seg[0].i).toFixed(1)} ${padT+innerH} Z" fill="url(#hgrad)"/>`; seg=[]; } };
+  pts.forEach((p,i)=>{ if(p.v==null)flush(); else seg.push({i,v:p.v}); }); flush();
+  pts.forEach((p,i)=>{ if(p.v!=null){ const last=i===n-1; dots+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${last?3.8:2.6}" fill="#fff" stroke="${color}" stroke-width="${last?2.6:1.6}"><title>${p.date}: ${p.raw}</title></circle>`; } });
+  const dl=ds=>{const p=ds.split("-");return p[1]+"/"+p[2];};
+  const xl=n?`<text x="${X(0).toFixed(1)}" y="${H-6}" font-size="9" fill="#b3a6c0">${dl(pts[0].date)}</text><text x="${(W-padR).toFixed(1)}" y="${H-6}" text-anchor="end" font-size="9" fill="#b3a6c0">${dl(pts[n-1].date)}</text>`:"";
+  const vals=pts.filter(p=>p.raw!=null).map(p=>p.raw);
+  const summary=vals.length?`avg ${(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1)} · range ${Math.min.apply(null,vals)}–${Math.max.apply(null,vals)} · ${vals.length} day${vals.length>1?"s":""} logged`:"no data for this one yet — log a few days 🌸";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block"><defs><linearGradient id="hgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".5"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>${grid}${areas}${lines}${dots}${xl}</svg><div class="soft" style="font-size:11.5px;margin-top:4px;text-align:center">${summary}</div>`;
+}
 async function renderHealth(){
   const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(30)]);
   const pat=healthPatterns(rows);
   const h=day.health||{}; const meds=await loadMeds(); const joints=h.joints||[];
+  const hm=HMETRICS.find(m=>m[0]===(state.healthMetric||"mood"))||HMETRICS[0];
   const moodBtns=[-3,-2,-1,0,1,2,3].map(i=>`<button data-act="healthSet" data-f="mood" data-v="${i}" class="${h.mood===i?'on':''}">${i>0?"+"+i:i}</button>`).join("");
   const medRows=meds.length?meds.map(m=>`<button class="hbtn ${(h.meds&&h.meds[m.id])?'done':''}" data-act="medToggle" data-id="${m.id}" style="display:flex;align-items:center;gap:8px"><span class="check ${(h.meds&&h.meds[m.id])?'on':''}"></span><span class="grow" style="font-size:12.5px">${esc(m.name)}${m.dose?` <span class="muted">${esc(m.dose)}</span>`:""}</span>${m.time?`<span class="label">${esc(m.time)}</span>`:""}</button>`).join(""):`<div class="soft" style="font-size:12.5px">No meds added yet — tap “edit list”.</div>`;
   const heavy=(h.pain>=4)||(h.fatigue>=4);
@@ -1497,10 +1518,14 @@ async function renderHealth(){
       <div class="label" style="margin:10px 0 4px">Notes</div><textarea class="inp" id="hNote" rows="2">${esc(h.note||"")}</textarea>
       <button class="btn btn-pink" data-act="saveHealthNotes" style="margin-top:10px">💾 save notes + sleep</button>
     </div>
-    <div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Last 14 days</h2><span class="label">your patterns</span></div>
-      ${[["Pain","pain",5,0],["Fatigue","fatigue",5,0],["Lightheaded","lighthead",5,0],["Mood","mood",6,3],["Anxiety","anxiety",5,0],["Water (cups)","water",12,0],["Sleep (hrs)","sleepH",12,0]].map(([l,f,mx,sh])=>`<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><span style="width:88px;font-size:12px" class="soft">${l}</span>${spark(f,mx,sh)}</div>`).join("")}
-      ${flares.length?`<div class="label" style="margin-top:12px">recent flares</div>${flares.map(r=>`<div style="font-size:12px;margin-top:3px" class="soft">🌶️ ${r.date}${r.notes.health.triggers?` · ${esc(r.notes.health.triggers)}`:""}</div>`).join("")}`:""}
-      <p class="soft" style="font-size:11.5px;margin-top:12px">Gaps are fine — a missing bar just means a rest day from tracking. 💗</p>
+    <div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${HMETRICS.map(m=>`<button class="chiptog ${m[0]===hm[0]?'on':''}" data-act="healthMetric" data-f="${m[0]}" style="font-size:11px">${m[4]} ${m[1]}</button>`).join("")}</div>
+      <div style="background:linear-gradient(135deg,#fef5fb,#f4eefc);border:1px solid #f0e4f3;border-radius:16px;padding:12px 10px 6px">
+        <div class="label" style="margin:0 0 2px 4px">${hm[4]} ${hm[1]}</div>
+        ${healthChartSVG(rows,hm[0],hm[2],hm[3],hm[5],state.healthRange||14)}
+      </div>
+      ${flares.length?`<div class="label" style="margin-top:12px">recent flares 🌶️</div>${flares.map(r=>`<div style="font-size:12px;margin-top:3px" class="soft">🌶️ ${r.date}${r.notes.health.triggers?` · ${esc(r.notes.health.triggers)}`:""}</div>`).join("")}`:""}
+      <p class="soft" style="font-size:11.5px;margin-top:12px">Tap a chip to switch what you're seeing. Gaps just mean a rest day from tracking — that's allowed. 💗</p>
     </div>
     <div class="panel"><div class="card-head"><h2 style="font-size:18px">🔎 Gentle patterns</h2><span class="label">from your own logs</span></div>
       ${pat.days<5
@@ -2008,14 +2033,16 @@ document.addEventListener("click",async(e)=>{
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); settingsModal(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); settingsModal(); render(); return; }
   if(act==="exitFocus"){ localStorage.setItem("eggie-focus","0"); applySettings(); render(); return; }
-  if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),[f]:v}})); render(); }
-  if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const hh={...(n.health||{})};hh[f]=Math.max(0,(Number(hh[f])||0)+d);return {...n,health:hh};}); render(); }
-  if(act==="healthToggle"){ const f=el.dataset.f; await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),[f]:!((n.health||{})[f])}})); render(); }
+  if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=v; return {...n,health:h};}); render(); }
+  if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=Math.max(0,(Number(h[f])||0)+d); return {...n,health:h};}); render(); }
+  if(act==="healthToggle"){ const f=el.dataset.f; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=!h[f]; return {...n,health:h};}); render(); }
+  if(act==="healthMetric"){ state.healthMetric=el.dataset.f; return render(); }
+  if(act==="healthRange"){ state.healthRange=Number(el.dataset.v); return render(); }
   if(act==="saveCreative"){ const project=document.getElementById("cfProject").value.trim(), step=document.getElementById("cfStep").value.trim(); await DB.saveDaily(SENTINEL,n=>({...n,creativeFocus:{project,step}})); toast("Saved 🎨 one tiny step at a time"); render(); return; }
-  if(act==="healthJoint"){ const j=el.dataset.j; await DB.saveDaily(TODAY,n=>{const cur=(n.health&&n.health.joints)||[];const joints=cur.includes(j)?cur.filter(x=>x!==j):[...cur,j];return {...n,health:{...(n.health||{}),joints}};}); render(); }
-  if(act==="medToggle"){ await DB.saveDaily(TODAY,n=>{const meds={...((n.health&&n.health.meds)||{})};meds[id]=!meds[id];return {...n,health:{...(n.health||{}),meds}};}); render(); }
-  if(act==="healthFlare"){ await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),flare:!((n.health||{}).flare)}})); render(); }
-  if(act==="saveHealthNotes"){ const sleepH=parseFloat(document.getElementById("hSleepH").value)||null, triggers=document.getElementById("hTriggers").value, note=document.getElementById("hNote").value; await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),sleepH,triggers,note}})); toast("Saved 💗"); }
+  if(act==="healthJoint"){ const j=el.dataset.j; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); const cur=h.joints||[]; h.joints=cur.includes(j)?cur.filter(x=>x!==j):[...cur,j]; return {...n,health:h};}); render(); }
+  if(act==="medToggle"){ await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); const meds={...(h.meds||{})}; meds[id]=!meds[id]; h.meds=meds; return {...n,health:h};}); render(); }
+  if(act==="healthFlare"){ await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h.flare=!h.flare; return {...n,health:h};}); render(); }
+  if(act==="saveHealthNotes"){ const v=document.getElementById("hSleepH").value, sleepH=(v===""?null:parseFloat(v)), triggers=document.getElementById("hTriggers").value, note=document.getElementById("hNote").value; await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),sleepH,triggers,note}})); toast("Saved 💗"); }
   if(act==="recoveryDay"){ await DB.saveDaily(TODAY,n=>({...n,energy:"low",streamDay:false})); toast("Recovery day set 🌙 be kind to yourself"); render(); }
   if(act==="editMeds")return medsModal();
   if(act==="saveMed")return saveMed();
@@ -2048,7 +2075,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="ask")return ask();
 });
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
-  if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} } });
+  if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
+  if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); } });
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
