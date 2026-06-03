@@ -65,7 +65,7 @@
   main{padding:18px;max-width:1380px;margin:0 auto;}
   .grid-home{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;}
   /* ---- modular dashboard ---- */
-  .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:16px;}
+  .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:0 16px;}
   .home-widget{position:relative;transition:transform .24s cubic-bezier(.2,.8,.25,1);}
   .home-widget.resizing{transition:none;}
   #nav .tab{transition:transform .2s cubic-bezier(.2,.8,.25,1);}
@@ -80,7 +80,7 @@
   .home-widget:hover .home-tools button,.home-tools button:hover{opacity:.95;}
   .home-resize{position:absolute;right:3px;bottom:3px;z-index:6;border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:12px;line-height:1;color:#9b8fae;cursor:nwse-resize;padding:2px 5px;opacity:.4;touch-action:none;user-select:none;}
   .home-widget:hover .home-resize,.home-resize:hover{opacity:.95;}
-  .home-add{border:2px dashed var(--line);border-radius:16px;background:rgba(255,255,255,.4);color:var(--lav-deep);font-size:13px;cursor:pointer;min-height:80px;grid-column:span 4;grid-row:span 4;}
+  .home-add{border:2px dashed var(--line);border-radius:16px;background:rgba(255,255,255,.4);color:var(--lav-deep);font-size:13px;cursor:pointer;min-height:44px;max-height:48px;grid-column:1/-1;grid-row:span 8;margin-top:2px;}
   body.locked .home-tools,body.locked .home-resize,body.locked .home-add{display:none!important;}
   #nav .tab{touch-action:none;user-select:none;-webkit-user-select:none;}
   #nav .tab.reordering{opacity:.55;}
@@ -912,7 +912,7 @@ function layoutHome(){
     let h;
     if(w.classList.contains("min")){ h=50; }
     else { const sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; h=panel.getBoundingClientRect().height; }
-    if(h>0)w.style.gridRowEnd="span "+Math.max(1,Math.ceil((h+gap)/(rowH+gap)));
+    if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
   });
 }
 const WLABEL={today:"Today at a glance",mission:"Content mission control",artcorner:"Art corner",money:"Money pulse",creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
