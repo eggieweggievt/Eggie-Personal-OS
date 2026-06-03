@@ -228,6 +228,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - markHabit: { name }     // check off a habit by name (fuzzy-matched to her habit list)
 - addHabit: { label, emoji?, cat?: "Pre-stream"|"On-air"|"Post-stream"|"Content"|"Community"|"Health"|"Business"|"Batch days", energy?: "essential"|"normal"|"intensive", total?: number }
 - scheduleContent: { name (fuzzy-matched to an EXISTING content title in her list above), date: "YYYY-MM-DD" }   // sets that content's scheduled date. Use ONLY for content she already has; if it's a new idea, use addContent instead.
+- startScript: { kind: "short"|"long", title?, raw? (any idea/notes/spoken words she gave you to start from), references?, format?: boolean }   // opens the Script Writer seeded with this; set format:true ONLY if she gave enough raw/references to shape it now (otherwise leave false so she can dictate more first).
 
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
       const raw = await claude(

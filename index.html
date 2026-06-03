@@ -2221,6 +2221,11 @@ render();
       case "navigate":
         if(a.tab && TABS.some(function(t){return t[0]===a.tab;})){ setTab(a.tab); return "→ opened "+a.tab; }
         return "";
+      case "startScript":
+        state.script={kind:(a.kind==="long"?"long":"short"),title:a.title||"",references:a.references||"",raw:a.raw||"",out:null};
+        setTab("script");
+        if(a.format && (state.script.raw||state.script.references)){ setTimeout(function(){ try{formatScript();}catch(e){} },80); }
+        return "✍️ started a "+(a.kind==="long"?"long-form":"short")+" script"+(a.title?" — “"+a.title+"”":"")+(a.format?" and shaping it now…":" — talk it out and hit format when ready");
       default: return "";
     }
   }
