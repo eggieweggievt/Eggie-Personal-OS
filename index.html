@@ -561,7 +561,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
@@ -740,6 +740,7 @@ async function render(){
     else if(state.tab==="care") html=await renderCare();
     else if(state.tab==="habits") html=await renderHabits();
     else if(state.tab==="optimize") html=renderOptimize();
+    else if(state.tab==="script") html=await renderScript();
     else if(state.tab==="health") html=await renderHealth();
     else if(state.tab==="income") html=await renderIncome();
     else if(state.tab==="pitch") html=await renderPitch();
@@ -1572,6 +1573,70 @@ function snapHTML(s){
   </div></div>
   ${(s.recent&&s.recent.length)?s.recent.map(v=>`<div style="display:flex;gap:12px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(v.title)}</span><span class="label" style="white-space:nowrap">${n(v.views)} views</span></div>`).join(""):`<div class="soft" style="font-size:12px">No recent videos found.</div>`}`;
 }
+/* ===================== SCRIPT WRITER ===================== */
+async function renderScript(){
+  const sent=await DB.daily(SENTINEL); const saved=sent.scripts||[];
+  if(!state.script)state.script={kind:"short",title:"",references:"",raw:"",out:null};
+  const s=state.script, kind=s.kind||"short";
+  const seg=`<div class="seg">${[["short","📲 Short"],["long","🎬 Long-form"]].map(([k,l])=>`<button data-act="scriptKind" data-v="${k}" class="${kind===k?'on':''}">${l}</button>`).join("")}</div>`;
+  const out=s.out;
+  const outHtml = out ? `<div class="soft-card" style="margin-top:10px">
+      ${(out.hooks&&out.hooks.length)?`<div class="label">hook options</div>${out.hooks.map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span class="grow" style="font-size:12.5px">${esc(h)}</span><button class="btn" data-act="copyText" data-t="${esc(h)}" style="padding:2px 8px">copy</button></div>`).join("")}`:""}
+      <div class="label" style="margin-top:10px">script${out.title?` · <span class="soft">${esc(out.title)}</span>`:""} <button class="btn" data-act="copyScript" style="padding:2px 8px;margin-left:6px">copy script</button></div>
+      <div id="scrScript" style="white-space:pre-wrap;font-size:13px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:4px;background:#fff">${esc(out.script||"")}</div>
+      ${out.cta?`<div class="label" style="margin-top:8px">CTA</div><div class="soft" style="font-size:12.5px">${esc(out.cta)}</div>`:""}
+      <div style="margin-top:12px"><button class="btn btn-pink" data-act="scrToContent">＋ add to content pipeline</button></div>
+    </div>` : "";
+  const savedHtml = saved.length?`<div class="panel"><div class="card-head"><span class="label">📁 saved drafts</span></div>${saved.slice().reverse().map(d=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="pill ${d.kind==='long'?'pill-lav':'pill-pink'}">${d.kind==='long'?'LF':'SF'}</span><span class="grow" style="font-size:12.5px">${esc(d.title||"(untitled)")}</span><button class="btn" data-act="loadScript" data-id="${d.id}">open</button><button class="label" data-act="delScript" data-id="${d.id}" style="background:none;border:none;color:var(--rose)">✕</button></div>`).join("")}</div>`:"";
+  return `<div style="max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div class="panel">
+      <div class="card-head"><h2 style="font-size:18px">✍️ Script writer</h2>${seg}</div>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">Drop in your research, then just talk it out — I'll shape your own words into your ${kind==='long'?'long-form':'short'} format, in your voice.${DEMO?` <b>(Deploy the analyze function + demo off to format.)</b>`:""}</p>
+      <div class="label">Working title <span class="muted">· optional</span></div>
+      <input class="inp" id="scrTitle" value="${esc(s.title||"")}" placeholder="e.g. I tried VTubing on a $0 budget" />
+      <div class="label" style="margin-top:10px">Research / references <span class="muted">· paste facts, links, notes</span></div>
+      <textarea class="inp" id="scrRefs" rows="4" placeholder="paste your sources, bullet points, key facts…">${esc(s.references||"")}</textarea>
+      <div class="card-head" style="margin-top:12px"><div class="label">🎙️ Your words <span class="muted">· talk, it types for you</span></div>
+        <div style="display:flex;gap:6px"><button class="btn" id="recBtn" data-act="recToggle">🎙️ Record</button><button class="btn" data-act="scrClearRaw">clear</button></div></div>
+      <textarea class="inp" id="scrRaw" rows="7" placeholder="hit Record and just talk — or type. Don't worry about being tidy, I'll clean it up.">${esc(s.raw||"")}</textarea>
+      <div id="recHint" class="soft" style="font-size:11.5px;margin-top:4px"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="formatScript">✨ format into a ${kind==='long'?'long-form':'short'} script</button><button class="btn" data-act="saveScript">💾 save draft</button></div>
+      <div id="scrOut">${outHtml}</div>
+    </div>
+    ${savedHtml}
+  </div>`;
+}
+let RECOG=null, recOn=false;
+function setRecBtn(on){ const b=document.getElementById("recBtn"); if(b){ b.textContent=on?"⏹ Stop":"🎙️ Record"; b.classList.toggle("on",on); } const h=document.getElementById("recHint"); if(h)h.textContent=on?"listening… speak naturally, tap Stop when you're done 🌸":""; }
+function recToggle(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast("Voice typing needs Chrome or Edge on desktop 🌸"); return; }
+  if(!state.script)state.script={kind:"short",raw:""};
+  if(recOn){ recOn=false; try{RECOG&&RECOG.stop();}catch(e){} scrCapture(); setRecBtn(false); return; }
+  try{ RECOG=new SR(); }catch(e){ toast("Couldn't start the mic 🌸"); return; }
+  RECOG.lang="en-US"; RECOG.continuous=true; RECOG.interimResults=true;
+  RECOG.onresult=function(e){ let interim="",fin=""; for(let i=e.resultIndex;i<e.results.length;i++){ const tx=e.results[i][0].transcript; if(e.results[i].isFinal)fin+=tx; else interim+=tx; } if(fin){ state.script.raw=((state.script.raw||"").replace(/\s*$/,"")+" "+fin.trim()).trim(); } const ta=document.getElementById("scrRaw"); if(ta){ ta.value=state.script.raw+(interim?" "+interim:""); ta.scrollTop=ta.scrollHeight; } };
+  RECOG.onerror=function(e){ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ toast("Let the browser use your mic 🌸"); recOn=false; setRecBtn(false); } };
+  RECOG.onend=function(){ if(recOn){ try{RECOG.start();}catch(e){} } };
+  try{ RECOG.start(); recOn=true; setRecBtn(true); }catch(e){ toast("Mic busy — try again 🌸"); }
+}
+function scrCapture(){ if(!state.script)state.script={kind:"short"}; const g=id=>{const el=document.getElementById(id);return el?el.value:undefined;}; const t=g("scrTitle"),r=g("scrRefs"),w=g("scrRaw"); if(t!=null)state.script.title=t; if(r!=null)state.script.references=r; if(w!=null)state.script.raw=w; }
+async function formatScript(){
+  scrCapture(); if(recOn)recToggle(); const out=document.getElementById("scrOut"); if(!out)return;
+  if(DEMO||!SB){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;margin-top:10px">✨ Runs once the analyze function is deployed and demo is off — see EDGE-FUNCTION-SETUP.md 🐙</div>`; return; }
+  if(!(state.script.raw||"").trim() && !(state.script.references||"").trim()){ toast("Add some words or research first 🌸"); return; }
+  out.innerHTML=`<div class="label" style="margin-top:10px">shaping your script… 🐙</div>`;
+  try{ const r=await aiCall("script",{kind:state.script.kind,title:state.script.title,references:state.script.references,raw:state.script.raw}); if(r&&r.error){ out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px;margin-top:10px">${esc(r.error)}</div>`; return; } state.script.out=r; render(); }
+  catch(e){ out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px;margin-top:10px">${esc(e.message||e)}</div>`; }
+}
+async function saveScriptDraft(){
+  scrCapture(); const s=state.script; if(!(s.title||s.raw||s.references)){ toast("Nothing to save yet 🌸"); return; }
+  await DB.saveDaily(SENTINEL,n=>{ const list=(n.scripts||[]).slice(); const rec={id:s.id||("sc"+uid().slice(0,8)),kind:s.kind,title:s.title||"",references:s.references||"",raw:s.raw||"",out:s.out||null,updated:new Date().toISOString()}; const i=list.findIndex(x=>x.id===rec.id); if(i>=0)list[i]=rec; else list.push(rec); s.id=rec.id; return {...n,scripts:list}; });
+  toast("Saved 💗"); render();
+}
+async function loadScriptDraft(id){ const sent=await DB.daily(SENTINEL); const d=(sent.scripts||[]).find(x=>x.id===id); if(d){ state.script={id:d.id,kind:d.kind||"short",title:d.title||"",references:d.references||"",raw:d.raw||"",out:d.out||null}; render(); } }
+async function delScriptDraft(id){ await DB.saveDaily(SENTINEL,n=>({...n,scripts:(n.scripts||[]).filter(x=>x.id!==id)})); toast("Removed"); render(); }
+async function scrToContent(){ scrCapture(); const s=state.script, o=s.out||{}; const title=(o.title||s.title||"Untitled script").slice(0,160); const hook=(o.hooks&&o.hooks[0])||""; await DB.addContent({title,format:s.kind==="long"?"long":"short",stage:"scripting",hook,priority:60}); toast("Added to content 🎬"); }
 function renderOptimize(){
   const live=state.optMode==="livestream";
   const seg=`<div class="seg">${[["video","📹 Video"],["livestream","🔴 Livestream"]].map(([k,l])=>`<button data-act="optMode" data-v="${k}" class="${state.optMode===k?'on':''}">${l}</button>`).join("")}</div>`;
@@ -1815,7 +1880,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -1967,6 +2032,15 @@ document.addEventListener("click",async(e)=>{
     catch(e){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(e.message||e)}</div>`; }
     return;
   }
+  if(act==="scriptKind"){ scrCapture(); if(!state.script)state.script={}; state.script.kind=el.dataset.v; state.script.out=null; return render(); }
+  if(act==="recToggle")return recToggle();
+  if(act==="scrClearRaw"){ if(!state.script)state.script={}; state.script.raw=""; const ta=document.getElementById("scrRaw"); if(ta)ta.value=""; return; }
+  if(act==="formatScript")return formatScript();
+  if(act==="saveScript")return saveScriptDraft();
+  if(act==="loadScript")return loadScriptDraft(id);
+  if(act==="delScript")return delScriptDraft(id);
+  if(act==="scrToContent")return scrToContent();
+  if(act==="copyScript"){ const el2=document.getElementById("scrScript"); if(el2&&navigator.clipboard)navigator.clipboard.writeText(el2.innerText); toast("Copied 💗"); return; }
   if(act==="runOptimize")return runOptimize();
   if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }

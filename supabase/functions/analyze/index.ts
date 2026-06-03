@@ -241,6 +241,31 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
       return json({ reply: parsed.reply || "okay!", actions: parsed.actions });
     }
 
+    // --- script: turn raw spoken notes + research into a formatted short/long-form script ---
+    if (mode === "script") {
+      const i = body.input || {};
+      const kind = i.kind === "long" ? "long" : "short";
+      const title = (i.title || "").toString().slice(0, 200);
+      const refs = (i.references || "").toString().slice(0, 4000);
+      const raw = (i.raw || "").toString().slice(0, 7000);
+      if (!raw && !refs) return json({ error: "Add some spoken words or references first." }, 400);
+      const common = `Her working title: ${title || "(none)"}\n\nResearch / references she pasted (facts, links, source notes — ground the script in these, don't invent facts):\n${refs || "(none)"}\n\nHer own spoken words (raw voice-to-text — may ramble, mis-punctuate, or repeat; clean it up but KEEP her phrasing, jokes, and voice — do not blandify her):\n${raw || "(none)"}`;
+      const prompt = kind === "short"
+        ? `Shape this into a tight SHORT-form video script (YouTube Shorts / TikTok, ~45–55 seconds, roughly 110–150 spoken words). Return ONLY JSON:
+{ "title": string, "hooks": string[3], "script": string, "cta": string }
+- hooks: 3 punchy first-line options (the first 1–2 seconds — curiosity / shock / a specific claim, in her TITLE-ENGINE style).
+- script: the full spoken script in her warm, playful, lightly-unhinged, spoon-theory-aware voice. Open on the strongest hook, 2–4 fast beats, one clear payoff. Spoken lines only (no camera directions). Tight enough for a short.
+- cta: one soft, on-brand closing line.
+${common}`
+        : `Shape this into a LONG-form YouTube script. Return ONLY JSON:
+{ "title": string, "hooks": string[3], "script": string, "cta": string }
+- script: a full script in her voice — a strong cold-open hook, then clear sections using short "## Section name" headers, natural spoken paragraphs grounded in the research, building logically, with a warm outro. Tighten the rambling but preserve her points, phrasing, and personality.
+- hooks: 3 cold-open options. cta: a warm subscribe / community CTA.
+${common}`;
+      const out = await claude(BRAND, prompt, 2400);
+      return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
+    }
+
     if (mode === "thumbnail") {
       const img = (body.input?.image || "").toString();
       const m = img.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
