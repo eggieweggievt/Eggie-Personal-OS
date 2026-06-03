@@ -1773,10 +1773,10 @@ function renderAsk(){
 }
 
 /* ===================== ART & CREATIVITY 🎨 ===================== */
-const ART_SUBJECTS=["a cozy octopus","your OC","a sleepy cat","a forest spirit","a cup of tea with steam","a magical girl","a tiny dragon","a mushroom house","a koi fish","a star-catcher","a jellyfish","a little robot companion","a flower crown","a luna moth","a sea slug","a friendly ghost","a frog knight","a constellation given a face"];
-const ART_MOODS=["golden hour","moody & rainy","dreamy pastel","neon night","misty morning","candle-lit","underwater glow","autumn warmth","frosty blue","sunset gradient"];
-const ART_CONSTRAINTS=["only 3 colours","no black, no white","one light source","under 20 minutes","fit it inside a circle","monochrome + one accent","big shapes only, no lineart","non-dominant hand","grayscale values first","one continuous line"];
-const ART_GESTURES=["standing figure","dynamic action pose","a pair of hands","a face at 3/4","running pose","seated figure","an animal in motion","drapery / cloth fold","feet","expressive silhouette","twisting torso","two figures interacting"];
+const ART_SUBJECTS=["your VTuber OC, half-body bust","an anime portrait, ¾ view","your OC in a brand-new outfit / alt","a chibi version of your OC","an emote concept (pog / happy / crying)","a key-visual splash of your OC","fanart of a VTuber you like","your OC in seasonal wear (yukata, holiday)","an expression sheet, 5 emotions","a dynamic action pose of your OC","your OC + their mascot / familiar","a 'currently streaming' screen illustration","a detailed eye study, anime style","a Twitch sub-badge concept","your OC reimagined in another art style","an idol / performance pose","a cozy half-body with soft lighting","your OC's hairstyle explored 3 ways"];
+const ART_MOODS=["soft anime cel-shading","golden-hour rim light","neon cyberpunk glow","dreamy pastel gradient","moody dramatic backlight","sakura petals & bloom","cozy warm indoor light","ethereal cool blues","high-contrast manga inks","vaporwave sunset"];
+const ART_CONSTRAINTS=["cel-shade with 2 light values","limited 3-colour palette","clean, finished lineart","one accent colour only","push the expression further","fully render the eyes","try foreshortening","background gradient + bloom","post it even if unfinished","30-minute speedpaint"];
+const ART_GESTURES=["anime ¾ face","expressive anime eyes","dynamic action pose","hands holding a prop","idol / performance pose","cozy seated pose","hair-flow study","chibi proportions","dramatic foreshortening","two characters interacting","clothing-fold study","confident hero pose"];
 const ART_REFRAMES=[
   "Art isn't a detour from your work — it's the well your work draws from. A dry well makes nothing. 🌊",
   "You're allowed to make things that only matter to you. That's not wasted time, that's being a person. 💗",
@@ -1787,8 +1787,8 @@ const ART_REFRAMES=[
   "Your worth isn't an output. You're allowed to make art for absolutely no reason. ✨",
   "The pressure to be 'productive' is what's stealing your art — not the art stealing your productivity. 🌙"
 ];
-const ART_DAILY=["5-minute warm-up scribbles","draw one small thing from life","fill a page with one repeated shape","redraw an old sketch","quick colour study from a photo","draw the last thing you ate","one-line contour of your hand","tiny 3-colour doodle","draw your mood as a creature","gesture 5 poses, 30s each"];
-const ART_WEEKLY=["finish one small piece, all the way to colour","try a brand-new brush or tool","do a master study — copy an artist you love","draw the same subject three ways","make one limited-palette illustration","a full sketchbook page, any day this week","draw your OC in a brand-new outfit","learn one new shortcut or technique"];
+const ART_DAILY=["warm up with 5 expression doodles","a quick chibi of your OC","one detailed anime eye study","redraw an old piece of your OC art","30-min colour study from an anime screencap","design one new emote","ink one clean character","draw your OC's hairstyle 3 ways","a half-body bust, sketch only","gesture 5 poses, 30s each"];
+const ART_WEEKLY=["finish one polished half-body illustration of your OC","design a post-ready emote","a master study of an artist you admire","render your OC in a brand-new outfit","build an expression sheet you can reuse","make a key-visual splash to post","draw fanart of a VTuber you like","learn + apply one new rendering technique"];
 const DEFAULT_ART_RES=[
   {id:"r1",title:"Line of Action — gesture / figure timer",url:"https://line-of-action.com/practice-tools/",tag:"reference"},
   {id:"r2",title:"Coolors — palette generator",url:"https://coolors.co/",tag:"colour"},
@@ -1857,6 +1857,32 @@ function mbCardHTML(c){
   return `<div class="mb-card swatch" data-mb="${c.id}" style="${pos};background:${esc(c.color||"#ec7faf")}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-hex" data-act="copyText" data-t="${esc(c.color||"")}">${esc(c.color||"")}</span><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
 }
 async function mbUpdate(id,patch){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===id?{...c,...patch}:c)})); }
+function mbWrapText(ctx,text,x,y,maxW,lh){ let yy=y; String(text).split("\n").forEach(para=>{ const words=para.split(/\s+/); let line=""; words.forEach(w=>{ const test=line?line+" "+w:w; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,yy); line=w; yy+=lh; } else line=test; }); ctx.fillText(line,x,yy); yy+=lh; }); }
+/* rasterise the freeform mood board to a PNG (for importing into Clip Studio etc.). CORS-blocked
+   images can't be read back by the browser, so those become placeholder boxes — layout is preserved. */
+async function exportMoodBoardPNG(){
+  const boardEl=document.getElementById("moodBoard");
+  const sent=await DB.daily(SENTINEL); const cards=sent.artBoard||[];
+  if(!cards.length){ toast("Board's empty — add something first 🌸"); return; }
+  const BW=Math.round((boardEl&&boardEl.clientWidth)||900), BH=Math.round((boardEl&&boardEl.clientHeight)||520), scale=2;
+  const cv=document.createElement("canvas"); cv.width=BW*scale; cv.height=BH*scale; const ctx=cv.getContext("2d"); ctx.scale(scale,scale);
+  ctx.fillStyle="#faf7fc"; ctx.fillRect(0,0,BW,BH);
+  ctx.fillStyle="#e7daf0"; for(let y=0;y<BH;y+=22)for(let x=0;x<BW;x+=22){ ctx.beginPath(); ctx.arc(x,y,1,0,7); ctx.fill(); }
+  const imgs={}; let failed=0;
+  await Promise.all(cards.filter(c=>c.type==="img").map(c=>new Promise(res=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>{imgs[c.id]=im;res();}; im.onerror=()=>{failed++;res();}; im.src=c.url; })));
+  const rr=(x,y,w,h,r)=>{ r=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); };
+  cards.forEach(c=>{ const x=c.x||0,y=c.y||0,w=c.w||160,h=c.h||160; ctx.save();
+    ctx.shadowColor="rgba(120,90,140,.18)"; ctx.shadowBlur=10; ctx.shadowOffsetY=3;
+    if(c.type==="img"){ rr(x,y,w,h,12); ctx.fillStyle="#efe6f5"; ctx.fill(); ctx.shadowColor="transparent"; ctx.save(); rr(x,y,w,h,12); ctx.clip(); const im=imgs[c.id];
+        if(im){ const ar=im.width/im.height, br=w/h; let dw,dh,dx,dy; if(ar>br){ dh=h; dw=h*ar; dx=x-(dw-w)/2; dy=y; } else { dw=w; dh=w/ar; dx=x; dy=y-(dh-h)/2; } ctx.drawImage(im,dx,dy,dw,dh); }
+        else { ctx.fillStyle="#b9a9c8"; ctx.font="13px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("🖼 image",x+w/2,y+h/2); }
+        ctx.restore(); }
+    else if(c.type==="note"){ rr(x,y,w,h,12); ctx.fillStyle="#fff7da"; ctx.fill(); ctx.shadowColor="transparent"; ctx.strokeStyle="#f0e3a8"; ctx.lineWidth=1; rr(x,y,w,h,12); ctx.stroke(); ctx.fillStyle="#5a5230"; ctx.font="12.5px sans-serif"; ctx.textAlign="left"; ctx.textBaseline="top"; ctx.save(); rr(x,y,w,h,12); ctx.clip(); mbWrapText(ctx,c.text||"",x+9,y+9,w-18,17); ctx.restore(); }
+    else { rr(x,y,w,h,12); ctx.fillStyle=c.color||"#ec7faf"; ctx.fill(); ctx.shadowColor="transparent"; ctx.font="10px sans-serif"; const lw=ctx.measureText(c.color||"").width+12; ctx.fillStyle="rgba(0,0,0,.4)"; rr(x+w/2-lw/2,y+h-22,lw,16,6); ctx.fill(); ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(c.color||"",x+w/2,y+h-14); }
+    ctx.restore(); });
+  try{ cv.toBlob(b=>{ if(!b){ toast("Couldn't make the PNG 🌸"); return; } const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="mood-board.png"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); toast(failed?("Saved 🎨 — "+failed+" image"+(failed>1?"s":"")+" couldn't embed (that site blocks it)"):"Mood board saved as PNG 🎨"); },"image/png"); }
+  catch(err){ toast("Some images block PNG export — try CORS-friendly image links 🌸"); }
+}
 async function renderArt(){
   const sent=await DB.daily(SENTINEL);
   if(!state.art)state.art={};
@@ -1891,6 +1917,7 @@ async function renderArt(){
       <button class="btn btn-pink" data-act="mbAddImage">🖼️ image</button>
       <button class="btn" data-act="mbAddNote">📝 note</button>
       <button class="btn" data-act="mbAddColor">🎨 colour</button>
+      <button class="btn" data-act="mbExport">⤓ PNG</button>
       <button class="btn" data-act="mbMax">${boardMax?'⤡ minimize':'⤢ expand'}</button></div>`;
   const boardInner=`<div class="mb-board ${boardMax?'max':''}" id="moodBoard">${board.length?board.map(mbCardHTML).join(""):`<div class="label" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;opacity:.65;width:80%">your canvas is empty 🌸<br>add an image, note, or colour below — then drag things anywhere</div>`}</div>`;
   const res=sent.artResources||DEFAULT_ART_RES;
@@ -2501,6 +2528,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="mbAddNote"){ const ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"note",text:"",x:ox,y:oy,w:170,h:120}]})); render(); return; }
   if(act==="mbAddColor"){ const col=(state.art&&state.art.pBase)||randHex(); const ox=40+Math.floor(Math.random()*60), oy=40+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}]})); render(); return; }
   if(act==="mbDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).filter(c=>c.id!==id)})); render(); return; }
+  if(act==="mbExport"){ try{ await exportMoodBoardPNG(); }catch(e){ toast("Export hiccuped 🌸"); } return; }
   if(act==="mbMax"){ state.art=state.art||{}; state.art.boardMax=!state.art.boardMax; render(); return; }
   if(act==="artResAdd"){ const ti=document.getElementById("artResTitle"), ui=document.getElementById("artResUrl"), tg=document.getElementById("artResTag"); const title=(ti&&ti.value||"").trim(), url=(ui&&ui.value||"").trim(); if(!title||!url){toast("Need a title and a link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artResources:[...((n.artResources)||DEFAULT_ART_RES),{id:uid(),title,url,tag:(tg&&tg.value)||"other"}]})); render(); return; }
   if(act==="artResDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artResources:((n.artResources)||DEFAULT_ART_RES).filter(x=>x.id!==id)})); render(); return; }
