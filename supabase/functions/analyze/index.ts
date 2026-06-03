@@ -222,6 +222,11 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
 - navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"income"|"pitch"|"review" }
+- logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
+- logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
+- setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
+- markHabit: { name }     // check off a habit by name (fuzzy-matched to her habit list)
+- addHabit: { label, emoji?, cat?: "Pre-stream"|"On-air"|"Post-stream"|"Content"|"Community"|"Health"|"Business"|"Batch days", energy?: "essential"|"normal"|"intensive", total?: number }
 
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
       const raw = await claude(
