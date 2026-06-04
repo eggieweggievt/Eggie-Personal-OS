@@ -373,6 +373,8 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addBoardImage: { url }              // add an image BY URL to the mood board (she uploads local files herself)
 - addBoardColor: { color?: "#hex" }   // drop a colour swatch onto the mood board
 - addArtResource: { title, url, tag?: "reference"|"colour"|"perspective"|"learn"|"other" }   // save a tutorial / tool link to her art library
+- addArtIdea: { text }                // "add to my ideas dump: …" — park an art idea so it doesn't get lost
+- addInspo: { url, note? }            // "save this to my inspiration vault" — a trending post / art style / ref she wants to try
 - rollArtPrompt: { }                  // "give me something to draw" — rolls a fresh OC/anime draw-this prompt and opens the Art tab
 - startArtTimer: { seconds? }         // "start an art timer", "let's warm up" — starts her gesture-practice timer (default 120s rounds)
 - showGuide: { type: "thirds"|"phi"|"spiral"|"armature"|"radial"|"iso"|"persp1"|"persp2"|"persp3" }   // open a composition guide — golden spiral, phi grid, dynamic symmetry, radial, isometric, 1/2/3-pt perspective

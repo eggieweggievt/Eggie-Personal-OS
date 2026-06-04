@@ -2120,6 +2120,17 @@ async function renderArt(){
       <div class="art-prompt">Draw <b>${esc(P.subject)}</b><br><span style="font-size:14px;color:var(--lav-deep)">${esc(P.mood)} · ${esc(P.constraint)}</span></div>
     </div>
 
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+      <div class="panel"><div class="card-head"><h2 style="font-size:17px">💡 Ideas dump</h2><span class="label">park it before it escapes</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="ideaText" placeholder="that piece I suddenly want to draw…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artIdeaAdd" ${RO?"disabled":""}>＋</button></div>
+        ${(sent.artIdeas||[]).length?`<div style="display:flex;flex-direction:column;gap:4px">${(sent.artIdeas||[]).slice().reverse().map(i=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(i.text)}</span><button class="ft-ic" data-act="artIdeaToBoard" data-id="${i.id}" title="pin to mood board">📌</button><button class="ft-ic" data-act="artIdeaDel" data-id="${i.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Every "ooh I should draw that" goes here — no more losing them. 📌 pins one to the mood board.</p>`}
+      </div>
+      <div class="panel"><div class="card-head"><h2 style="font-size:17px">✨ Inspiration vault</h2><span class="label">trends · posts · refs to try</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><input class="inp" id="inspoUrl" placeholder="link (tweet, trend, artwork…)" style="flex:2;min-width:150px" ${RO?"disabled":""}/><input class="inp" id="inspoNote" placeholder="why it sparked you (optional)" style="flex:2;min-width:140px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artInspoAdd" ${RO?"disabled":""}>＋ save</button></div>
+        ${(sent.artInspo||[]).length?`<div style="display:flex;flex-direction:column;gap:4px">${(sent.artInspo||[]).slice().reverse().map(s=>{let host="link";try{host=new URL(s.url).hostname.replace("www.","");}catch(e){} return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check ${s.done?'on':''}" data-act="artInspoDone" data-id="${s.id}" ${RO?"disabled":""} title="tried it!" style="padding:0"></button><div class="grow" style="min-width:0"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:12.5px;color:var(--lav-deep);text-decoration:none;${s.done?'opacity:.55':''}">${esc(host)} ↗</a>${s.note?`<div class="soft" style="font-size:11.5px;${s.done?'text-decoration:line-through;opacity:.55':''}">${esc(s.note)}</div>`:""}</div><button class="ft-ic" data-act="artInspoDel" data-id="${s.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Trending tweet? Art style you want to try? Drop the link here so it stops living in 47 open tabs. Check it off once you've drawn it. 💗</p>`}
+      </div>
+    </div>
+
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏲️ Practice timer</h2><span class="label">gesture / warm-ups</span></div>
       <div id="artStage" style="border-radius:14px;padding:16px;text-align:center;transition:background .6s">
         <div class="art-tim" id="artTimerDisp">${("0"+Math.floor((t.left??tLen)/60)).slice(-1)}:${("0"+((t.left??tLen)%60)).slice(-2)}</div>
@@ -2744,6 +2755,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="artLogQuick"){ const m=parseInt(el.dataset.m)||0; if(m)await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m}]})); toast("Logged "+m+" min of play 🎨 proud of you"); render(); return; }
   if(act==="artLog"){ const mi=document.getElementById("artMin"), ni=document.getElementById("artNote"); const m=parseInt(mi&&mi.value)||0; const note=(ni&&ni.value||"").trim(); if(!m){toast("How many minutes? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m,note:note||undefined}]})); toast("Logged "+m+" min 🎨"); render(); return; }
   if(act==="artPromptRoll"){ state.art=state.art||{}; state.art.prompt={subject:artRand(ART_SUBJECTS),mood:artRand(ART_MOODS),constraint:artRand(ART_CONSTRAINTS)}; render(); return; }
+  if(act==="artIdeaAdd"){ const i=document.getElementById("ideaText"); const t=(i&&i.value||"").trim(); if(!t){toast("What's the idea? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artIdeas:[...(n.artIdeas||[]),{id:uid(),text:t,added:TODAY}]})); toast("Idea parked 💡"); render(); return; }
+  if(act==="artIdeaDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artIdeas:(n.artIdeas||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="artIdeaToBoard"){ const sent2=await DB.daily(SENTINEL); const idea=(sent2.artIdeas||[]).find(x=>x.id===id); if(idea){ const ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50); await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"note",text:idea.text,x:ox,y:oy,w:170,h:120}]})); toast("Pinned to the mood board 📌"); render(); } return; }
+  if(act==="artInspoAdd"){ const u=((document.getElementById("inspoUrl")||{}).value||"").trim(); const note=((document.getElementById("inspoNote")||{}).value||"").trim(); if(!u){toast("Paste the link 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artInspo:[...(n.artInspo||[]),{id:uid(),url:u,note,done:false,added:TODAY}]})); toast("Saved to the vault ✨"); render(); return; }
+  if(act==="artInspoDel"){ await DB.saveDaily(SENTINEL,n=>({...n,artInspo:(n.artInspo||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="artInspoDone"){ await DB.saveDaily(SENTINEL,n=>({...n,artInspo:(n.artInspo||[]).map(x=>x.id===id?{...x,done:!x.done}:x)})); render(); return; }
   if(act==="artPaletteRoll"){ state.art=state.art||{}; state.art.pBase=randHex(); render(); return; }
   if(act==="artPaletteScheme"){ state.art=state.art||{}; state.art.pScheme=el.dataset.v; render(); return; }
   if(act==="artLimited"){ state.art=state.art||{}; state.art.limited=[randHex(),randHex(),randHex()]; render(); return; }
@@ -2913,11 +2930,13 @@ let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
 document.addEventListener("pointermove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
 document.addEventListener("pointerup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
+document.addEventListener("pointercancel",()=>{ dragSticky=null; });   // pencil palm-rejection cancels mustn't leave a sticky glued to the pointer
 /* sticky resize (drag the ◢ corner) */
 let resizeSticky=null,resizeStart=null;
 document.addEventListener("pointerdown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); e.stopPropagation(); });
 document.addEventListener("pointermove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
 document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
+document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
 
 /* ===== mood-board: freeform drag + resize of cards (Milanote-style) ===== */
 (function(){
@@ -2940,6 +2959,7 @@ document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=re
     if(mbRz){ const id=mbRz.id,w=parseInt(mbRz.card.style.width)||mbRz.card.offsetWidth,h=parseInt(mbRz.card.style.height)||mbRz.card.offsetHeight; mbRz=null; try{await mbUpdate(id,{w,h});}catch(_){}; render(); return; }
     if(!mbDrag)return; const id=mbDrag.id,x=parseInt(mbDrag.card.style.left)||0,y=parseInt(mbDrag.card.style.top)||0; mbDrag=null; try{await mbUpdate(id,{x,y});}catch(_){}; render(); return;
   },true);
+  document.addEventListener("pointercancel",()=>{ if(!mbDrag&&!mbRz)return; mbDrag=null; mbRz=null; try{render();}catch(_){} },true);
 })();
 
 /* ===== resource center: drag rows to reorder ===== */
@@ -2961,6 +2981,7 @@ document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=re
     await DB.saveDaily(SENTINEL,n=>{ const cur=(n.artResources)||DEFAULT_ART_RES; const map=Object.fromEntries(cur.map(x=>[x.id,x])); const out=order.map(id=>map[id]).filter(Boolean); cur.forEach(x=>{ if(!order.includes(x.id))out.push(x); }); return {...n,artResources:out}; });
     render();
   },true);
+  document.addEventListener("pointercancel",()=>{ if(!rr)return; rr.row.style.opacity=""; rr.row.style.boxShadow=""; rr=null; render(); },true);
 })();
 
 /* ===== touch drag-and-drop (iPad/phone): HTML5 DnD doesn't fire on touch, so for touch
@@ -3003,12 +3024,16 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
   if(t.id==="euInput"){ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
   if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
+  if(t.id==="ideaText"){ const b=document.querySelector('[data-act="artIdeaAdd"]'); if(b)b.click(); }
+  if(t.id==="inspoUrl"||t.id==="inspoNote"){ const b=document.querySelector('[data-act="artInspoAdd"]'); if(b)b.click(); }
   if(t.id==="smartQ")smart();
   if(t.id==="askQ")ask();
   if(t.dataset&&t.dataset.act==="goalAdd"&&t.value.trim()){const sc=t.dataset.scope,tx=t.value.trim();t.value="";await goalMut(sc,g=>[...g,{id:uid(),text:tx,done:false}]);render();}
 });
-let dragId=null,dragType=null;
-document.addEventListener("dragstart",e=>{const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');const tc=e.target.closest('[data-act="dragTask"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}else if(tc){dragId=tc.dataset.id;dragType="task";}});
+let dragId=null,dragType=null,_lastPtr="mouse";
+document.addEventListener("pointerdown",e=>{ _lastPtr=e.pointerType||"mouse"; },true);
+/* Apple Pencil / touch: suppress Safari's NATIVE drag so only the pointer ghost-drag engine runs — otherwise both fire and drops glitch/double */
+document.addEventListener("dragstart",e=>{ if(_lastPtr!=="mouse"){ e.preventDefault(); return; } const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');const tc=e.target.closest('[data-act="dragTask"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}else if(tc){dragId=tc.dataset.id;dragType="task";}});
 document.addEventListener("drop",async e=>{
   if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');const ts=e.target.closest('[data-act="dropTaskStatus"]');
   if(cd&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:cd.dataset.date});dragId=null;render();}
@@ -3082,7 +3107,7 @@ render();
     document.body.appendChild(p); count++;
     p.addEventListener("animationend",()=>{ p.remove(); count--; });
   }
-  window.addEventListener("pointermove",e=>{ if(e.pointerType==="touch")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
+  window.addEventListener("pointermove",e=>{ if(e.pointerType!=="mouse")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
 })();
 /* ===== ambient bubble field — canvas, behind the boxes, plentiful + mouse-interactive 🐙 ===== */
 (function(){
@@ -3370,6 +3395,14 @@ render();
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artBoard:(n.artBoard||[]).concat([{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}])}); });
         return "🎨 dropped "+col+" onto your mood board";
       }
+      case "addArtIdea":
+        if(!a.text) return "";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artIdeas:(n.artIdeas||[]).concat([{id:uid(),text:String(a.text).slice(0,300),added:TODAY}])}); });
+        return "💡 parked that in your ideas dump";
+      case "addInspo":
+        if(!a.url) return "I need the link 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artInspo:(n.artInspo||[]).concat([{id:uid(),url:a.url,note:a.note||"",done:false,added:TODAY}])}); });
+        return "✨ saved to your inspiration vault";
       case "addArtResource":
         if(!a.url) return "I need a link to save 🌸";
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artResources:((n.artResources)||DEFAULT_ART_RES).concat([{id:uid(),title:a.title||a.url,url:a.url,tag:a.tag||"other"}])}); });
