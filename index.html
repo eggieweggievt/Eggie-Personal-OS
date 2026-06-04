@@ -259,6 +259,15 @@
   .art-grid-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
   .art-ref{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);aspect-ratio:1;background:#faf6fb center/cover no-repeat;}
   .art-ref button{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:8px;width:22px;height:22px;cursor:pointer;font-size:12px;}
+  /* ideas dump + inspiration vault galleries */
+  .idea-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .idea-card{position:relative;border-radius:4px 14px 14px 14px;padding:12px 12px 32px;font-size:12.5px;line-height:1.5;min-height:86px;box-shadow:0 3px 10px rgba(120,90,140,.14);word-break:break-word;color:#5a4a55;}
+  .idea-card .ic-tools{position:absolute;bottom:5px;right:6px;display:flex;gap:2px;opacity:.7;}
+  .inspo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .inspo-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column;box-shadow:0 3px 10px rgba(120,90,140,.10);}
+  .inspo-card.done{opacity:.55;}
+  .inspo-thumb{height:104px;background:#f3ecfa center/cover no-repeat;display:grid;place-items:center;}
+  .inspo-body{padding:9px 11px;display:flex;flex-direction:column;gap:4px;flex:1;}
   /* milanote-style mood board */
   .mb-board{position:relative;background:#faf7fc;border:1px solid var(--line);border-radius:14px;overflow:hidden;height:520px;background-image:radial-gradient(#e7daf0 1px,transparent 1px);background-size:22px 22px;}
   .mb-board.max{height:auto;flex:1;width:100%;border-radius:12px;}
@@ -2099,6 +2108,24 @@ async function renderArt(){
       </div>
     </div>
 
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">💡 Ideas dump</h2><span class="pill pill-lav">${(sent.artIdeas||[]).length} idea${(sent.artIdeas||[]).length===1?"":"s"}</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="ideaText" placeholder="that piece I suddenly want to draw…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artIdeaAdd" ${RO?"disabled":""}>＋ park it</button></div>
+      ${(sent.artIdeas||[]).length?`<div class="idea-grid">${(sent.artIdeas||[]).slice().reverse().map((i,ix)=>{const cols2=["#fff3c9","#ffe1ee","#e7defb","#dcf4ea","#ffe7d6"];return `<div class="idea-card" style="background:${cols2[ix%5]};transform:rotate(${ix%2?0.8:-0.8}deg)">${esc(i.text)}<div class="ic-tools"><button class="ft-ic" data-act="artIdeaToBoard" data-id="${i.id}" title="pin to mood board">📌</button><button class="ft-ic" data-act="artIdeaDel" data-id="${i.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Every "ooh I should draw that" lands here as a sticky — no more losing them. 📌 pins one to the mood board. 🌸</p>`}
+    </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">✨ Inspiration vault</h2><span class="pill pill-pink">${(sent.artInspo||[]).filter(s=>!s.done).length} to try · ${(sent.artInspo||[]).filter(s=>s.done).length} done</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><input class="inp" id="inspoUrl" placeholder="link (tweet, trend, artwork…)" style="flex:2;min-width:150px" ${RO?"disabled":""}/><input class="inp" id="inspoNote" placeholder="why it sparked you (optional)" style="flex:2;min-width:140px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artInspoAdd" ${RO?"disabled":""}>＋ save</button></div>
+      ${(sent.artInspo||[]).length?`<div class="inspo-grid">${(sent.artInspo||[]).slice().reverse().map(s=>{let host="link";try{host=new URL(s.url).hostname.replace("www.","");}catch(e){} const isImg=/\.(png|jpe?g|gif|webp)(\?|$)/i.test(s.url);
+        return `<div class="inspo-card ${s.done?'done':''}">
+          <a href="${esc(s.url)}" target="_blank" rel="noopener"><div class="inspo-thumb" style="${isImg?`background-image:url('${esc(s.url)}')`:""}">${isImg?"":`<img src="https://www.google.com/s2/favicons?domain=${esc(host)}&sz=64" style="width:34px;height:34px;border-radius:9px" onerror="this.style.display='none'"/>`}</div></a>
+          <div class="inspo-body">
+            <a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:var(--lav-deep);text-decoration:none">${esc(host)} ↗</a>
+            ${s.note?`<div class="soft" style="font-size:11.5px;${s.done?'text-decoration:line-through':''}">${esc(s.note)}</div>`:""}
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:auto"><button class="chiptog ${s.done?'on':''}" data-act="artInspoDone" data-id="${s.id}" ${RO?"disabled":""} style="font-size:10.5px;padding:3px 9px">${s.done?'✓ tried it!':'mark tried'}</button><button class="ft-ic" data-act="artInspoDel" data-id="${s.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>
+          </div>
+        </div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Trending tweet? Style you want to try? Drop the link so it stops living in 47 open tabs — cards with image links show the picture itself. 💗</p>`}
+    </div>
+
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏱️ Art minutes</h2><span class="label">every minute counts — even 5</span></div>
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
         <div><div class="num" style="font-size:30px;font-family:var(--display);color:var(--pink-deep)">${weekMin}<span style="font-size:14px"> min</span></div><div class="label">this week · ${weekDays} day${weekDays===1?'':'s'} of play 💗</div></div>
@@ -2120,16 +2147,6 @@ async function renderArt(){
       <div class="art-prompt">Draw <b>${esc(P.subject)}</b><br><span style="font-size:14px;color:var(--lav-deep)">${esc(P.mood)} · ${esc(P.constraint)}</span></div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
-      <div class="panel"><div class="card-head"><h2 style="font-size:17px">💡 Ideas dump</h2><span class="label">park it before it escapes</span></div>
-        <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="ideaText" placeholder="that piece I suddenly want to draw…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artIdeaAdd" ${RO?"disabled":""}>＋</button></div>
-        ${(sent.artIdeas||[]).length?`<div style="display:flex;flex-direction:column;gap:4px">${(sent.artIdeas||[]).slice().reverse().map(i=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(i.text)}</span><button class="ft-ic" data-act="artIdeaToBoard" data-id="${i.id}" title="pin to mood board">📌</button><button class="ft-ic" data-act="artIdeaDel" data-id="${i.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Every "ooh I should draw that" goes here — no more losing them. 📌 pins one to the mood board.</p>`}
-      </div>
-      <div class="panel"><div class="card-head"><h2 style="font-size:17px">✨ Inspiration vault</h2><span class="label">trends · posts · refs to try</span></div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><input class="inp" id="inspoUrl" placeholder="link (tweet, trend, artwork…)" style="flex:2;min-width:150px" ${RO?"disabled":""}/><input class="inp" id="inspoNote" placeholder="why it sparked you (optional)" style="flex:2;min-width:140px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artInspoAdd" ${RO?"disabled":""}>＋ save</button></div>
-        ${(sent.artInspo||[]).length?`<div style="display:flex;flex-direction:column;gap:4px">${(sent.artInspo||[]).slice().reverse().map(s=>{let host="link";try{host=new URL(s.url).hostname.replace("www.","");}catch(e){} return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check ${s.done?'on':''}" data-act="artInspoDone" data-id="${s.id}" ${RO?"disabled":""} title="tried it!" style="padding:0"></button><div class="grow" style="min-width:0"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:12.5px;color:var(--lav-deep);text-decoration:none;${s.done?'opacity:.55':''}">${esc(host)} ↗</a>${s.note?`<div class="soft" style="font-size:11.5px;${s.done?'text-decoration:line-through;opacity:.55':''}">${esc(s.note)}</div>`:""}</div><button class="ft-ic" data-act="artInspoDel" data-id="${s.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Trending tweet? Art style you want to try? Drop the link here so it stops living in 47 open tabs. Check it off once you've drawn it. 💗</p>`}
-      </div>
-    </div>
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏲️ Practice timer</h2><span class="label">gesture / warm-ups</span></div>
       <div id="artStage" style="border-radius:14px;padding:16px;text-align:center;transition:background .6s">
