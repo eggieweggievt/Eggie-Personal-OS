@@ -7,6 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Eggie OS" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="pet-widget/Screenshot 2026-06-02 202234.png" />
 <title>Eggie OS 🐙</title>
@@ -270,6 +271,24 @@
   }
   #addStickyBtn{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
   #focusBtn{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+  /* ===== native-app feel (PWA / touch devices) ===== */
+  html{-webkit-text-size-adjust:100%;}
+  *{-webkit-tap-highlight-color:transparent;}                      /* kill iOS's gray tap flash */
+  body{overscroll-behavior-y:none;}                                /* no whole-page rubber-band */
+  nav,.kanban{overscroll-behavior-x:contain;}                      /* inner swipes don't bounce the page */
+  .eu-log,.pet-log,.mb-board{overscroll-behavior:contain;}
+  .btn,.chip,.chiptog,.hbtn,.seg>button,.check,.ft-ic,.pill,.home-add,.eu-chip,.idea-card button{touch-action:manipulation;}  /* no double-tap-zoom delay on controls (drag handles keep their own touch-action) */
+  .btn:active,.chiptog:active,.hbtn:active,.seg>button:active,.chip:active,.eu-chip:active{transform:scale(.96);transition:transform .06s ease;}  /* instant press feedback, like a real app */
+  .btn,.chiptog,.hbtn{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}   /* no long-press text-select on buttons */
+  @media (display-mode:standalone){
+    #rail{padding-top:calc(8px + env(safe-area-inset-top,0px));}   /* rail clears the status bar / notch when installed */
+  }
+  @media (pointer:coarse){
+    .btn{padding:9px 15px;}                                        /* slightly fatter touch targets */
+    .ft-ic{padding:5px 7px;}
+    .check{width:20px;height:20px;}
+    #rail{backdrop-filter:blur(8px);}                              /* lighter blur = smoother scrolling under the sticky rail */
+  }
   /* Ask Eugene — full chat page */
   .eu-full{position:fixed;inset:0;z-index:9995;background:var(--bg);padding:14px;display:flex;flex-direction:column;}
   .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
