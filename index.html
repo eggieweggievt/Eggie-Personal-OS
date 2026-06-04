@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#fbf3f9" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="pet-widget/Screenshot 2026-06-02 202234.png" />
 <title>Eggie OS 🐙</title>
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="favicon.png" />
@@ -236,6 +242,34 @@
   /* health counter stepper */
   .hcount{display:flex;align-items:center;gap:8px;}
   .hcount>span{min-width:30px;text-align:center;font-size:18px;font-family:var(--display);color:var(--ink);}
+  /* ===== mobile (phones) ===== */
+  @media(max-width:640px){
+    main{padding:12px 10px calc(76px + env(safe-area-inset-bottom,0px));}   /* room for the floating buttons + pet */
+    #rail{padding:8px 10px;gap:6px;}
+    .brand-name{display:none;}                                   /* logo only — give the tabs the width */
+    nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:100%;}
+    nav::-webkit-scrollbar{display:none;}
+    #nav .tab{touch-action:pan-x;white-space:nowrap;padding:8px 11px;font-size:13px;}  /* swipe the row; tab-reorder stays a desktop/iPad thing */
+    #rail .right{gap:6px;}
+    .chip{padding:4px 8px;font-size:10px;}
+    .panel{padding:13px;border-radius:15px;}
+    .inp,select.inp,textarea.inp{font-size:16px;}                /* ≥16px = iOS stops auto-zooming on focus */
+    .grid-modular{gap:0 10px;}
+    .home-tools button,.home-resize{opacity:.75;}                /* no hover on touch — keep card tools visible */
+    .cal-cell{min-height:58px;padding:2px;font-size:10px;}
+    .cal-ev{font-size:9.5px;padding:2px 4px;}
+    .kanban{grid-template-columns:repeat(7,160px);}
+    .art-tim{font-size:38px;}
+    .tp-bar{gap:8px;padding:8px 10px;}
+    .tp-text{max-width:96%;}
+    .mb-board{height:420px;}
+    .idea-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));}
+    .inspo-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+    .eu-asks{gap:6px;}
+    .toast{bottom:calc(78px + env(safe-area-inset-bottom,0px));}
+  }
+  #addStickyBtn{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+  #focusBtn{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
   /* Ask Eugene — full chat page */
   .eu-full{position:fixed;inset:0;z-index:9995;background:var(--bg);padding:14px;display:flex;flex-direction:column;}
   .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
@@ -1573,7 +1607,7 @@ async function renderIncome(){
   const kind=state.ledgerKind||"in";
   const MP={};
   MP.overview=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💰 Money ${view==="year"?"· this year":"· this month"}</h2>${viewSeg}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:10px">
         <div class="soft-card"><div class="label">Money in</div><div class="num mint" style="font-size:20px;font-family:var(--display)">+$${totalIn.toLocaleString()}</div></div>
         <div class="soft-card"><div class="label">Money out</div><div class="num" style="font-size:20px;font-family:var(--display);color:var(--rose)">−$${totalOut.toLocaleString()}</div></div>
         <div class="soft-card"><div class="label">Net</div><div class="num" style="font-size:20px;font-family:var(--display);color:${net>=0?'var(--mint)':'var(--rose)'}">${net>=0?'+':'−'}$${Math.abs(net).toLocaleString()}</div></div>
@@ -1630,7 +1664,7 @@ async function renderPitch(){
   const PP={};
   PP.builder=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Pitch Builder</h2><span class="label">tailored to you · ${esc(c.handle)}</span></div>
       <p class="soft" style="font-size:12.5px;margin:0 0 12px">Tell me about the brand once — I'll draft a cold email, DMs, and a rate snapshot in your voice, pulling your real channel stats. You're a virtual busker; entertainment has value. 💗</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
         <div><div class="label">Brand</div><input class="inp" id="pBrand" placeholder="e.g. GamerSupps" /></div>
         <div><div class="label">What they make</div><input class="inp" id="pProduct" placeholder="energy drink, indie game…" /></div>
         <div><div class="label">Deal type</div><select class="inp" id="pType">${DEAL_TYPES.map(d=>`<option value="${d}">${d}</option>`).join("")}</select></div>
@@ -1916,7 +1950,7 @@ async function renderReview(){
   RP.summary=`<div class="panel"><div class="card-head"><div><h2 style="font-size:18px">🌷 Weekly review</h2><div class="label" style="margin-top:2px">a gentle retro · seal the week to keep your streak</div></div><button class="btn btn-pink" data-act="saveReview" ${RO?"disabled":""}>✓ seal week</button></div>
     <div class="soft-card"><div class="label">📦 Shipped this week (auto)</div>${shipped.length?`<div style="margin-top:6px">${shipped.map(c=>`<span class="pill pill-mint" style="margin:2px">${esc(c.title)}</span>`).join("")}</div>`:`<div class="soft" style="font-size:12.5px;margin-top:4px">Nothing marked live this week — and that's okay. Rest weeks count.</div>`}</div></div>`;
   RP.reflect=`<div class="panel"><div class="card-head"><span class="label">🌸 this week's reflection</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${fields.map(([k,l])=>`<div><div class="label" style="margin-bottom:5px">${l}</div><textarea class="inp" data-rv="${k}" rows="3" ${RO?"disabled":""}>${esc(rv[k]||"")}</textarea></div>`).join("")}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">${fields.map(([k,l])=>`<div><div class="label" style="margin-bottom:5px">${l}</div><textarea class="inp" data-rv="${k}" rows="3" ${RO?"disabled":""}>${esc(rv[k]||"")}</textarea></div>`).join("")}</div>
     <div style="margin-top:12px"><div class="label" style="margin-bottom:5px">✨ Next week — top 3 that actually matter</div><input class="inp" data-rv="top3" value="${esc(rv.top3||"")}" ${RO?"disabled":""} placeholder="1) …  2) …  3) …" /></div></div>`;
   return modularPage("review",{summary:"Shipped + seal week",reflect:"Reflection"},[["summary",RP.summary],["reflect",RP.reflect]],12);
 }
@@ -2105,7 +2139,7 @@ async function renderArt(){
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px">
       <div class="panel"><div class="card-head"><span class="label">🌱 today's tiny challenge</span><button class="btn" data-act="artRoll" data-scope="day" style="padding:2px 8px">↻</button></div>
         <button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.dayText)}</span></button>
       </div>
@@ -3114,7 +3148,7 @@ render();
 /* ===== glowing sakura petal cursor trail (pink + white) ===== */
 (function(){
   const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
-  let last=0, count=0; const MAX=42;
+  let last=0, count=0; const MAX=(innerWidth<640?20:42), TH=(innerWidth<640?95:55);
   function spawn(x,y){
     if(reduce()||count>=MAX)return;
     const p=document.createElement("div"); p.className="petal";
@@ -3132,7 +3166,7 @@ render();
     document.body.appendChild(p); count++;
     p.addEventListener("animationend",()=>{ p.remove(); count--; });
   }
-  window.addEventListener("pointermove",e=>{ if(e.pointerType!=="mouse")return; const now=performance.now(); if(now-last<55)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
+  window.addEventListener("pointermove",e=>{ if(e.pointerType!=="mouse")return; const now=performance.now(); if(now-last<TH)return; last=now; spawn(e.clientX,e.clientY); },{passive:true});
 })();
 /* ===== ambient bubble field — canvas, behind the boxes, plentiful + mouse-interactive 🐙 ===== */
 (function(){
@@ -3154,7 +3188,7 @@ render();
   let mx=-9999,my=-9999;
   addEventListener("pointermove",e=>{ mx=e.clientX*DPR; my=e.clientY*DPR; });
   addEventListener("pointerleave",()=>{ mx=my=-9999; });
-  const COUNT=90, bub=[];
+  const COUNT=(innerWidth<640?34:90), bub=[];   // phones get a lighter sea — battery + smoothness
   function mk(seed){ const r=(7+Math.random()*22)*DPR; return { x:Math.random()*W, y: seed? Math.random()*H : H+r+Math.random()*60*DPR, r, sp:(0.35+Math.random()*0.95)*DPR, wob:Math.random()*6.28, wobsp:0.008+Math.random()*0.02, amp:(0.3+Math.random()*0.7)*DPR, o:0.2+Math.random()*0.4 }; }
   for(let i=0;i<COUNT;i++)bub.push(mk(true));
   const R=120; // mouse push radius (css px)

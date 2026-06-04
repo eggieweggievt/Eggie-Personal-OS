@@ -1,0 +1,12 @@
+{
+  "name": "Eggie OS",
+  "short_name": "Eggie OS",
+  "description": "Eggie's cozy personal operating system 🐙",
+  "display": "standalone",
+  "start_url": ".",
+  "background_color": "#fbf3f9",
+  "theme_color": "#fbf3f9",
+  "icons": [
+    { "src": "pet-widget/Screenshot 2026-06-02 202234.png", "sizes": "any", "type": "image/png", "purpose": "any" }
+  ]
+}
