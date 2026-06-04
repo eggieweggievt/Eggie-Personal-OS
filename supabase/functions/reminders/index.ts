@@ -56,21 +56,30 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
   const dueDm = rems.filter((r) => isDue(r) && !r.dmed);
   if (!duePush.length && !dueEmail.length && !dueDm.length) return { user, push: 0, email: 0, dm: 0 };
 
-  // ---- Discord DM with ✓ done / 😴 snooze buttons ----
+  // ---- Discord ping with ✓ done / 😴 snooze buttons ----
+  // Destination is per-user: sentinel notes.discordNotify = {mode:"dm"|"channel", channelId}
+  // (set in Settings → Notifications, or by telling the assistant). Default: private DM.
   let dmed = 0;
   const dTok = Deno.env.get("DISCORD_BOT_TOKEN"), dTarget = discordIdFor(user);
   if (dueDm.length && dTok && dTarget) {
     try {
-      const ch = await fetch("https://discord.com/api/v10/users/@me/channels", {
-        method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
-        body: JSON.stringify({ recipient_id: dTarget }),
-      }).then((x) => x.json());
-      if (ch?.id) {
+      const pref = notes.discordNotify || { mode: "dm", channelId: "" };
+      const useChannel = pref.mode === "channel" && pref.channelId;
+      let chId = useChannel ? String(pref.channelId) : "";
+      if (!chId) {
+        const ch = await fetch("https://discord.com/api/v10/users/@me/channels", {
+          method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
+          body: JSON.stringify({ recipient_id: dTarget }),
+        }).then((x) => x.json());
+        chId = ch?.id || "";
+      }
+      if (chId) {
         for (const r of dueDm) {
-          const res2 = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+          const res2 = await fetch(`https://discord.com/api/v10/channels/${chId}/messages`, {
             method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
             body: JSON.stringify({
-              content: `⏰ ${r.text}${r.time ? `  ·  ${r.date} ${r.time}` : ""} ${user === "eggie" ? "🐙" : "✨"}`,
+              // in a server channel the <@mention> is what actually pings her phone; DMs ping on their own
+              content: `${useChannel ? `<@${dTarget}> ` : ""}⏰ ${r.text}${r.time ? `  ·  ${r.date} ${r.time}` : ""} ${user === "eggie" ? "🐙" : "✨"}`,
               components: [{ type: 1, components: [
                 { type: 2, style: 3, label: "✓ done", custom_id: `dn:${r.id}` },
                 { type: 2, style: 2, label: "😴 snooze 1h", custom_id: `snz:${r.id}` },
@@ -78,9 +87,14 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
             }),
           });
           if (res2.ok) { (r as any)._dmok = true; dmed++; }
+          else if (useChannel) {
+            // bad channel id / missing permission → flip this user back to DMs so pings never silently die
+            notes.discordNotify = { mode: "dm", channelId: "" };
+            break;
+          }
         }
       }
-    } catch { /* DM failures just retry next tick */ }
+    } catch { /* failures just retry next tick */ }
   }
 
   // ---- web push to every subscribed device ----

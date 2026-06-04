@@ -70,6 +70,12 @@ async function execAction(userId: string, a: any): Promise<string> {
     case "addCapture":
       await sb().from("raw_captures").insert({ user_id: userId, raw_text: a.text || "" });
       return "🐙 captured it";
+    case "setDiscordDelivery": {
+      const md = a.mode === "channel" ? "channel" : "dm"; const cid = String(a.channelId || "").replace(/[^0-9]/g, "");
+      if (md === "channel" && !cid) return "I need the channel ID — right-click the channel → Copy Channel ID 🌸";
+      await saveSent(userId, (n) => ({ ...n, discordNotify: { mode: md, channelId: cid } }));
+      return md === "channel" ? "📢 pings will post in that channel" : "📩 pings will come as private DMs";
+    }
     case "rememberFact":
       if (!a.fact) return "";
       await saveSent(userId, (n) => { const f = (n.eugeneFacts || []).slice(); f.push(String(a.fact).slice(0, 300)); return { ...n, eugeneFacts: f.slice(-40) }; });

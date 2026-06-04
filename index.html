@@ -1882,7 +1882,13 @@ async function renderSettings(){
         ${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable browser pings</button>`:`<span class="chip on">🔔 pings enabled</span>`}
         <button class="btn" data-act="pushSub">📲 push to this device</button>
       </div>
-      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Pings fire while the OS is open · 📲 push and 💌 email reach you even when it's closed. Reminders live on the Planner tab.</p>
+      <div class="label" style="margin:14px 0 6px">💬 Discord pings go to</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="seg"><button data-act="discordMode" data-v="dm" class="${(sent.discordNotify||{}).mode!=="channel"?'on':''}">📩 private DM</button><button data-act="discordMode" data-v="channel" class="${(sent.discordNotify||{}).mode==="channel"?'on':''}">📢 server channel</button></div>
+        ${(sent.discordNotify||{}).mode==="channel"?`<input class="inp num" id="dcChan" value="${esc((sent.discordNotify||{}).channelId||"")}" placeholder="channel ID" style="width:190px"/><button class="btn btn-pink" data-act="discordChanSave">💾 save</button>`:""}
+      </div>
+      ${(sent.discordNotify||{}).mode==="channel"?`<p class="soft" style="font-size:11px;margin:6px 0 0">Right-click the channel in Discord → Copy Channel ID (needs Developer Mode on). The bot must be in that server — it @mentions you there so your phone still pings. If the channel ever breaks, pings auto-fall back to DMs.</p>`:""}
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Pings fire while the OS is open · 📲 push, 💌 email and 💬 Discord reach you even when it's closed. Reminders live on the Planner tab.</p>
     </div>
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">🧩 Layout</h2></div>
@@ -2885,6 +2891,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="factDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:(n.eugeneFacts||[]).filter((_,i2)=>i2!==ix)})); render(); return; }
+  if(act==="discordMode"){ const v=el.dataset.v==="channel"?"channel":"dm"; await DB.saveDaily(SENTINEL,n=>({...n,discordNotify:Object.assign({mode:"dm",channelId:""},n.discordNotify||{},{mode:v})})); render(); return; }
+  if(act==="discordChanSave"){ const v=(((document.getElementById("dcChan")||{}).value)||"").replace(/[^0-9]/g,""); if(!v){toast("Paste the channel ID 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,discordNotify:{mode:"channel",channelId:v}})); toast("Discord pings → that channel 📢"); render(); return; }
   if(act==="exitFocus"){ localStorage.setItem("eggie-focus","0"); applySettings(); render(); return; }
   if(act==="healthSet"){ const f=el.dataset.f,v=Number(el.dataset.v); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=v; return {...n,health:h};}); render(); }
   if(act==="healthCounter"){ const f=el.dataset.f,d=Number(el.dataset.d); await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=Math.max(0,(Number(h[f])||0)+d); return {...n,health:h};}); render(); }
@@ -3564,6 +3572,12 @@ render();
         var nm=(a.text||"").toLowerCase(); var hit=null;
         await DB.saveDaily(SENTINEL,function(n){ var rs=(n.reminders||[]).map(function(r){ if(!hit&&!r.done&&(r.text||"").toLowerCase().indexOf(nm)>=0){hit=r;return Object.assign({},r,{done:true});} return r; }); return Object.assign({},n,{reminders:rs}); });
         return hit? "✅ marked “"+hit.text+"” done — nice" : "couldn't find a reminder like that 🌸";
+      }
+      case "setDiscordDelivery": {
+        var md=(a.mode==="channel")?"channel":"dm"; var cid=String(a.channelId||"").replace(/[^0-9]/g,"");
+        if(md==="channel"&&!cid) return "I need the channel ID for that — right-click the channel → Copy Channel ID 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{discordNotify:{mode:md,channelId:cid}}); });
+        return md==="channel"?"📢 Discord pings will post in that channel (I'll @ you so your phone still buzzes)":"📩 Discord pings will come as private DMs";
       }
       case "rememberFact":
         if(!a.fact) return "";

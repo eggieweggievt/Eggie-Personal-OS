@@ -45,6 +45,11 @@ Her two proven templates — prefer these when generating titles:
  3) SHORTS: a punchy question/hook, optional tasteful emoji, then 2–3 niche hashtags (#vtuber + the game/topic).
 Her voice: warm, playful, a little unhinged/self-deprecating, squid/🐙 energy, kind underneath. Match that — aim for the 90+ bar she already hits.`;
 
+// Fallback personality for any non-eggie user (e.g. the desktop pet). Each user's real
+// persona lives in THEIR sentinel daily_logs row (log_date 2000-01-01) under
+// appConfig.assistantPrompt — editable without redeploying.
+const GENERIC_ASSISTANT = `You are a warm, practical desktop companion. You chat, remember things the user tells you, set reminders, and keep small lists. Friendly, a little playful, concise — never preachy, never corporate.`;
+
 async function claude(system: string, user: string, maxTokens = 1600): Promise<string> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY secret is not set");
@@ -149,6 +154,7 @@ async function fullContext(userId: string, today: string): Promise<string> {
       if (up.length) lines.push(`REMINDERS PENDING: ${up.map((r: any) => `${r.date}${r.time ? " " + r.time : ""} — ${r.text}`).join("; ")}`);
     }
     lines.push(`PUSH DEVICES: ${(s.pushSubs || []).length} subscribed for web-push reminders.`);
+    lines.push(`DISCORD DELIVERY: reminder pings go to ${s.discordNotify?.mode === "channel" ? `server channel ${s.discordNotify.channelId}` : "private DMs"}.`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -304,10 +310,25 @@ Deno.serve(async (req) => {
       const hist = Array.isArray(body.input?.history) ? body.input.history.slice(-10) : [];
       const convo = hist.length
         ? "Recent conversation (oldest first — use it to resolve follow-ups like \"yes\", \"the second one\", \"actually 5pm\"):\n" +
-          hist.map((m: any) => (m.role === "me" ? "Her: " : "You: ") + String(m.text || "").slice(0, 300)).join("\n") + "\n\n"
+          hist.map((m: any) => ((m.role === "me" ? (userId === "eggie" ? "Her: " : "Them: ") : "You: ")) + String(m.text || "").slice(0, 300)).join("\n") + "\n\n"
         : "";
       const ctx = await fullContext(userId, today);
-      const sys = BRAND + `
+      // per-user personality: eggie keeps BRAND; anyone else gets the persona stored on
+      // THEIR sentinel row (appConfig.assistantPrompt), falling back to GENERIC_ASSISTANT.
+      let persona = BRAND;
+      let nameLine = "Your name is Eugene — Eggie's cozy octopus helper. If she asks who you are, you're Eugene. 🐙";
+      if (userId !== "eggie") {
+        persona = GENERIC_ASSISTANT;
+        nameLine = "If asked who you are, stay in the persona described at the top of these instructions.";
+        try {
+          const sbp = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+          const { data: row } = await sbp.from("daily_logs").select("notes")
+            .eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+          const p = JSON.parse(row?.notes || "{}")?.appConfig?.assistantPrompt;
+          if (p) persona = String(p).slice(0, 4000);
+        } catch { /* keep GENERIC_ASSISTANT */ }
+      }
+      let sys = persona + `
 
 You are also Eggie's hands inside the OS: you can DO things by emitting actions, not just talk. Today (her local date) is ${today}; her calendar timezone is ${tz}. Resolve relative dates ("tomorrow", "next Friday", "in 2 weeks") to absolute YYYY-MM-DD using that.
 
@@ -320,7 +341,7 @@ WEB ACCESS: you have a real web_search tool. Use it (sparingly, only when the an
 
 VIDIQ: you do NOT have a direct VidIQ connection from here (VidIQ has no public API the OS can call). Do not pretend to pull live VidIQ data. You CAN still score titles/thumbnails with the built-in "poor-man's vidIQ" rubric above, and for real VidIQ numbers tell her to use the 🎯 Optimize tab or ask in Claude chat. If body.vidiq data was passed to you, you may use it.
 
-Your name is Eugene — Eggie's cozy octopus helper. If she asks who you are, you're Eugene. 🐙
+${nameLine}
 
 Return ONLY JSON, no prose around it:
 { "reply": string, "actions": [ { "type": string, ...args } ] }
@@ -404,6 +425,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep
 - forgetFact: { hint }                // remove a remembered fact matching the hint
 - optimizeTitle: { title, topic?, format?: "short"|"long", platform? }   // "score/optimize this title: …" — runs her real optimizer and returns the score + better titles in chat
+- setDiscordDelivery: { mode: "dm"|"channel", channelId? (numeric, required for channel) }   // "send my Discord pings to #reminders" / "DM me instead" — where reminder pings go on Discord
 
 DELETES: deleting is destructive — if her wording is ambiguous about WHICH item (multiple could match), ask in "reply" and emit no actions instead of guessing. When she then confirms ("yes", "the first one"), use the conversation context and emit the action. "Undo" for money = delLastIncome.
 
@@ -413,7 +435,14 @@ HOW HER REMINDERS REACH HER (know this system; answer questions about it accurat
 - In-tab ping: while the OS is open, due reminders toast + bubble within ~30 seconds.
 - Web push 📲: real notifications on subscribed devices even with the browser closed, delivered by a cron that runs every ~5 minutes (so timing is ±5 min). A device subscribes once via Settings → "push to this device" (or the Planner). Once a device has granted permission, the OS re-subscribes it automatically on every load — she never has to think about it again. iPhone only supports this if the OS is added to the Home Screen first (Apple's rule); Android Chrome and desktop work directly.
 - Email 💌: due reminders also email her (default ON per reminder; email:false turns it off).
-The snapshot tells you how many devices are subscribed. If she says reminders aren't reaching her phone, walk her through: is the device subscribed (Settings → 📲)? on iPhone, is it installed to the Home Screen? are notifications allowed for the browser in system settings?
+- Discord 💬: due reminders ALSO arrive on Discord with ✓ done / 😴 snooze-1h buttons — by default as a private DM from the bot (which pings her phone via the Discord app), or, if she prefers, posted into ONE server channel she picks (the bot @mentions her there so the phone still buzzes). She switches DM ↔ channel in Settings → Notifications, or just by telling you — use setDiscordDelivery. If a chosen channel ever fails (deleted / no permission), delivery auto-falls back to DMs so pings never silently die.
+The snapshot tells you how many devices are subscribed. If she says reminders aren't reaching her phone, walk her through: is the device subscribed (Settings → 📲)? on iPhone, is it installed to the Home Screen? are notifications allowed for the browser in system settings? Is Discord delivery set to a channel she's muted?
+
+YOU ARE ALSO ON DISCORD (know your own integration):
+- You exist as a Discord bot in her server (and via user-install, anywhere she goes). Slash commands: /ask (this same brain), /remind, /task, /capture, /idea, /inspo, /today (her day at a glance), /done. Everything written from Discord lands in the same OS database.
+- You CANNOT read normal Discord chat or react to casual @mentions in conversation — serverless bots only hear slash commands and button presses (that's a hard platform limit, not shyness). If she asks why you didn't respond in chat, that's why: tell her to use /ask.
+- Reminder pings on Discord carry working ✓ done and 😴 snooze buttons.
+- Her boyfriend (or anyone) can be added by mapping their Discord id to their own OS user tag — their commands then hit THEIR data, never hers.
 
 When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
 
@@ -425,11 +454,18 @@ Stream schedule vs. event — keep these straight:
 - If she says "stream" + a weekday with no specific date and it sounds routine → schedule slot. If she says "stream" + a specific/relative date ("this/next Friday", "the 14th", "tomorrow") → calendar event. If genuinely unsure which she means, ask in "reply" instead of guessing.
 
 Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
-      const raw = await claudeWeb(
-        sys,
-        `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`,
-        1400,
-      );
+      // non-eggie users: de-Eggify the shared instruction text (their persona is already in `sys`)
+      if (userId !== "eggie") {
+        sys = sys
+          .replace(/Eggie's hands inside the OS/g, "the user's hands inside their assistant")
+          .replace(/\bEggie\b/g, "the user")
+          .replace(/\bHer\b/g, "Their").replace(/\bher\b/g, "their")
+          .replace(/\bShe\b/g, "They").replace(/\bshe\b/g, "they");
+      }
+      const userMsg = userId === "eggie"
+        ? `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`
+        : `${convo}They say: "${q}"\n\nReturn ONLY the JSON object.`;
+      const raw = await claudeWeb(sys, userMsg, 1400);
       const parsed = parseJSON(raw);
       if (!parsed) return json({ reply: raw, actions: [] });
       if (!Array.isArray(parsed.actions)) parsed.actions = [];
