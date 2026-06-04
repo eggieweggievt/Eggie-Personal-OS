@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
     if (act === "snz") {
       const dt = new Date(new Date().toLocaleString("en-US", { timeZone: TZ })); dt.setHours(dt.getHours() + 1);
       const t2 = ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
-      await saveSent(tag, (n) => ({ ...n, reminders: (n.reminders || []).map((r: any) => r.id === rid ? { ...r, date: todayStr(), time: t2, notified: false, emailed: false, pushed: false, dmed: false } : r) }));
+      await saveSent(tag, (n) => ({ ...n, reminders: (n.reminders || []).map((r: any) => r.id === rid ? { ...r, date: todayStr(), time: t2, notified: false, emailed: false, pushed: false, dmed: false, pings: 0, lastPing: null } : r) }));
       return json({ type: 7, data: { content: (i.message?.content || "") + `\n😴 snoozed to ${t2}`, components: [] } });
     }
     return json({ type: 6 });

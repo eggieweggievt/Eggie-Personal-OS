@@ -50,11 +50,16 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
   const petName = notes.appConfig?.assistantName || (user === "eggie" ? "Eugene" : "your assistant");
   const userEmail = notes.appConfig?.email || (user === "eggie" ? TO : null);
 
+  // Nagging by design (kindly): while a due reminder isn't done/snoozed, push + Discord
+  // re-ping every NAG_MINUTES, up to NAG_MAX waves, then rest. Email goes once.
+  const NAGMIN = Number(Deno.env.get("NAG_MINUTES") || 30);
+  const MAXP = Number(Deno.env.get("NAG_MAX") || 4);
   const isDue = (r: any) => !r.done && (r.date < today || (r.date === today && (r.time || "09:00") <= hm));
-  const duePush = rems.filter((r) => isDue(r) && !r.pushed);
+  const waveOK = (r: any) => (Date.now() - (r.lastPing ? Date.parse(r.lastPing) : 0)) >= NAGMIN * 60000 && (r.pings || 0) < MAXP;
+  const dueWave = rems.filter((r) => isDue(r) && waveOK(r));
+  const duePush = dueWave, dueDm = dueWave;
   const dueEmail = rems.filter((r) => isDue(r) && !r.emailed && r.email !== false);
-  const dueDm = rems.filter((r) => isDue(r) && !r.dmed);
-  if (!duePush.length && !dueEmail.length && !dueDm.length) return { user, push: 0, email: 0, dm: 0 };
+  if (!dueWave.length && !dueEmail.length) return { user, push: 0, email: 0, dm: 0 };
 
   // ---- Discord ping with ✓ done / 😴 snooze buttons ----
   // Destination is per-user: sentinel notes.discordNotify = {mode:"dm"|"channel", channelId}
@@ -79,7 +84,7 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
             method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
             body: JSON.stringify({
               // in a server channel the <@mention> is what actually pings her phone; DMs ping on their own
-              content: `${useChannel ? `<@${dTarget}> ` : ""}⏰ ${r.text}${r.time ? `  ·  ${r.date} ${r.time}` : ""} ${user === "eggie" ? "🐙" : "✨"}`,
+              content: `${useChannel ? `<@${dTarget}> ` : ""}${(r.pings || 0) > 0 ? `🔁 nudge ${(r.pings || 0) + 1}/${MAXP} · ` : ""}⏰ ${r.text}${r.time ? `  ·  ${r.date} ${r.time}` : ""} ${user === "eggie" ? "🐙" : "✨"}`,
               components: [{ type: 1, components: [
                 { type: 2, style: 3, label: "✓ done", custom_id: `dn:${r.id}` },
                 { type: 2, style: 2, label: "😴 snooze 1h", custom_id: `snz:${r.id}` },
@@ -141,8 +146,9 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
   // ---- mark what went out + persist (incl. pruned subs) ----
   notes.reminders = rems.map((r) => {
     let o = r;
-    if (duePush.some((d) => d.id === r.id) && pushedDevices > 0) o = { ...o, pushed: true };
     if (dueEmail.some((d) => d.id === r.id) && emailId) o = { ...o, emailed: true };
+    // a "wave" is claimed when anything actually went out — the next wave comes NAG_MINUTES later
+    if (dueWave.some((d) => d.id === r.id) && (pushedDevices > 0 || (r as any)._dmok)) o = { ...o, lastPing: new Date().toISOString(), pings: (o.pings || 0) + 1 };
     if ((r as any)._dmok) { o = { ...o, dmed: true }; delete (o as any)._dmok; }
     return o;
   });

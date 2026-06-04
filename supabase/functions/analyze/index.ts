@@ -70,11 +70,19 @@ async function claude(system: string, user: string, maxTokens = 1600): Promise<s
 // Like claude(), but lets Claude reach the live web via Anthropic's server-side
 // web_search tool. Anthropic runs the searches itself (no extra key needed beyond
 // ANTHROPIC_API_KEY); we just loop while it pauses to think between searches.
-async function claudeWeb(system: string, user: string, maxTokens = 1800, maxSearches = 4): Promise<string> {
+// Citation markers like <cite index="3-13">…</cite> sometimes leak into the model's
+// text when web search is on — strip the tags, keep the words inside them.
+function stripCites(s: string): string {
+  return String(s == null ? "" : s).replace(/<\/?cite[^>]*>/g, "").replace(/\s{2,}/g, " ").trim();
+}
+
+async function claudeWeb(system: string, user: string, maxTokens = 1800, maxSearches = 4): Promise<{ text: string; sources: { url: string; title: string }[] }> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY secret is not set");
   const messages: any[] = [{ role: "user", content: user }];
   let text = "";
+  const cited = new Map<string, string>();   // urls the model actually cited
+  const found = new Map<string, string>();   // every search result it saw (fallback)
   for (let hop = 0; hop < 5; hop++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -86,12 +94,24 @@ async function claudeWeb(system: string, user: string, maxTokens = 1800, maxSear
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || `Anthropic error ${res.status}`);
+    for (const b of (data.content || [])) {
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content)) {
+        for (const r of b.content) if (r?.url && !found.has(r.url)) found.set(r.url, r.title || "");
+      }
+      if (b.type === "text" && Array.isArray(b.citations)) {
+        for (const c of b.citations) if (c?.url && !cited.has(c.url)) cited.set(c.url, c.title || "");
+      }
+    }
     text = (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
     // server tools run inside Anthropic; only "pause_turn" needs us to continue the turn
     if (data.stop_reason === "pause_turn") { messages.push({ role: "assistant", content: data.content }); continue; }
     break;
   }
-  return text;
+  // up to 5 sources: cited pages first, then other search results
+  const sources: { url: string; title: string }[] = [];
+  for (const [url, title] of cited) { if (sources.length >= 5) break; sources.push({ url, title }); }
+  for (const [url, title] of found) { if (sources.length >= 5) break; if (!cited.has(url)) sources.push({ url, title }); }
+  return { text: stripCites(text), sources };
 }
 
 // Pull a compact snapshot of her ENTIRE OS so the pet can answer about (and act on)
@@ -434,7 +454,8 @@ MEMORY: you receive the recent conversation AND her remembered facts — use bot
 HOW HER REMINDERS REACH HER (know this system; answer questions about it accurately):
 - In-tab ping: while the OS is open, due reminders toast + bubble within ~30 seconds.
 - Web push 📲: real notifications on subscribed devices even with the browser closed, delivered by a cron that runs every ~5 minutes (so timing is ±5 min). A device subscribes once via Settings → "push to this device" (or the Planner). Once a device has granted permission, the OS re-subscribes it automatically on every load — she never has to think about it again. iPhone only supports this if the OS is added to the Home Screen first (Apple's rule); Android Chrome and desktop work directly.
-- Email 💌: due reminders also email her (default ON per reminder; email:false turns it off).
+- Email 💌: due reminders also email her (default ON per reminder; email:false turns it off — email sends ONCE, no repeats).
+- RE-PINGING (by design, kindly): until a due reminder is marked done or snoozed, push + Discord re-nudge every ~30 minutes, up to 4 waves total ("🔁 nudge 2/4 …"), then it rests but stays visible on the Planner. ✓ done or 😴 snooze stops the nudging; snooze restarts the cycle at the new time. If she says it's nagging too much: mark it done, snooze it, or delete it.
 - Discord 💬: due reminders ALSO arrive on Discord with ✓ done / 😴 snooze-1h buttons — by default as a private DM from the bot (which pings her phone via the Discord app), or, if she prefers, posted into ONE server channel she picks (the bot @mentions her there so the phone still buzzes). She switches DM ↔ channel in Settings → Notifications, or just by telling you — use setDiscordDelivery. If a chosen channel ever fails (deleted / no permission), delivery auto-falls back to DMs so pings never silently die.
 The snapshot tells you how many devices are subscribed. If she says reminders aren't reaching her phone, walk her through: is the device subscribed (Settings → 📲)? on iPhone, is it installed to the Home Screen? are notifications allowed for the browser in system settings? Is Discord delivery set to a channel she's muted?
 
@@ -465,11 +486,11 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
       const userMsg = userId === "eggie"
         ? `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`
         : `${convo}They say: "${q}"\n\nReturn ONLY the JSON object.`;
-      const raw = await claudeWeb(sys, userMsg, 1400);
+      const { text: raw, sources } = await claudeWeb(sys, userMsg, 1400);
       const parsed = parseJSON(raw);
-      if (!parsed) return json({ reply: raw, actions: [] });
+      if (!parsed) return json({ reply: stripCites(raw), actions: [], sources });
       if (!Array.isArray(parsed.actions)) parsed.actions = [];
-      return json({ reply: parsed.reply || "okay!", actions: parsed.actions });
+      return json({ reply: stripCites(parsed.reply || "okay!"), actions: parsed.actions, sources });
     }
 
     // --- script: turn raw spoken notes + research into a formatted short/long-form script ---

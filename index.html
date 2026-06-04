@@ -3751,14 +3751,16 @@ render();
       if(RO) return;
       var sent=await DB.daily(SENTINEL); var rems=sent.reminders||[];
       var now=new Date(); var hm=("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
-      var due=rems.filter(function(r){ return !r.done&&!r.notified&&(r.date<TODAY||(r.date===TODAY&&(r.time||"09:00")<=hm)); });
+      var NAG=30*60000, MAXP=4;   // same wave clock as the cron — whichever fires first claims the wave
+      var due=rems.filter(function(r){ if(r.done)return false; var dueNow=(r.date<TODAY||(r.date===TODAY&&(r.time||"09:00")<=hm)); var last=r.lastPing?Date.parse(r.lastPing):0; return dueNow&&(Date.now()-last>=NAG)&&((r.pings||0)<MAXP); });
       if(!due.length) return;
       due.forEach(function(r){
-        try{ if(window.Notification&&Notification.permission==="granted") new Notification("⏰ Eugene reminder",{body:r.text,icon:"pet-widget/Screenshot 2026-06-02 202234.png"}); }catch(e){}
-        toast("⏰ "+r.text);
+        var nudge=(r.pings||0)>0?("🔁 nudge "+((r.pings||0)+1)+"/"+MAXP+" · "):"";
+        try{ if(window.Notification&&Notification.permission==="granted") new Notification("⏰ Eugene reminder",{body:nudge+r.text,icon:"pet-widget/Screenshot 2026-06-02 202234.png"}); }catch(e){}
+        toast("⏰ "+nudge+r.text);
       });
-      showPetBubble("⏰ psst — "+due.map(function(r){return r.text;}).join(" · "),20000);
-      await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{reminders:(n.reminders||[]).map(function(r){ return due.some(function(d){return d.id===r.id;})?Object.assign({},r,{notified:true}):r; })}); });
+      showPetBubble("⏰ psst — "+due.map(function(r){return r.text;}).join(" · ")+" (tap ✓ on the Planner when it's handled 💗)",20000);
+      await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{reminders:(n.reminders||[]).map(function(r){ return due.some(function(d){return d.id===r.id;})?Object.assign({},r,{notified:true,lastPing:new Date().toISOString(),pings:(r.pings||0)+1}):r; })}); });
     }catch(e){}
   }
   setTimeout(checkReminders, 5000); setInterval(checkReminders, 30000);
