@@ -107,7 +107,15 @@
   .citem{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;padding:9px;transition:.15s;cursor:grab;box-shadow:var(--shadow-sm);}
   .citem:hover{border-color:var(--pink);} .citem.dim{opacity:.35;} .citem.hit{border-color:var(--lav);}
   .bar{height:6px;border-radius:999px;background:#f0e6f2;overflow:hidden;} .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--lav));}
-  .modal-bg{position:fixed;inset:0;background:rgba(90,60,90,.32);z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;}
+  .modal-bg{position:fixed;inset:0;background:rgba(90,60,90,.32);z-index:50;display:flex;align-items:center;justify-content:center;padding:14px;}
+  /* modal safety net (iPad/phone): rows always wrap instead of poking past the panel edge,
+     and iOS date/time inputs (which refuse to shrink below their intrinsic width) get tamed */
+  .modal-bg .panel{width:100%;max-width:min(92vw,560px);}
+  .modal-bg .panel div[style*="display:flex"]{flex-wrap:wrap;}
+  input[type="date"],input[type="time"]{min-width:0;max-width:100%;}
+  select.inp{max-width:100%;}
+  .modal-bg .inp{min-width:0;}
+  .seg{flex-wrap:wrap;}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;}
   th{text-align:left;padding:8px 6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);font-weight:700;}
   td{padding:8px 6px;font-size:13px;border-bottom:1px solid var(--line);}
@@ -1356,12 +1364,15 @@ function bucketLabel(k){ const b=TASK_BUCKETS.find(x=>x[0]===k); return b?b[1]+"
 function spoonShort(s){ return {low:"🌙",some:"🌤",full:"🌞"}[s]||"·"; }
 function spoonLabel(s){ const b=TASK_SPOONS.find(x=>x[0]===s); return b?b[1]+" "+b[2]:"any spoons"; }
 function spoonPill(s){ return {low:"pill-lav",some:"pill-peach",full:"pill-mint"}[s]||"pill-gray"; }
+let REM_BY_TASK={};   // taskId → its open linked reminder (rebuilt each planner render)
 function taskRow(t){
   const subs=t.sub||[];
+  const lr=REM_BY_TASK[t.id];
   return `<div class="hbtn ${t.done?'done':''}" style="display:block;margin-bottom:7px">
     <div style="display:flex;align-items:center;gap:9px">
       <button class="check ${t.done?'on':''}" data-act="taskDone" data-id="${t.id}" ${RO?"disabled":""} style="padding:0"></button>
       <span class="grow" style="font-size:13px;${t.done?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span>
+      <button class="ft-ic" data-act="taskRem" data-id="${t.id}" title="${lr?`reminder ${lr.date}${lr.time?" "+lr.time:""} — tap to change`:"attach a reminder"}" style="${lr?'color:var(--pink-deep);opacity:1':''}">⏰${lr?`<span class="label num" style="margin-left:2px;color:var(--pink-deep)">${esc((lr.date===TODAY?"":lr.date.slice(5)+" ")+(lr.time||""))}</span>`:""}</button>
       <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
       <button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="Focus on just this one">◎</button>
       <button class="ft-ic" data-act="addSubtask" data-id="${t.id}" title="Break into a step" ${RO?"disabled":""}>＋</button>
@@ -1384,6 +1395,7 @@ function taskCard(t){
     <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;align-items:center">
       <span class="pill pill-lav">${bucketLabel(t.bucket)}</span>
       <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
+      ${REM_BY_TASK[t.id]?`<span class="pill pill-pink">⏰ ${esc(REM_BY_TASK[t.id].time||REM_BY_TASK[t.id].date)}</span>`:""}
       ${subN?`<span class="label" style="font-size:10.5px">▫ ${subDone}/${subN}</span>`:""}
     </div>
   </div>`;
@@ -1394,7 +1406,18 @@ function taskBoard(list){
     return `<div class="kcol" data-act="dropTaskStatus" data-status="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(taskCard).join("")||`<div class="label" style="padding:8px 6px;opacity:.55">${key==="done"?"nothing finished yet — that's fine 🌸":key==="doing"?"drag a card here when you start it":"all clear 🌙"}</div>`}</div>`;
   }).join("")}</div>`;
 }
-async function setTaskStatus(id,status){ await taskMut(t=>t.map(x=>x.id===id?{...x,status,done:status==="done"}:x)); }
+async function setTaskStatus(id,status){ await DB.saveDaily(SENTINEL,n=>{ const tasks=(n.tasks||[]).map(x=>x.id===id?{...x,status,done:status==="done"}:x); let rems=n.reminders||[]; if(status==="done") rems=rems.map(r=>(r.taskId===id&&!r.done)?{...r,done:true}:r); return {...n,tasks,reminders:rems}; }); }
+/* link a reminder to a task — one thing, one ping; checking either completes both */
+async function taskRemModal(taskId){
+  const sent=await DB.daily(SENTINEL);
+  const t=(sent.tasks||[]).find(x=>x.id===taskId); if(!t)return;
+  const r=(sent.reminders||[]).find(x=>x.taskId===taskId&&!x.done);
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">⏰ Remind me about this</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12.5px;margin:0 0 10px">“${esc(t.text)}” — checking off either one completes both. 💗</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="trDate" type="date" value="${esc(r?r.date:TODAY)}" style="width:auto"/><input class="inp" id="trTime" type="time" value="${esc(r?(r.time||"09:00"):"09:00")}" style="width:auto"/></div>
+    <div style="display:flex;justify-content:space-between;margin-top:14px">${r?`<button class="btn" data-act="taskRemUnlink" data-id="${taskId}" style="color:var(--rose)">🗑 remove reminder</button>`:"<span></span>"}<button class="btn btn-pink" data-act="taskRemSave" data-id="${taskId}">💾 ${r?"update":"attach"}</button></div>
+  </div></div>`;
+}
 async function renderPlanner(){
   const sent=await DB.daily(SENTINEL); const tasks=sent.tasks||[];
   /* focus-one-thing mode */
@@ -1411,6 +1434,7 @@ async function renderPlanner(){
   }
   if(state.plannerView==null){ try{state.plannerView=localStorage.getItem("eggie-planner-view")||"list";}catch(e){state.plannerView="list";} }
   const view=state.plannerView;
+  REM_BY_TASK={}; (sent.reminders||[]).forEach(r=>{ if(r.taskId&&!r.done) REM_BY_TASK[r.taskId]=r; });
   const sf=state.taskSpoon||"all";
   const match=t=> sf==="all" || t.spoon===sf || (sf==="low" && !t.spoon);
   const groups=TASK_BUCKETS.map(([key,emoji,label])=>{
@@ -1428,7 +1452,7 @@ async function renderPlanner(){
   const remUp=(sent.reminders||[]).filter(r=>!r.done).sort((a,b)=>String(a.date+(a.time||"")).localeCompare(String(b.date+(b.time||"")))).slice(0,8);
   const needPerm=(window.Notification&&Notification.permission!=="granted");
   const remPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><span class="label">⏰ Reminders</span><div style="display:flex;gap:8px;align-items:center">${needPerm?`<button class="btn" data-act="remindPerm">🔔 enable pings</button>`:`<span class="label">🔔 on</span>`}<button class="btn" data-act="pushSub" title="get reminders on this device even when the tab is closed">📲 push to this device</button></div></div>
-    ${remUp.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">${remUp.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:12.5px;${(r.date<TODAY)?'color:var(--rose)':''}">${esc(r.text)}</span><span class="label num">${esc(r.date)}${r.time?` · ${esc(r.time)}`:""}</span>${r.email!==false?`<span title="emails too">💌</span>`:""}<button class="ft-ic" data-act="remindDel" data-id="${r.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0 0 10px">Nothing pending — tell Eugene "remind me Friday at 3 to send the invoice", or add one here. 🌸</p>`}
+    ${remUp.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">${remUp.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:12.5px;${(r.date<TODAY)?'color:var(--rose)':''}">${esc(r.text)}</span><span class="label num">${esc(r.date)}${r.time?` · ${esc(r.time)}`:""}</span>${r.taskId?`<span class="pill pill-lav" title="linked to a task — completing either finishes both">🔗</span>`:""}${r.email!==false?`<span title="emails too">💌</span>`:""}<button class="ft-ic" data-act="remindDel" data-id="${r.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0 0 10px">Nothing pending — tell Eugene "remind me Friday at 3 to send the invoice", or add one here. 🌸</p>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input class="inp" id="remText" placeholder="remind me to…" style="flex:1;min-width:150px" ${RO?"disabled":""}/>
       <input class="inp" id="remDate" type="date" value="${TODAY}" style="width:auto" ${RO?"disabled":""}/>
@@ -2813,14 +2837,17 @@ document.addEventListener("click",async(e)=>{
 
   /* planner */
   if(act==="addTask"){ const i=document.getElementById("newTask"); const tx=(i.value||"").trim(); if(tx){ const bucket=document.getElementById("taskBucket").value, spoon=document.getElementById("taskSpoonSel").value; state.addBucket=bucket; await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:tx,bucket,spoon,done:false,sub:[],created_at:new Date().toISOString()}]); render(); } return; }
-  if(act==="taskDone"){ await taskMut(t=>t.map(x=>{ if(x.id!==id)return x; const nd=!x.done; let status=x.status; if(nd)status="done"; else if(!x.status||x.status==="done")status="todo"; return {...x,done:nd,status}; })); render(); return; }
+  if(act==="taskDone"){ await DB.saveDaily(SENTINEL,n=>{ let justDone=null; const tasks=(n.tasks||[]).map(x=>{ if(x.id!==id)return x; const nd=!x.done; if(nd)justDone=x.id; let status=x.status; if(nd)status="done"; else if(!x.status||x.status==="done")status="todo"; return {...x,done:nd,status}; }); let rems=n.reminders||[]; if(justDone) rems=rems.map(r=>(r.taskId===justDone&&!r.done)?{...r,done:true}:r); return {...n,tasks,reminders:rems}; }); render(); return; }
+  if(act==="taskRem"){ taskRemModal(id); return; }
+  if(act==="taskRemSave"){ const d=((document.getElementById("trDate")||{}).value)||TODAY, tm=((document.getElementById("trTime")||{}).value)||"09:00"; await DB.saveDaily(SENTINEL,n=>{ const t=(n.tasks||[]).find(x=>x.id===id); const rems=(n.reminders||[]).slice(); const ex=rems.find(x=>x.taskId===id&&!x.done); if(ex){ ex.date=d; ex.time=tm; ex.pings=0; ex.lastPing=null; ex.emailed=false; } else rems.push({id:uid(),text:(t?t.text:"task"),date:d,time:tm,email:true,done:false,notified:false,emailed:false,taskId:id,pings:0}); return {...n,reminders:rems}; }); document.getElementById("modal").innerHTML=""; toast("⏰ attached — one thing now 💗"); render(); return; }
+  if(act==="taskRemUnlink"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>!(r.taskId===id&&!r.done))})); document.getElementById("modal").innerHTML=""; toast("Reminder removed 🌸"); render(); return; }
   if(act==="delTask"){ await taskMut(t=>t.filter(x=>x.id!==id)); render(); return; }
   if(act==="focusTask"){ state.focusTask=id; render(); return; }
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
   if(act==="taskSpoonFilter"){ state.taskSpoon=el.dataset.v; render(); return; }
   if(act==="plannerView"){ state.plannerView=el.dataset.v; try{localStorage.setItem("eggie-planner-view",el.dataset.v);}catch(e){} render(); return; }
   if(act==="remindAdd"){ const t=((document.getElementById("remText")||{}).value||"").trim(); if(!t){toast("What should I remind you of? 🌸");return;} const d=(document.getElementById("remDate")||{}).value||TODAY, tm=(document.getElementById("remTime")||{}).value||"09:00", em=!!((document.getElementById("remEmail")||{}).checked); await DB.saveDaily(SENTINEL,n=>({...n,reminders:[...(n.reminders||[]),{id:uid(),text:t,date:d,time:tm,email:em,done:false,notified:false,emailed:false}]})); try{ if(window.Notification&&Notification.permission==="default")Notification.requestPermission(); }catch(e){} toast("Reminder set ⏰"); render(); return; }
-  if(act==="remindDone"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).map(r=>r.id===id?{...r,done:!r.done}:r)})); render(); return; }
+  if(act==="remindDone"){ await DB.saveDaily(SENTINEL,n=>{ let tid=null; const rems=(n.reminders||[]).map(r=>{ if(r.id!==id)return r; const nd=!r.done; if(nd&&r.taskId)tid=r.taskId; return {...r,done:nd}; }); let tasks=n.tasks||[]; if(tid) tasks=tasks.map(t=>t.id===tid?{...t,done:true,status:"done"}:t); return {...n,reminders:rems,tasks}; }); render(); return; }
   if(act==="remindDel"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>r.id!==id)})); render(); return; }
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
@@ -3261,7 +3288,7 @@ render();
       else { const r=d.item.getBoundingClientRect(); d.gx=d.sx-r.left; d.gy=d.sy-r.top; const g=d.item.cloneNode(true); g.classList.add("drag-clone"); g.classList.remove("reordering","dragsrc"); g.style.width=r.width+"px"; g.style.height=r.height+"px"; g.querySelectorAll(".home-tools,.home-resize").forEach(x=>x.remove()); document.body.appendChild(g); d.ghost=g; d.item.classList.add("dragsrc"); moveGhost(d.sx,d.sy); }
     }
     e.preventDefault();
-    if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(3,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; } const nh=Math.max(120,Math.round(d.startH+(e.clientY-d.sy))); d.h=nh; if(d.panel)d.panel.style.minHeight=nh+"px"; d.item.dataset.h=nh; relayoutSoon(); return; }
+    if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(3,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; d.item.dataset.c=nc; } const nh=Math.max(120,Math.round(d.startH+(e.clientY-d.sy))); d.h=nh; if(d.panel)d.panel.style.minHeight=nh+"px"; d.item.dataset.h=nh; relayoutSoon(); return; }
     moveGhost(e.clientX,e.clientY);
     const el=document.elementFromPoint(e.clientX,e.clientY), over=el&&el.closest(d.itemSel);
     if(over&&over!==d.item&&over.parentElement===d.c){ const r=over.getBoundingClientRect(), before=d.horiz?(e.clientX<r.left+r.width/2):(e.clientY<r.top+r.height/2); const ref=before?over:over.nextSibling; if(ref!==d.item){ flipReorder(d.c, ()=>d.c.insertBefore(d.item, ref)); } }
@@ -3376,7 +3403,7 @@ render();
       }
       case "completeTask": {
         var nm=(a.name||"").toLowerCase(); var done=(a.done!==false); var hit=null;
-        await taskMut(function(t){ return t.map(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{done:done,status:done?"done":"todo"}); } return x; }); });
+        await DB.saveDaily(SENTINEL,function(n){ var ts=(n.tasks||[]).map(function(x){ if(!hit && (x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{done:done,status:done?"done":"todo"}); } return x; }); var rs=n.reminders||[]; if(hit&&done) rs=rs.map(function(r){return (r.taskId===hit.id&&!r.done)?Object.assign({},r,{done:true}):r;}); return Object.assign({},n,{tasks:ts,reminders:rs}); });
         return hit? (done?"✅ checked off “"+hit.text+"”":"↩ un-checked “"+hit.text+"”") : "couldn't find a task like “"+(a.name||"")+"” 🌸";
       }
       case "moveTask": {
@@ -3612,10 +3639,13 @@ render();
         return "🗑 peeled off that sticky note";
       }
       case "setReminder": {
-        if(!a.text||!a.date) return "I need what to remind you of and when 🌸";
-        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{reminders:(n.reminders||[]).concat([{id:uid(),text:String(a.text).slice(0,300),date:a.date,time:a.time||"09:00",email:a.email!==false,done:false,notified:false,emailed:false}])}); });
+        if((!a.text&&!a.task)||!a.date) return "I need what to remind you of and when 🌸";
+        var tid=null, txt=a.text||"";
+        if(a.task){ var sx=await DB.daily(SENTINEL); var tk=(sx.tasks||[]).find(function(x){return !x.done&&(x.text||"").toLowerCase().indexOf(String(a.task).toLowerCase())>=0;}); if(tk){ tid=tk.id; if(!txt)txt=tk.text; } }
+        if(!txt) return "couldn't find a task like “"+(a.task||"")+"” — what should the reminder say? 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ var rems=(n.reminders||[]).slice(); if(tid){ var ex=rems.find(function(x){return x.taskId===tid&&!x.done;}); if(ex){ ex.date=a.date; ex.time=a.time||"09:00"; ex.pings=0; ex.lastPing=null; ex.emailed=false; return Object.assign({},n,{reminders:rems}); } } rems.push({id:uid(),text:String(txt).slice(0,300),date:a.date,time:a.time||"09:00",email:a.email!==false,done:false,notified:false,emailed:false,taskId:tid||undefined,pings:0}); return Object.assign({},n,{reminders:rems}); });
         try{ if(window.Notification&&Notification.permission==="default")Notification.requestPermission(); }catch(e){}
-        return "⏰ reminder set for "+a.date+" at "+(a.time||"09:00")+" — "+a.text+(a.email!==false?" (browser ping + email 💌)":" (browser ping only)");
+        return "⏰ reminder set for "+a.date+" at "+(a.time||"09:00")+" — "+txt+(tid?" 🔗 linked to the task — either checks off both":"")+(a.email!==false?" 💌":"");
       }
       case "delReminder": {
         var nm=(a.text||"").toLowerCase(); var hit=null;
@@ -3624,8 +3654,8 @@ render();
       }
       case "doneReminder": {
         var nm=(a.text||"").toLowerCase(); var hit=null;
-        await DB.saveDaily(SENTINEL,function(n){ var rs=(n.reminders||[]).map(function(r){ if(!hit&&!r.done&&(r.text||"").toLowerCase().indexOf(nm)>=0){hit=r;return Object.assign({},r,{done:true});} return r; }); return Object.assign({},n,{reminders:rs}); });
-        return hit? "✅ marked “"+hit.text+"” done — nice" : "couldn't find a reminder like that 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ var rs=(n.reminders||[]).map(function(r){ if(!hit&&!r.done&&(r.text||"").toLowerCase().indexOf(nm)>=0){hit=r;return Object.assign({},r,{done:true});} return r; }); var ts=n.tasks||[]; if(hit&&hit.taskId) ts=ts.map(function(t){return t.id===hit.taskId?Object.assign({},t,{done:true,status:"done"}):t;}); return Object.assign({},n,{reminders:rs,tasks:ts}); });
+        return hit? "✅ marked “"+hit.text+"” done"+(hit.taskId?" (and its linked task)":"")+" — nice" : "couldn't find a reminder like that 🌸";
       }
       case "setDiscordDelivery": {
         var md=(a.mode==="channel")?"channel":"dm"; var cid=String(a.channelId||"").replace(/[^0-9]/g,"");

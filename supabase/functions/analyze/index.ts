@@ -389,7 +389,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - markMed: { name (fuzzy-matched to a med on her list), on?: boolean (default true) }   // "I took my <med>", "mark off my meds", "check off my morning pill"
 - markAllMeds: { on?: boolean }     // "I took all my meds today"
 - addMed: { name, dose?, time? }    // add a new medication to her list
-- completeTask: { name (fuzzy-matched to a planner task), done?: boolean }   // "mark <task> done", "I finished <task>", "uncheck <task>"
+- completeTask: { name (fuzzy-matched to a planner task), done?: boolean }   // "mark <task> done", "I finished <task>", "uncheck <task>". Linked task↔reminder pairs complete TOGETHER automatically (same for doneReminder) — never emit both actions for one thing.
 - moveTask: { name, status: "todo"|"doing"|"done" }   // move a task on the kanban board
 - delTask: { name }                 // remove a planner task she names
 - addGoal: { scope: "week"|"month", text }     // add a goal to her week or month goals
@@ -439,7 +439,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delBoardCard: { text }              // remove a mood-board NOTE matching the text, or a SWATCH by exact "#hex"
 - delSticky: { text (fuzzy) }         // peel a sticky note off the screen
 
-- setReminder: { text, date: "YYYY-MM-DD", time?: "HH:MM" 24h (default "09:00"), email?: boolean (default true) }   // "remind me Friday at 3 to send the invoice", "remind me in 2 hours to stretch" — resolve relative dates/times to absolute using today + her timezone. She gets a browser ping (if the OS is open) AND an email (cron). Reminders are a real struggle for her — set them generously whenever she even hints at one.
+- setReminder: { text?, task? (fuzzy name of an EXISTING planner task), date: "YYYY-MM-DD", time?: "HH:MM" 24h (default "09:00"), email?: boolean (default true) }   // "remind me Friday at 3 to send the invoice", "remind me in 2 hours to stretch" — resolve relative dates/times to absolute using today + her timezone. If she's clearly talking about an existing task ("remind me about the thumbnail task tomorrow"), pass the 'task' arg — the reminder LINKS to it: one thing, one ping, and completing either finishes both. A linked task already having a reminder just updates its time. Reminders are a real struggle for her — set them generously whenever she even hints at one.
 - delReminder: { text (fuzzy) }       // cancel a reminder
 - doneReminder: { text (fuzzy) }      // mark a reminder handled
 - rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep

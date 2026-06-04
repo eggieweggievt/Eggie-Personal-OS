@@ -56,16 +56,25 @@ async function execAction(userId: string, a: any): Promise<string> {
   if (!a || !a.type) return "";
   const fuzzy = (s: string, q: string) => (s || "").toLowerCase().includes((q || "").toLowerCase());
   switch (a.type) {
-    case "setReminder":
-      if (!a.text || !a.date) return "";
-      await saveSent(userId, (n) => ({ ...n, reminders: [...(n.reminders || []), { id: uid(), text: String(a.text).slice(0, 300), date: a.date, time: a.time || "09:00", email: a.email !== false, done: false, notified: false, emailed: false, pushed: false, dmed: false }] }));
-      return `⏰ reminder set — ${a.date} ${a.time || "09:00"}: ${a.text}`;
+    case "setReminder": {
+      if ((!a.text && !a.task) || !a.date) return "";
+      let tid: string | null = null, txt = a.text || "";
+      if (a.task) { const s = await loadSent(userId); const tk = (s.tasks || []).find((x: any) => !x.done && fuzzy(x.text, a.task)); if (tk) { tid = tk.id; if (!txt) txt = tk.text; } }
+      if (!txt) return `couldn't find a task like “${a.task}” 🌸`;
+      await saveSent(userId, (n) => {
+        const rems = (n.reminders || []).slice();
+        if (tid) { const ex = rems.find((x: any) => x.taskId === tid && !x.done); if (ex) { ex.date = a.date; ex.time = a.time || "09:00"; ex.pings = 0; ex.lastPing = null; ex.emailed = false; return { ...n, reminders: rems }; } }
+        rems.push({ id: uid(), text: String(txt).slice(0, 300), date: a.date, time: a.time || "09:00", email: a.email !== false, done: false, notified: false, emailed: false, taskId: tid || undefined, pings: 0 });
+        return { ...n, reminders: rems };
+      });
+      return `⏰ reminder set — ${a.date} ${a.time || "09:00"}: ${txt}${tid ? " 🔗 linked to the task" : ""}`;
+    }
     case "delReminder": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, reminders: (n.reminders || []).filter((r: any) => { if (!hit && fuzzy(r.text, a.text)) { hit = r; return false; } return true; }) })); return hit ? `🗑 removed “${hit.text}”` : "couldn't find that reminder 🌸"; }
-    case "doneReminder": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, reminders: (n.reminders || []).map((r: any) => { if (!hit && !r.done && fuzzy(r.text, a.text)) { hit = r; return { ...r, done: true }; } return r; }) })); return hit ? `✅ “${hit.text}” done` : "couldn't find that reminder 🌸"; }
+    case "doneReminder": { let hit: any = null; await saveSent(userId, (n) => { const rs = (n.reminders || []).map((r: any) => { if (!hit && !r.done && fuzzy(r.text, a.text)) { hit = r; return { ...r, done: true }; } return r; }); let ts = n.tasks || []; if (hit?.taskId) ts = ts.map((t: any) => t.id === hit.taskId ? { ...t, done: true, status: "done" } : t); return { ...n, reminders: rs, tasks: ts }; }); return hit ? `✅ “${hit.text}” done${hit.taskId ? " (+ its task)" : ""}` : "couldn't find that reminder 🌸"; }
     case "addTask":
       await saveSent(userId, (n) => ({ ...n, tasks: [...(n.tasks || []), { id: "t" + uid(), text: a.text || "task", bucket: a.bucket || "personal", spoon: a.spoon || "some", done: false, sub: [], created_at: new Date().toISOString() }] }));
       return `🗒️ added task “${a.text}”`;
-    case "completeTask": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, tasks: (n.tasks || []).map((t: any) => { if (!hit && fuzzy(t.text, a.name)) { hit = t; return { ...t, done: a.done !== false, status: a.done !== false ? "done" : "todo" }; } return t; }) })); return hit ? `✅ checked off “${hit.text}”` : "couldn't find that task 🌸"; }
+    case "completeTask": { let hit: any = null; const dn = a.done !== false; await saveSent(userId, (n) => { const ts = (n.tasks || []).map((t: any) => { if (!hit && fuzzy(t.text, a.name)) { hit = t; return { ...t, done: dn, status: dn ? "done" : "todo" }; } return t; }); let rs = n.reminders || []; if (hit && dn) rs = rs.map((r: any) => (r.taskId === hit.id && !r.done) ? { ...r, done: true } : r); return { ...n, tasks: ts, reminders: rs }; }); return hit ? `✅ checked off “${hit.text}”` : "couldn't find that task 🌸"; }
     case "delTask": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, tasks: (n.tasks || []).filter((t: any) => { if (!hit && fuzzy(t.text, a.name)) { hit = t; return false; } return true; }) })); return hit ? `🗑 removed “${hit.text}”` : "couldn't find that task 🌸"; }
     case "addCapture":
       await sb().from("raw_captures").insert({ user_id: userId, raw_text: a.text || "" });
@@ -198,7 +207,13 @@ Deno.serve(async (req) => {
   if (i.type === 3) {
     const [act, rid] = String(i.data?.custom_id || "").split(":");
     if (act === "dn") {
-      await saveSent(tag, (n) => ({ ...n, reminders: (n.reminders || []).map((r: any) => r.id === rid ? { ...r, done: true } : r) }));
+      await saveSent(tag, (n) => {
+        let tid: string | null = null;
+        const rems = (n.reminders || []).map((r: any) => { if (r.id === rid) { if (r.taskId) tid = r.taskId; return { ...r, done: true }; } return r; });
+        let tasks = n.tasks || [];
+        if (tid) tasks = tasks.map((t: any) => t.id === tid ? { ...t, done: true, status: "done" } : t);
+        return { ...n, reminders: rems, tasks };
+      });
       return json({ type: 7, data: { content: (i.message?.content || "") + "\n✅ done — nice!", components: [] } });
     }
     if (act === "snz") {
