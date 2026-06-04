@@ -1372,7 +1372,8 @@ function taskRow(t){
     <div style="display:flex;align-items:center;gap:9px">
       <button class="check ${t.done?'on':''}" data-act="taskDone" data-id="${t.id}" ${RO?"disabled":""} style="padding:0"></button>
       <span class="grow" style="font-size:13px;${t.done?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span>
-      <button class="ft-ic" data-act="taskRem" data-id="${t.id}" title="${lr?`reminder ${lr.date}${lr.time?" "+lr.time:""} — tap to change`:"attach a reminder"}" style="${lr?'color:var(--pink-deep);opacity:1':''}">⏰${lr?`<span class="label num" style="margin-left:2px;color:var(--pink-deep)">${esc((lr.date===TODAY?"":lr.date.slice(5)+" ")+(lr.time||""))}</span>`:""}</button>
+      ${duePill(t)}
+      <button class="ft-ic" data-act="taskRem" data-id="${t.id}" title="${lr?`reminder ${lr.date}${lr.time?" "+lr.time:""} — tap to change`:"due date + reminder"}" style="${lr?'color:var(--pink-deep);opacity:1':''}">⏰${lr?`<span class="label num" style="margin-left:2px;color:var(--pink-deep)">${esc((lr.date===TODAY?"":lr.date.slice(5)+" ")+(lr.time||""))}</span>`:""}</button>
       <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
       <button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="Focus on just this one">◎</button>
       <button class="ft-ic" data-act="addSubtask" data-id="${t.id}" title="Break into a step" ${RO?"disabled":""}>＋</button>
@@ -1384,6 +1385,27 @@ function taskRow(t){
 /* ---- Kanban board view (To do / Doing / Done) — same tasks as the list, just a different lens ---- */
 const TASK_STATUSES=[["todo","🌱 To do"],["doing","🔆 Doing"],["done","✅ Done"]];
 function taskStatus(t){ return t.status || (t.done?"done":"todo"); }
+/* sort lens for board columns + within list groups: custom (her order) · bucket · due · spoons */
+function sortTasks(arr){
+  const m=state.boardSort||"custom"; if(m==="custom")return arr;
+  const bIdx=k=>{ const i=TASK_BUCKETS.findIndex(b=>b[0]===k); return i<0?99:i; };
+  const sIdx={low:0,some:1,full:2};
+  return arr.slice().sort((a,b)=>{
+    if(m==="bucket"){ const d=bIdx(a.bucket)-bIdx(b.bucket); if(d)return d; return String(a.due||"9999").localeCompare(String(b.due||"9999")); }
+    if(m==="due") return String(a.due||"9999-99").localeCompare(String(b.due||"9999-99"));
+    if(m==="spoon"){ const d=((sIdx[a.spoon]??1)-(sIdx[b.spoon]??1)); if(d)return d; return String(a.due||"9999").localeCompare(String(b.due||"9999")); }
+    return 0;
+  });
+}
+function duePill(t){
+  if(!t.due)return "";
+  const diff=Math.ceil((new Date(t.due+"T00:00")-new Date(TODAY+"T00:00"))/86400000);
+  if(t.done)return `<span class="pill pill-gray">📅 ${esc(t.due.slice(5))}</span>`;
+  if(diff<0)return `<span class="pill" style="background:#fde4e4;color:#c0566a">📅 ${-diff}d late</span>`;
+  if(diff===0)return `<span class="pill pill-peach">📅 today</span>`;
+  if(diff<=3)return `<span class="pill pill-peach">📅 ${diff===1?"tomorrow":"in "+diff+"d"}</span>`;
+  return `<span class="pill pill-gray">📅 ${esc(t.due.slice(5))}</span>`;
+}
 function taskCard(t){
   const subN=(t.sub||[]).length, subDone=(t.sub||[]).filter(s=>s.done).length;
   return `<div class="citem" draggable="true" data-act="dragTask" data-id="${t.id}">
@@ -1395,6 +1417,7 @@ function taskCard(t){
     <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;align-items:center">
       <span class="pill pill-lav">${bucketLabel(t.bucket)}</span>
       <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
+      ${duePill(t)}
       ${REM_BY_TASK[t.id]?`<span class="pill pill-pink">⏰ ${esc(REM_BY_TASK[t.id].time||REM_BY_TASK[t.id].date)}</span>`:""}
       ${subN?`<span class="label" style="font-size:10.5px">▫ ${subDone}/${subN}</span>`:""}
     </div>
@@ -1402,7 +1425,7 @@ function taskCard(t){
 }
 function taskBoard(list){
   return `<div class="kanban" style="grid-template-columns:repeat(3,minmax(160px,1fr))">${TASK_STATUSES.map(([key,lbl])=>{
-    const col=list.filter(t=>taskStatus(t)===key);
+    const col=sortTasks(list.filter(t=>taskStatus(t)===key));
     return `<div class="kcol" data-act="dropTaskStatus" data-status="${key}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${lbl}</span><span>${col.length}</span></div>${col.map(taskCard).join("")||`<div class="label" style="padding:8px 6px;opacity:.55">${key==="done"?"nothing finished yet — that's fine 🌸":key==="doing"?"drag a card here when you start it":"all clear 🌙"}</div>`}</div>`;
   }).join("")}</div>`;
 }
@@ -1412,10 +1435,13 @@ async function taskRemModal(taskId){
   const sent=await DB.daily(SENTINEL);
   const t=(sent.tasks||[]).find(x=>x.id===taskId); if(!t)return;
   const r=(sent.reminders||[]).find(x=>x.taskId===taskId&&!x.done);
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">⏰ Remind me about this</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <p class="soft" style="font-size:12.5px;margin:0 0 10px">“${esc(t.text)}” — checking off either one completes both. 💗</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="trDate" type="date" value="${esc(r?r.date:TODAY)}" style="width:auto"/><input class="inp" id="trTime" type="time" value="${esc(r?(r.time||"09:00"):"09:00")}" style="width:auto"/></div>
-    <div style="display:flex;justify-content:space-between;margin-top:14px">${r?`<button class="btn" data-act="taskRemUnlink" data-id="${taskId}" style="color:var(--rose)">🗑 remove reminder</button>`:"<span></span>"}<button class="btn btn-pink" data-act="taskRemSave" data-id="${taskId}">💾 ${r?"update":"attach"}</button></div>
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">📅 Date & reminder</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12.5px;margin:0 0 10px">“${esc(t.text)}”</p>
+    <div class="label" style="margin-bottom:4px">Due date <span class="muted">· optional, shows on the task</span></div>
+    <input class="inp" id="trDue" type="date" value="${esc(t.due||"")}" style="width:auto"/>
+    <div class="label" style="margin:12px 0 4px"><label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="trRemOn" ${r?"checked":""} style="accent-color:var(--pink)"/> ⏰ remind me <span class="muted">· checking off either completes both</span></label></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="trDate" type="date" value="${esc(r?r.date:(t.due||TODAY))}" style="width:auto"/><input class="inp" id="trTime" type="time" value="${esc(r?(r.time||"09:00"):"09:00")}" style="width:auto"/></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-pink" data-act="taskRemSave" data-id="${taskId}">💾 save</button></div>
   </div></div>`;
 }
 async function renderPlanner(){
@@ -1433,12 +1459,13 @@ async function renderPlanner(){
     state.focusTask=null;
   }
   if(state.plannerView==null){ try{state.plannerView=localStorage.getItem("eggie-planner-view")||"list";}catch(e){state.plannerView="list";} }
+  if(state.boardSort==null){ try{state.boardSort=localStorage.getItem("eggie-board-sort")||"custom";}catch(e){state.boardSort="custom";} }
   const view=state.plannerView;
   REM_BY_TASK={}; (sent.reminders||[]).forEach(r=>{ if(r.taskId&&!r.done) REM_BY_TASK[r.taskId]=r; });
   const sf=state.taskSpoon||"all";
   const match=t=> sf==="all" || t.spoon===sf || (sf==="low" && !t.spoon);
   const groups=TASK_BUCKETS.map(([key,emoji,label])=>{
-    const list=tasks.filter(t=>t.bucket===key && match(t));
+    const list=sortTasks(tasks.filter(t=>t.bucket===key && match(t)));
     if(!list.length && key!=="someday") return "";
     const doneN=list.filter(t=>t.done).length;
     const body=list.length?list.map(taskRow).join(""):`<div class="soft" style="font-size:12px;padding:4px 2px">${key==="someday"?"a no-pressure parking lot — nothing in here is ever overdue 🌙":"nothing here right now 🌸"}</div>`;
@@ -1468,10 +1495,12 @@ async function renderPlanner(){
         <div class="grow" style="min-width:200px"><div class="label" style="margin-bottom:4px">New task</div><input class="inp" id="newTask" placeholder="e.g. reply to that email 🐙" ${RO?"disabled":""}/></div>
         <div><div class="label" style="margin-bottom:4px">Bucket</div><select class="inp" id="taskBucket" style="width:auto">${buckOpts}</select></div>
         <div><div class="label" style="margin-bottom:4px">Spoons</div><select class="inp" id="taskSpoonSel" style="width:auto">${spoonOpts}</select></div>
+        <div><div class="label" style="margin-bottom:4px">Due · optional</div><input class="inp" id="taskDue" type="date" style="width:auto" ${RO?"disabled":""}/></div>
         <button class="btn btn-pink" data-act="addTask" ${RO?"disabled":""}>+ add</button>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
         <span class="label">Show</span><div class="seg">${fbtn("all","Everything")}${fbtn("low","🌙 Low-spoon")}${fbtn("some","🌤 Some")}${fbtn("full","🌞 Full")}</div>
+        <span class="label">Sort</span><div class="seg">${[["custom","⠿ custom"],["bucket","🗂 category"],["due","📅 due"],["spoon","🥄 spoons"]].map(([v,l])=>`<button data-act="boardSort" data-v="${v}" class="${(state.boardSort||"custom")===v?'on':''}">${l}</button>`).join("")}</div>
       </div>
     </div>${remPanel}${view==="board"?board:groups}</div>`;
 }
@@ -2836,10 +2865,25 @@ document.addEventListener("click",async(e)=>{
   if(act==="delHabit")return delHabit(id);
 
   /* planner */
-  if(act==="addTask"){ const i=document.getElementById("newTask"); const tx=(i.value||"").trim(); if(tx){ const bucket=document.getElementById("taskBucket").value, spoon=document.getElementById("taskSpoonSel").value; state.addBucket=bucket; await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:tx,bucket,spoon,done:false,sub:[],created_at:new Date().toISOString()}]); render(); } return; }
+  if(act==="addTask"){ const i=document.getElementById("newTask"); const tx=(i.value||"").trim(); if(tx){ const bucket=document.getElementById("taskBucket").value, spoon=document.getElementById("taskSpoonSel").value, due=((document.getElementById("taskDue")||{}).value)||""; state.addBucket=bucket; await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:tx,bucket,spoon,due:due||undefined,done:false,sub:[],created_at:new Date().toISOString()}]); render(); } return; }
   if(act==="taskDone"){ await DB.saveDaily(SENTINEL,n=>{ let justDone=null; const tasks=(n.tasks||[]).map(x=>{ if(x.id!==id)return x; const nd=!x.done; if(nd)justDone=x.id; let status=x.status; if(nd)status="done"; else if(!x.status||x.status==="done")status="todo"; return {...x,done:nd,status}; }); let rems=n.reminders||[]; if(justDone) rems=rems.map(r=>(r.taskId===justDone&&!r.done)?{...r,done:true}:r); return {...n,tasks,reminders:rems}; }); render(); return; }
   if(act==="taskRem"){ taskRemModal(id); return; }
-  if(act==="taskRemSave"){ const d=((document.getElementById("trDate")||{}).value)||TODAY, tm=((document.getElementById("trTime")||{}).value)||"09:00"; await DB.saveDaily(SENTINEL,n=>{ const t=(n.tasks||[]).find(x=>x.id===id); const rems=(n.reminders||[]).slice(); const ex=rems.find(x=>x.taskId===id&&!x.done); if(ex){ ex.date=d; ex.time=tm; ex.pings=0; ex.lastPing=null; ex.emailed=false; } else rems.push({id:uid(),text:(t?t.text:"task"),date:d,time:tm,email:true,done:false,notified:false,emailed:false,taskId:id,pings:0}); return {...n,reminders:rems}; }); document.getElementById("modal").innerHTML=""; toast("⏰ attached — one thing now 💗"); render(); return; }
+  if(act==="taskRemSave"){
+    const due=((document.getElementById("trDue")||{}).value)||"";
+    const remOn=!!((document.getElementById("trRemOn")||{}).checked);
+    const d=((document.getElementById("trDate")||{}).value)||TODAY, tm=((document.getElementById("trTime")||{}).value)||"09:00";
+    await DB.saveDaily(SENTINEL,n=>{
+      const tasks=(n.tasks||[]).map(x=>x.id===id?{...x,due:due||undefined}:x);
+      const t=tasks.find(x=>x.id===id);
+      let rems=(n.reminders||[]).slice();
+      const ex=rems.find(x=>x.taskId===id&&!x.done);
+      if(remOn){ if(ex){ ex.date=d; ex.time=tm; ex.pings=0; ex.lastPing=null; ex.emailed=false; } else rems.push({id:uid(),text:(t?t.text:"task"),date:d,time:tm,email:true,done:false,notified:false,emailed:false,taskId:id,pings:0}); }
+      else if(ex){ rems=rems.filter(x=>!(x.taskId===id&&!x.done)); }
+      return {...n,tasks,reminders:rems};
+    });
+    document.getElementById("modal").innerHTML=""; toast(remOn?"📅 + ⏰ saved 💗":"📅 saved 💗"); render(); return;
+  }
+  if(act==="boardSort"){ state.boardSort=el.dataset.v; try{localStorage.setItem("eggie-board-sort",el.dataset.v);}catch(e){} render(); return; }
   if(act==="taskRemUnlink"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>!(r.taskId===id&&!r.done))})); document.getElementById("modal").innerHTML=""; toast("Reminder removed 🌸"); render(); return; }
   if(act==="delTask"){ await taskMut(t=>t.filter(x=>x.id!==id)); render(); return; }
   if(act==="focusTask"){ state.focusTask=id; render(); return; }
@@ -3328,8 +3372,8 @@ render();
         await DB.saveDaily(SENTINEL,function(n){ var evs=(n.calendarEvents||[]).slice(); evs.push({id:uid(),title:a.title||"event",date:a.date||TODAY,endDate:a.endDate||"",time:a.time||"",tz:a.tz||CAL_TZ_TARGET,note:a.note||"",color:a.color||CAL_COLORS[0]}); return Object.assign({},n,{calendarEvents:evs}); });
         return "📅 added “"+(a.title||"event")+"” on "+(a.date||TODAY)+(a.time?" at "+a.time:"");
       case "addTask":
-        await taskMut(function(t){ return t.concat([{id:"t"+uid().slice(0,8),text:a.text||"task",bucket:a.bucket||"personal",spoon:a.spoon||"some",done:false,sub:[],created_at:new Date().toISOString()}]); });
-        return "🗒️ added task “"+(a.text||"")+"”";
+        await taskMut(function(t){ return t.concat([{id:"t"+uid().slice(0,8),text:a.text||"task",bucket:a.bucket||"personal",spoon:a.spoon||"some",due:a.due||undefined,done:false,sub:[],created_at:new Date().toISOString()}]); });
+        return "🗒️ added task “"+(a.text||"")+"”"+(a.due?" (due "+a.due+")":"");
       case "addContent":
         await DB.addContent({title:a.title||"idea",format:a.format||"short",stage:a.stage||"idea",pillar:a.pillar||null,priority:60});
         return "🎬 added content “"+(a.title||"")+"”";
@@ -3566,8 +3610,8 @@ render();
       }
       case "setTask": {
         var nm=(a.name||"").toLowerCase(); var hit=null;
-        await taskMut(function(t){ return t.map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; var o=Object.assign({},x); if(a.bucket)o.bucket=a.bucket; if(a.spoon)o.spoon=a.spoon; return o; } return x; }); });
-        return hit? "🗂️ updated “"+hit.text+"”" : "couldn't find a task like “"+(a.name||"")+"” 🌸";
+        await taskMut(function(t){ return t.map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; var o=Object.assign({},x); if(a.bucket)o.bucket=a.bucket; if(a.spoon)o.spoon=a.spoon; if(a.due!==undefined)o.due=a.due||undefined; return o; } return x; }); });
+        return hit? "🗂️ updated “"+hit.text+"”"+(a.due?" (due "+a.due+")":"") : "couldn't find a task like “"+(a.name||"")+"” 🌸";
       }
       case "delHabit": {
         var nm=(a.name||"").toLowerCase();
