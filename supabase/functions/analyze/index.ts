@@ -425,7 +425,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delContent: { name (fuzzy) }       // delete a piece of content from the pipeline — confirm in reply if her phrasing was vague
 - setContentDeadline: { name (fuzzy), date: "YYYY-MM-DD" }   // set/change a content brief's deadline
 - addSubtask: { task (fuzzy), text }  // break a planner task into a small step
-- setTask: { name (fuzzy), bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" or "" to clear }   // re-bucket, change spoons, or set/clear a due date on a task
+- setTask: { name (fuzzy — matches the CURRENT wording), text? (the new wording — rename), bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" or "" to clear }   // edit a task: rename, re-bucket, change spoons, set/clear due. Renaming also renames its linked reminder.
 - delHabit: { name (fuzzy) }          // remove a habit from her library
 - delMed: { name (fuzzy) }            // remove a medication from her list
 - delLastIncome: { }                  // "undo that last money entry" — removes the most recent ledger entry only (safest)
