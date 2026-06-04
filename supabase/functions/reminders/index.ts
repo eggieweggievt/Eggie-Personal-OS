@@ -1,16 +1,24 @@
 // =============================================================================
 // Eggie OS — "reminders" Edge Function ⏰🐙
-// Cron-driven (every ~5 min). Reads the sentinel row's reminders list and, for
-// any that are due: sends a WEB PUSH to every subscribed device + an email via
-// Resend. GET requests return the VAPID public key so the front-end can
-// subscribe devices without any key pasted into the code.
+// Cron-driven (every ~5 min). Now MULTI-USER: loops every tag in REMINDER_USERS
+// (default: just BRIEFING_USER_ID/eggie) and, for each user's due reminders:
+// sends a WEB PUSH to their subscribed devices, an email via Resend, and a
+// Discord DM with ✓/😴 buttons. GET requests return the VAPID public key.
+//
+// Per-user routing:
+//   email      → their sentinel appConfig.email (eggie falls back to BRIEFING_TO)
+//   discord DM → eggie → DISCORD_OWNER_ID; others → reverse lookup in
+//                DISCORD_USER_MAP {"<discordId>":"<osUserTag>"}
+//   push       → their own sentinel pushSubs
 //
 // Secrets:  RESEND_API_KEY  (email)
-//           VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY  (web push — from `npx web-push generate-vapid-keys`)
-//           BRIEFING_TO / BRIEFING_FROM / BRIEFING_USER_ID / BRIEFING_LINK (shared with briefing)
+//           VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY  (web push)
+//           BRIEFING_TO / BRIEFING_FROM / BRIEFING_USER_ID / BRIEFING_LINK
+//           DISCORD_BOT_TOKEN / DISCORD_OWNER_ID / DISCORD_USER_MAP
+//           REMINDER_USERS  e.g. "eggie,fabled"  (optional; default single-user)
 // Deploy:   supabase functions deploy reminders --no-verify-jwt
 // Cron:     */5 * * * *  → invoke "reminders", body {}
-// Times are interpreted in America/Toronto (Eggie's clock).
+// Times are interpreted in America/Toronto.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
@@ -18,12 +26,118 @@ import webpush from "npm:web-push@3.6.7";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info", "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
 
-const USER = Deno.env.get("BRIEFING_USER_ID") || "eggie";
+const DEFAULT_USER = Deno.env.get("BRIEFING_USER_ID") || "eggie";
+const USERS = (Deno.env.get("REMINDER_USERS") || DEFAULT_USER).split(",").map((s) => s.trim()).filter(Boolean);
 const TO = Deno.env.get("BRIEFING_TO") || "eggie@eggieweggie.ca";
 const FROM = Deno.env.get("BRIEFING_FROM") || "Eggie OS <onboarding@resend.dev>";
 const TZ = "America/Toronto";
 
 function esc(s: unknown) { return String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!)); }
+
+function discordIdFor(user: string): string | null {
+  if (user === DEFAULT_USER || user === "eggie") return Deno.env.get("DISCORD_OWNER_ID") || null;
+  try {
+    const m = JSON.parse(Deno.env.get("DISCORD_USER_MAP") || "{}");
+    for (const [discordId, tag] of Object.entries(m)) if (tag === user) return discordId;
+  } catch { /* bad map */ }
+  return null;
+}
+
+async function processUser(sb: any, user: string, today: string, hm: string) {
+  const { data: sent } = await sb.from("daily_logs").select("notes").eq("user_id", user).eq("log_date", "2000-01-01").maybeSingle();
+  let notes: any = {}; try { notes = sent?.notes ? JSON.parse(sent.notes) : {}; } catch { notes = {}; }
+  const rems: any[] = notes.reminders || [];
+  const petName = notes.appConfig?.assistantName || (user === "eggie" ? "Eugene" : "your assistant");
+  const userEmail = notes.appConfig?.email || (user === "eggie" ? TO : null);
+
+  const isDue = (r: any) => !r.done && (r.date < today || (r.date === today && (r.time || "09:00") <= hm));
+  const duePush = rems.filter((r) => isDue(r) && !r.pushed);
+  const dueEmail = rems.filter((r) => isDue(r) && !r.emailed && r.email !== false);
+  const dueDm = rems.filter((r) => isDue(r) && !r.dmed);
+  if (!duePush.length && !dueEmail.length && !dueDm.length) return { user, push: 0, email: 0, dm: 0 };
+
+  // ---- Discord DM with ✓ done / 😴 snooze buttons ----
+  let dmed = 0;
+  const dTok = Deno.env.get("DISCORD_BOT_TOKEN"), dTarget = discordIdFor(user);
+  if (dueDm.length && dTok && dTarget) {
+    try {
+      const ch = await fetch("https://discord.com/api/v10/users/@me/channels", {
+        method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
+        body: JSON.stringify({ recipient_id: dTarget }),
+      }).then((x) => x.json());
+      if (ch?.id) {
+        for (const r of dueDm) {
+          const res2 = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+            method: "POST", headers: { authorization: `Bot ${dTok}`, "content-type": "application/json" },
+            body: JSON.stringify({
+              content: `⏰ ${r.text}${r.time ? `  ·  ${r.date} ${r.time}` : ""} ${user === "eggie" ? "🐙" : "✨"}`,
+              components: [{ type: 1, components: [
+                { type: 2, style: 3, label: "✓ done", custom_id: `dn:${r.id}` },
+                { type: 2, style: 2, label: "😴 snooze 1h", custom_id: `snz:${r.id}` },
+              ] }],
+            }),
+          });
+          if (res2.ok) { (r as any)._dmok = true; dmed++; }
+        }
+      }
+    } catch { /* DM failures just retry next tick */ }
+  }
+
+  // ---- web push to every subscribed device ----
+  let pushedDevices = 0;
+  const VPUB = Deno.env.get("VAPID_PUBLIC_KEY"), VPRIV = Deno.env.get("VAPID_PRIVATE_KEY");
+  if (duePush.length && VPUB && VPRIV && Array.isArray(notes.pushSubs) && notes.pushSubs.length) {
+    webpush.setVapidDetails("mailto:" + (userEmail || TO), VPUB, VPRIV);
+    const payload = JSON.stringify({
+      title: duePush.length > 1 ? `⏰ ${duePush.length} reminders` : `⏰ ${petName} reminder`,
+      body: duePush.map((r) => r.text).join(" · ").slice(0, 180),
+      url: "https://" + (Deno.env.get("BRIEFING_LINK") || "eggieweggievt.github.io/Eggie-Personal-OS/"),
+    });
+    const alive: any[] = [];
+    for (const s of notes.pushSubs) {
+      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload); alive.push(s); pushedDevices++; }
+      catch (e: any) {
+        const code = e?.statusCode || 0;
+        if (code === 404 || code === 410) { /* device unsubscribed — drop it */ }
+        else alive.push(s);
+      }
+    }
+    notes.pushSubs = alive;
+  }
+
+  // ---- email (Resend) ----
+  let emailId: string | null = null;
+  const key = Deno.env.get("RESEND_API_KEY");
+  if (dueEmail.length && key && userEmail) {
+    const li = (r: any) => `<li style="margin:5px 0;font-size:15px"><b>${esc(r.text)}</b> <span style="color:#9b8aa0;font-size:12px">(${esc(r.date)}${r.time ? " · " + esc(r.time) : ""})</span></li>`;
+    const html = `<div style="font-family:-apple-system,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #f0dcec;border-radius:16px;padding:22px;color:#4a3a4d">
+      <div style="font-size:20px;font-weight:700;color:#db5e98;margin-bottom:6px">⏰ ${esc(petName)} here — gentle nudge${dueEmail.length > 1 ? "s" : ""}!</div>
+      <ul style="margin:8px 0;padding-left:18px">${dueEmail.map(li).join("")}</ul>
+      <p style="margin:14px 0 0;color:#7c6a80;font-size:13px">No pressure, no guilt — this is just so it doesn't slip. You've got this. ${user === "eggie" ? "🐙💗" : "💙"}</p>
+    </div>`;
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: FROM, to: [userEmail], subject: `⏰ ${dueEmail.length > 1 ? dueEmail.length + " reminders" : "Reminder"}: ${String(dueEmail[0].text).slice(0, 60)}`, html }),
+    });
+    const data = await res.json();
+    if (res.ok) emailId = data.id; // if Resend hiccups we just retry next cron tick
+  }
+
+  // ---- mark what went out + persist (incl. pruned subs) ----
+  notes.reminders = rems.map((r) => {
+    let o = r;
+    if (duePush.some((d) => d.id === r.id) && pushedDevices > 0) o = { ...o, pushed: true };
+    if (dueEmail.some((d) => d.id === r.id) && emailId) o = { ...o, emailed: true };
+    if ((r as any)._dmok) { o = { ...o, dmed: true }; delete (o as any)._dmok; }
+    return o;
+  });
+  await sb.from("daily_logs").upsert(
+    { user_id: user, log_date: "2000-01-01", notes: JSON.stringify(notes), updated_at: new Date().toISOString() },
+    { onConflict: "user_id,log_date" },
+  );
+  return { user, push: pushedDevices, email: emailId ? dueEmail.length : 0, dm: dmed };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -37,68 +151,12 @@ Deno.serve(async (req) => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(now);                                            // YYYY-MM-DD
     const hm = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now); // HH:MM
 
-    const { data: sent } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", "2000-01-01").maybeSingle();
-    let notes: any = {}; try { notes = sent?.notes ? JSON.parse(sent.notes) : {}; } catch { notes = {}; }
-    const rems: any[] = notes.reminders || [];
-
-    const isDue = (r: any) => !r.done && (r.date < today || (r.date === today && (r.time || "09:00") <= hm));
-    const duePush = rems.filter((r) => isDue(r) && !r.pushed);
-    const dueEmail = rems.filter((r) => isDue(r) && !r.emailed && r.email !== false);
-    if (!duePush.length && !dueEmail.length) return json({ ok: true, push: 0, email: 0 });
-
-    // ---- web push to every subscribed device ----
-    let pushedDevices = 0;
-    const VPUB = Deno.env.get("VAPID_PUBLIC_KEY"), VPRIV = Deno.env.get("VAPID_PRIVATE_KEY");
-    if (duePush.length && VPUB && VPRIV && Array.isArray(notes.pushSubs) && notes.pushSubs.length) {
-      webpush.setVapidDetails("mailto:" + TO, VPUB, VPRIV);
-      const payload = JSON.stringify({
-        title: duePush.length > 1 ? `⏰ ${duePush.length} reminders` : "⏰ Eugene reminder",
-        body: duePush.map((r) => r.text).join(" · ").slice(0, 180),
-        url: "https://" + (Deno.env.get("BRIEFING_LINK") || "eggieweggievt.github.io/Eggie-Personal-OS/"),
-      });
-      const alive: any[] = [];
-      for (const s of notes.pushSubs) {
-        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload); alive.push(s); pushedDevices++; }
-        catch (e: any) {
-          const code = e?.statusCode || 0;
-          if (code === 404 || code === 410) { /* device unsubscribed — drop it */ }
-          else alive.push(s);
-        }
-      }
-      notes.pushSubs = alive;
+    const results = [];
+    for (const user of USERS) {
+      try { results.push(await processUser(sb, user, today, hm)); }
+      catch (e) { results.push({ user, error: String((e as Error)?.message || e) }); }
     }
-
-    // ---- email (Resend) ----
-    let emailId: string | null = null;
-    const key = Deno.env.get("RESEND_API_KEY");
-    if (dueEmail.length && key) {
-      const li = (r: any) => `<li style="margin:5px 0;font-size:15px"><b>${esc(r.text)}</b> <span style="color:#9b8aa0;font-size:12px">(${esc(r.date)}${r.time ? " · " + esc(r.time) : ""})</span></li>`;
-      const html = `<div style="font-family:-apple-system,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #f0dcec;border-radius:16px;padding:22px;color:#4a3a4d">
-        <div style="font-size:20px;font-weight:700;color:#db5e98;margin-bottom:6px">⏰ Eugene here — gentle nudge${dueEmail.length > 1 ? "s" : ""}!</div>
-        <ul style="margin:8px 0;padding-left:18px">${dueEmail.map(li).join("")}</ul>
-        <p style="margin:14px 0 0;color:#7c6a80;font-size:13px">No pressure, no guilt — this is just so it doesn't slip. You've got this. 🐙💗</p>
-      </div>`;
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-        body: JSON.stringify({ from: FROM, to: [TO], subject: `⏰ ${dueEmail.length > 1 ? dueEmail.length + " reminders" : "Reminder"}: ${String(dueEmail[0].text).slice(0, 60)}`, html }),
-      });
-      const data = await res.json();
-      if (res.ok) emailId = data.id; // if Resend hiccups we just retry next cron tick (emailed stays false)
-    }
-
-    // ---- mark what went out + persist (incl. pruned subs) ----
-    notes.reminders = rems.map((r) => {
-      let o = r;
-      if (duePush.some((d) => d.id === r.id) && pushedDevices > 0) o = { ...o, pushed: true };
-      if (dueEmail.some((d) => d.id === r.id) && emailId) o = { ...o, emailed: true };
-      return o;
-    });
-    await sb.from("daily_logs").upsert(
-      { user_id: USER, log_date: "2000-01-01", notes: JSON.stringify(notes), updated_at: new Date().toISOString() },
-      { onConflict: "user_id,log_date" },
-    );
-    return json({ ok: true, push: pushedDevices, email: emailId ? dueEmail.length : 0 });
+    return json({ ok: true, results });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }
