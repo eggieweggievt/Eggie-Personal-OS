@@ -739,14 +739,15 @@ function calDiff(a,b){ const pa=a.split("-").map(Number), pb=b.split("-").map(Nu
 function calAdd(ds,n){ const p=ds.split("-").map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2]+n)).toISOString().slice(0,10); }
 /* Upcoming game updates/releases on the calendar. The weekly "game-dates" scheduled task
    rewrites the array between the markers below, then you commit + push. `approx:true` = date is
-   a window/estimate, not officially confirmed. Last refreshed: 2026-06-02. */
+   a window/estimate, not officially confirmed. Last refreshed: 2026-06-05. */
 /* GAME_RELEASES_START */
 const GAME_RELEASES=[
-  { date:"2026-06-30", title:"Space Marine 2 — Year 2 finale (PvP arenas)", approx:true, url:"https://www.focus-entmt.com/en/games/warhammer-40000-space-marine-2" },
+  { date:"2026-06-26", title:"Space Marine 2 — Siege mode (free update)", url:"https://www.focus-entmt.com/en/news/warhammer-40000-space-marine-2-unveils-its-new-siege-mode-coming-june-26-in-a-free-update" },
   { date:"2026-07-10", title:"Path of Exile 3.29 — new league", approx:true, url:"https://www.pathofexile.com/" },
   { date:"2026-07-15", title:"Monster Hunter Wilds — expansion reveal (Summer 2026)", approx:true, url:"https://www.monsterhunter.com/wilds/en-us/" },
   { date:"2026-07-28", title:"FFXIV Patch 7.55 — Occult Crescent North Horn", url:"https://na.finalfantasyxiv.com/" },
-  { date:"2026-09-06", title:"FFXIV Patch 7.56 — final Dawntrail content + Beastmaster", url:"https://na.finalfantasyxiv.com/" },
+  { date:"2026-09-08", title:"FFXIV Patch 7.56 — final Dawntrail content + Beastmaster", url:"https://na.finalfantasyxiv.com/" },
+  { date:"2026-09-15", title:"RE Requiem — 'Last Days' story DLC + Mercenaries", approx:true, url:"https://www.residentevil.com/requiem/en-us/" },
   { date:"2026-09-24", title:"Silent Hill: Townfall", url:"https://www.konami.com/games/series/silenthill/" },
   { date:"2026-12-05", title:"Path of Exile 2 — 1.0 full release", approx:true, url:"https://www.pathofexile.com/" },
   { date:"2027-01-15", title:"FFXIV: Evercold (8.0 expansion)", approx:true, url:"https://na.finalfantasyxiv.com/" },
