@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat Buddies — get your link 🐙</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{ --pink:#ec7faf; --purple:#a98fe0; --ink:#3a3550; --line:#e4d4ef; }
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;font:15px/1.6 system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(160deg,#fdf3f8,#f3effd);display:flex;flex-direction:column;align-items:center;padding:38px 18px 60px;}
+  h1{font-size:26px;margin:0 0 4px;color:var(--pink);}
+  .sub{color:#9b8fb6;margin:0 0 28px;text-align:center;max-width:480px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 32px rgba(120,110,160,.18);
+    padding:24px 26px;width:100%;max-width:560px;}
+  label{display:block;font-weight:700;margin:18px 0 6px;}
+  label:first-child{margin-top:0;}
+  .hint{font-weight:400;font-size:12.5px;color:#9b8fb6;}
+  input[type=text]{width:100%;border:1.5px solid #dde0f1;border-radius:12px;padding:11px 14px;font:inherit;color:var(--ink);outline:none;}
+  input[type=text]:focus{border-color:var(--purple);}
+  .row{display:flex;align-items:center;gap:12px;}
+  input[type=range]{flex:1;accent-color:var(--pink);}
+  .sizeval{font-weight:700;min-width:84px;text-align:right;color:var(--purple);}
+  .check{display:flex;align-items:center;gap:10px;margin-top:14px;font-weight:600;cursor:pointer;}
+  .check input{width:18px;height:18px;accent-color:var(--pink);cursor:pointer;}
+  .check .hint{font-weight:400;}
+
+  #pet{height:84px;display:flex;align-items:flex-end;justify-content:center;margin:4px 0 10px;}
+  #pet .spr{image-rendering:pixelated;background-repeat:no-repeat;}
+
+  #out{margin-top:22px;}
+  #url{width:100%;border:1.5px dashed var(--purple);background:#faf7ff;border-radius:12px;padding:11px 14px;
+    font:13px ui-monospace,monospace;color:#6b5a96;word-break:break-all;cursor:pointer;}
+  .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+  button{border:none;border-radius:12px;padding:11px 18px;font:inherit;font-weight:700;color:#fff;cursor:pointer;
+    background:linear-gradient(135deg,var(--pink),var(--purple));}
+  button.ghost{background:#fff;color:var(--purple);border:1.5px solid var(--line);}
+  #copied{font-size:13px;color:#5dbb8a;font-weight:700;align-self:center;min-width:70px;}
+
+  .steps{margin-top:26px;max-width:560px;width:100%;font-size:13.5px;color:#7a7096;}
+  .steps b{color:var(--ink);}
+  a{color:var(--purple);}
+
+  select{width:100%;border:1.5px solid #dde0f1;border-radius:12px;padding:10px 12px;font:inherit;color:var(--ink);background:#fff;}
+  .half{display:flex;gap:12px;}
+  .half>div{flex:1;}
+  input[type=file]{font:inherit;color:#7a7096;width:100%;}
+  #sprPrev{height:108px;display:none;align-items:flex-end;justify-content:center;
+    background:linear-gradient(160deg,#2a2438,#3d3454);border-radius:12px;margin-top:14px;padding-bottom:6px;}
+  #sprPrev .spr2{image-rendering:pixelated;background-repeat:no-repeat;}
+  #gPrev{height:140px;display:flex;align-items:flex-end;justify-content:center;
+    background:linear-gradient(160deg,#2a2438,#3d3454);border-radius:12px;margin:12px 0 4px;padding-bottom:4px;overflow:hidden;}
+  #gPrev .gpinner{position:relative;}
+  #gPrev .gspr{image-rendering:pixelated;background-repeat:no-repeat;position:relative;z-index:2;}
+  #gPrev .gimg{position:absolute;left:50%;image-rendering:pixelated;pointer-events:none;display:none;z-index:3;}
+  #gPrev .gimg.behind{z-index:1;}
+  .piece{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;
+    padding:4px 8px;margin:0 6px 6px 0;font-size:12.5px;color:#7a7096;background:#faf7ff;}
+  .piece img{height:24px;image-rendering:pixelated;}
+  .piece a{color:#e06a8a;cursor:pointer;font-weight:700;text-decoration:none;}
+  .hint.ok{color:#5dbb8a;font-weight:700;}
+  .hint.err{color:#e06a8a;font-weight:700;}
+  #sprStatus{margin-top:10px;min-height:20px;}
+  .callout{margin-top:10px;font-size:12.5px;background:#faf7ff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:#7a7096;}
+
+  .guide{margin-top:40px;width:100%;max-width:1000px;}
+  .guide h2{color:var(--pink);font-size:21px;text-align:center;margin:0 0 18px;}
+  .ggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;}
+  .gcard{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 32px rgba(120,110,160,.14);
+    padding:18px 20px;font-size:13.5px;color:#7a7096;}
+  .gcard h3{margin:0 0 8px;font-size:15px;color:var(--ink);}
+  .gcard p{margin:0;}
+  .gcard ol{margin:0;padding-left:18px;}
+  .gcard li{margin-bottom:4px;}
+  .gcard table{width:100%;border-collapse:collapse;}
+  .gcard td{padding:3px 6px 3px 0;vertical-align:top;}
+  .gcard td:first-child{white-space:nowrap;color:var(--purple);}
+  .gcard b{color:var(--ink);}
+  .gcard .hint{display:block;margin-top:8px;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<h1>🐙 Chat Buddies</h1>
+<p class="sub">Your Twitch chat, walking around on your stream.<br>Type your channel, pick a size, copy the link into OBS — that's the whole setup.</p>
+
+<div class="card">
+  <div id="pet"><div class="spr"></div></div>
+
+  <label for="ch">Twitch channel <span class="hint">— just the name, no @ or link</span></label>
+  <input type="text" id="ch" placeholder="eggieweggievt" autocomplete="off" spellcheck="false">
+
+  <label>Avatar size</label>
+  <div class="row">
+    <input type="range" id="size" min="0.8" max="2.4" step="0.1" value="1.6">
+    <div class="sizeval" id="sizeval">1.6× · cozy</div>
+  </div>
+
+  <label class="check"><input type="checkbox" id="bub" checked> Speech bubbles <span class="hint">— show chat messages above avatars</span></label>
+  <label class="check"><input type="checkbox" id="join"> Join mode <span class="hint">— viewers must type <b>!join</b> to appear</span></label>
+
+  <label>Canvas size <span class="hint">— how big the overlay is inside OBS</span></label>
+  <select id="canvas">
+    <option value="1920x1080" selected>1920 × 1080 — full HD (most streams)</option>
+    <option value="2560x1440">2560 × 1440 — 1440p canvas</option>
+    <option value="3840x2160">3840 × 2160 — 4K canvas</option>
+    <option value="1280x720">1280 × 720 — 720p</option>
+  </select>
+  <div class="callout">⚠️ <b>Important:</b> type these same two numbers into the OBS Browser Source's
+    <b>Width</b> and <b>Height</b> boxes. If avatars only use part of your screen, the Width/Height
+    in OBS are smaller than your canvas — that's the whole problem!</div>
+
+  <div id="out">
+    <label>Your OBS link <span class="hint">— click it to copy</span></label>
+    <div id="url" title="click to copy"></div>
+    <div class="btns">
+      <button id="copy">Copy link 💗</button>
+      <button class="ghost" id="test">Try it with fake avatars 🎮</button>
+      <span id="copied"></span>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:22px">
+  <label style="margin-top:0">📺 Live preview <span class="hint">— exactly what OBS will show (with fake chatters + the test background)</span></label>
+  <div class="btns" style="margin-top:4px">
+    <button class="ghost" id="prevToggle">Show the live preview ▾</button>
+  </div>
+  <div id="prevWrap" style="display:none;margin-top:14px">
+    <iframe id="prevFrame" style="width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#2a2438"></iframe>
+    <div class="hint" style="margin-top:8px">This is the real overlay running in debug mode — every skin, role badge, and random !boops included.
+    Saved a new sprite? Hit the button twice (hide + show) to reload it.</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:22px">
+  <label style="margin-top:0">🎨 Use your own sprite <span class="hint">— optional!</span></label>
+  <div class="hint" style="margin-bottom:12px">
+    Upload a <b>PNG animation sheet</b> (all animation rows on one transparent sheet — idle, walk, sit,
+    jump — like the default sprite) or a <b>ZIP of frame images</b>
+    (name them like <code>idle1.png</code>, <code>walk1.png</code>, <code>sit1.png</code>, <code>jump1.png</code>…).
+    I'll find the frames automatically and you confirm which row is which. Type your channel name above
+    first — your sprite is remembered for that channel, every stream, every PC.
+  </div>
+  <label>Who uses this sprite?</label>
+  <select id="sprRole">
+    <option value="default" selected>🌸 Everyone (the default sprite)</option>
+    <option value="subscriber">💜 Subscribers</option>
+    <option value="vip">💎 VIPs</option>
+    <option value="moderator">🛡️ Mods</option>
+    <option value="broadcaster">👑 Broadcaster (you!)</option>
+  </select>
+  <div class="hint" style="margin:6px 0 10px">Chatters get the sprite of their highest role — anyone without one uses Everyone's sprite.</div>
+
+  <input type="file" id="sprFile" accept=".png,.zip">
+  <div id="sprRows" style="display:none">
+    <div class="hint" style="margin:8px 0 2px">Full animation sheets supported! Tell me which row is which — anything skipped just uses the idle row.</div>
+    <div class="half">
+      <div><label>Walk row</label><select id="walkRow"></select></div>
+      <div><label>Idle row</label><select id="sitRow"></select></div>
+    </div>
+    <div class="half">
+      <div><label>Nap row (<b>!lurk</b>) <span class="hint">optional</span></label><select id="napRow"></select></div>
+      <div><label>Jump row <span class="hint">optional</span></label><select id="jumpRow"></select></div>
+    </div>
+  </div>
+  <div id="sprPrev"><div class="spr2"></div></div>
+  <div class="btns">
+    <button id="sprSave" disabled>Save my sprite 💾</button>
+    <button class="ghost" id="sprReset" style="display:none">Back to the default sprite</button>
+  </div>
+  <div id="sprStatus" class="hint"></div>
+</div>
+
+<div class="card" style="margin-top:22px">
+  <label style="margin-top:0">🎒 Accessories (gear) <span class="hint">— upload your own PNG items for chatters to wear</span></label>
+  <div class="hint" style="margin-bottom:10px">
+    Type your channel name at the top first. Make a <b>gear set</b> (like <code>hats</code>), upload <b>pieces</b> into it
+    (transparent PNGs), and nudge each one into place on the preview. Viewers equip with <b>!hats tophat</b> in chat
+    or on the viewer page — and you can hand gear out by role below.
+  </div>
+
+  <div class="half">
+    <div><label>Gear set</label><select id="gSet"><option value="">➕ new set…</option></select></div>
+    <div><label>New set name</label><input type="text" id="gNewSet" placeholder="hats" autocomplete="off"></div>
+  </div>
+  <label class="check"><input type="checkbox" id="gBehind"> Set draws <b>behind</b> the avatar <span class="hint">— capes, wings, auras</span></label>
+  <label class="check"><input type="checkbox" id="gNoFlip"> Set <b>doesn't flip</b> with the avatar <span class="hint">— items with text on them</span></label>
+
+  <label>Add a piece <span class="hint">— PNG image + a short name</span></label>
+  <div class="half">
+    <div><input type="file" id="gFile" accept=".png"></div>
+    <div><input type="text" id="gName" placeholder="tophat" autocomplete="off"></div>
+  </div>
+  <label class="check"><input type="checkbox" id="gAnim"> Frame-animated sheet <span class="hint">— a 7×5 sheet with a matching cell for every avatar frame (the default axe/crown/guts work this way)</span></label>
+
+  <div id="gPrevWrap" style="display:none">
+    <div id="gPrev"><div class="gpinner"><div class="gspr"></div><div class="gimg"></div></div></div>
+    <div class="half">
+      <div><label>↔ position <span id="gOxV" class="hint">0</span></label><input type="range" id="gOx" min="-48" max="48" step="1" value="0"></div>
+      <div><label>↕ position <span id="gOyV" class="hint">-20</span></label><input type="range" id="gOy" min="-64" max="96" step="1" value="-20"></div>
+    </div>
+    <label>Size <span id="gScV" class="hint">1</span></label>
+    <input type="range" id="gSc" min="0.3" max="2.5" step="0.05" value="1">
+  </div>
+
+  <div class="btns">
+    <button id="gSave" disabled>Save piece 💾</button>
+  </div>
+  <div id="gList" style="margin-top:10px"></div>
+  <div id="gStatus" class="hint" style="margin-top:6px;min-height:20px"></div>
+
+  <label>Gear by role <span class="hint">— worn automatically; a viewer's own pick wins</span></label>
+  <div class="half">
+    <div><label>👑 Broadcaster</label><select id="rg-broadcaster" class="rolegear"></select></div>
+    <div><label>🛡️ Mods</label><select id="rg-moderator" class="rolegear"></select></div>
+  </div>
+  <div class="half">
+    <div><label>💎 VIPs</label><select id="rg-vip" class="rolegear"></select></div>
+    <div><label>💜 Subscribers</label><select id="rg-subscriber" class="rolegear"></select></div>
+  </div>
+  <div class="btns"><button id="rgSave">Save role gear 💾</button></div>
+  <div id="rgStatus" class="hint" style="margin-top:8px;min-height:20px"></div>
+</div>
+
+<div class="guide">
+  <h2>📖 How it all works</h2>
+
+  <div class="ggrid">
+    <div class="gcard">
+      <h3>🖥️ Putting it in OBS</h3>
+      <ol>
+        <li>Sources → <b>+</b> → <b>Browser</b></li>
+        <li>Paste your link in <b>URL</b> <span class="hint">(don't tick "Local file")</span></li>
+        <li>Width <b id="obsW">1920</b> · Height <b id="obsH">1080</b> — <b>must match your canvas size</b>, or avatars get squeezed into a corner</li>
+        <li>FPS: <b>Custom 60</b> (30 is fine too)</li>
+        <li><b>Untick</b> "Shutdown source when not visible"</li>
+      </ol>
+      <div class="hint">Looks empty? Normal! Avatars appear when people chat. Use the <b>Try it</b> button's link (ends in <b>&amp;debug=1</b>) while arranging your scene, then swap to the real one.</div>
+    </div>
+
+    <div class="gcard">
+      <h3>💬 Commands your viewers can use</h3>
+      <table>
+        <tr><td><b>(chat anything)</b></td><td>their avatar appears + speech bubble</td></tr>
+        <tr><td><b>!jump</b></td><td>little hop</td></tr>
+        <tr><td><b>!dance</b></td><td>wiggle dance</td></tr>
+        <tr><td><b>!spin</b></td><td>fast spinny twirl</td></tr>
+        <tr><td><b>!wave</b></td><td>hop + 👋</td></tr>
+        <tr><td><b>!yeet</b></td><td>launched across the screen 🚀</td></tr>
+        <tr><td><b>!boop name</b></td><td>runs over and boops them</td></tr>
+        <tr><td><b>!hug name</b></td><td>runs over for a hug 💕</td></tr>
+        <tr><td><b>!duel name</b></td><td>runs over — loser gets yeeted 🏆</td></tr>
+        <tr><td><b>!lurk</b></td><td>cozy nap 💤</td></tr>
+        <tr><td><b>!gear</b></td><td>lists your gear sets</td></tr>
+        <tr><td><b>!items axe</b></td><td>equip a gear piece (<b>!items none</b> removes)</td></tr>
+        <tr><td><b>!hide</b></td><td>avatar leaves</td></tr>
+      </table>
+    </div>
+
+    <div class="gcard">
+      <h3>🎒 Gear &amp; the viewer page</h3>
+      <p>Gear: you upload PNG pieces into named sets above, and viewers equip with
+      <b>!{set} {piece}</b> in chat (e.g. <b>!items axe</b>) — saved to their Twitch account, sticks across streams.
+      There's also a gallery page: share <b>picker.html?channel=yourname</b> from this same site
+      (needs the one-time Twitch app step in the README before sign-in works).
+      Color skins are paused while the commissioned art gets sorted — the live preview shows a taste.</p>
+    </div>
+
+    <div class="gcard">
+      <h3>👑 Different sprites per role</h3>
+      <p>In <b>Use your own sprite</b> above, the "Who uses this sprite?" menu lets you upload a separate look for
+      <b>Subscribers</b>, <b>VIPs</b>, <b>Mods</b>, and the <b>Broadcaster</b>. Chatters automatically get the sprite of
+      their highest role — a perk for subbing! Name labels also get a badge: 👑 🛡️ 💎 💜.</p>
+    </div>
+
+    <div class="gcard">
+      <h3>🧸 Sprite file tips</h3>
+      <p><b>PNG animation sheet:</b> all animation rows on one transparent sheet — rows are detected
+      automatically and you map them: idle, walk, plus optional nap (<b>!lurk</b>) and jump rows.
+      A 5-row sheet in the standard layout (idle/walk/sit/stand/jump) maps itself.<br>
+      <b>ZIP:</b> frame images named like <b>idle1.png</b>, <b>walk1.png</b>, <b>sit1.png</b>, <b>jump1.png</b> —
+      they're sorted into animations by name and stitched into a sheet.<br>
+      Check the walking preview before saving; wrong row walking? Fix it with the dropdowns.</p>
+    </div>
+
+    <div class="gcard">
+      <h3>🔧 If something's weird</h3>
+      <p><b>Avatars stuck in a small box:</b> the OBS Width/Height don't match your canvas — fix the numbers in the source properties.<br>
+      <b>Changed something here but OBS shows the old version:</b> right-click the source → Refresh cache of current page.<br>
+      <b>Nothing at all:</b> open your link in a normal browser — if it 404s, the site needs a push (run update.ps1).</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* walking mascot preview */
+var SHEET="sheet.png", SCALE=0.9, FW=96, FH=96, SW=672, SH=480;
+var spr=document.querySelector("#pet .spr");
+spr.style.width=(FW*SCALE)+"px"; spr.style.height=(FH*SCALE)+"px";
+spr.style.backgroundImage="url('"+SHEET+"')";
+spr.style.backgroundSize=(SW*SCALE)+"px "+(SH*SCALE)+"px";
+var fi=0;
+setInterval(function(){
+  fi=(fi+1)%7;
+  spr.style.backgroundPosition="-"+(fi*FW*SCALE).toFixed(1)+"px -"+(FH*SCALE).toFixed(1)+"px";
+},150);
+
+/* link builder */
+var ch=document.getElementById("ch"), size=document.getElementById("size"),
+    bub=document.getElementById("bub"), join=document.getElementById("join"),
+    urlBox=document.getElementById("url"), sizeval=document.getElementById("sizeval"),
+    copied=document.getElementById("copied");
+
+var BASE = location.href.replace(/setup\.html.*$/i, "");   // works on GitHub Pages AND local preview
+
+function sizeWord(v){
+  return v<=1 ? "smol" : v<=1.4 ? "small" : v<=1.8 ? "cozy" : v<=2.1 ? "big" : "CHONKY";
+}
+function buildURL(debug){
+  var name=(ch.value||"").trim().toLowerCase().replace(/^@/,"").replace(/[^a-z0-9_]/g,"");
+  var u=BASE+"?channel="+(name||"your_channel");
+  var s=parseFloat(size.value);
+  u+="&scale="+s;
+  if(!bub.checked) u+="&bubbles=0";
+  if(join.checked) u+="&join=1";
+  if(debug) u+="&debug=1";
+  return u;
+}
+function refresh(){
+  sizeval.textContent=size.value+"× · "+sizeWord(parseFloat(size.value));
+  urlBox.textContent=buildURL(false);
+  copied.textContent="";
+}
+["input","change"].forEach(function(ev){
+  [ch,size,bub,join].forEach(function(el){ el.addEventListener(ev,refresh); });
+});
+
+function copyLink(){
+  var u=buildURL(false);
+  function ok(){ copied.textContent="copied! ✔"; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(ok).catch(fallback); }
+  else fallback();
+  function fallback(){
+    var t=document.createElement("textarea"); t.value=u; document.body.appendChild(t);
+    t.select(); try{ document.execCommand("copy"); ok(); }catch(e){}
+    document.body.removeChild(t);
+  }
+}
+document.getElementById("copy").onclick=copyLink;
+urlBox.onclick=copyLink;
+document.getElementById("test").onclick=function(){ window.open(buildURL(true),"_blank"); };
+
+/* live preview — only loads the engine when opened */
+var prevToggle=document.getElementById("prevToggle"), prevWrap=document.getElementById("prevWrap"),
+    prevFrame=document.getElementById("prevFrame");
+prevToggle.onclick=function(){
+  var open = prevWrap.style.display==="none";
+  if(open){
+    var name=(ch.value||"").trim().toLowerCase().replace(/^@/,"").replace(/[^a-z0-9_]/g,"");
+    prevFrame.src="index.html?debug=1&max=14&scale=1.2"+(name?("&channel="+name):"");
+    prevWrap.style.display="block";
+    prevToggle.textContent="Hide the live preview ▴";
+  } else {
+    prevFrame.src="about:blank";              // stop the engine when hidden
+    prevWrap.style.display="none";
+    prevToggle.textContent="Show the live preview ▾";
+  }
+};
+
+/* canvas size → OBS instructions */
+var canvasSel=document.getElementById("canvas");
+canvasSel.addEventListener("change",function(){
+  var p=canvasSel.value.split("x");
+  document.getElementById("obsW").textContent=p[0];
+  document.getElementById("obsH").textContent=p[1];
+});
+
+refresh();
+
+/* ============================================================
+   Custom sprite upload — PNG sheet or ZIP of frames.
+   Frames are auto-detected by scanning transparency, the sheet
+   is stored in Supabase, and the overlay loads it per channel.
+   ============================================================ */
+var SB_URL="https://clpfyxlenotepuceczbh.supabase.co";
+var SB_KEY="sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2";
+var SB_H={apikey:SB_KEY,Authorization:"Bearer "+SB_KEY};
+
+var sprFile=document.getElementById("sprFile"), sprSave=document.getElementById("sprSave"),
+    sprReset=document.getElementById("sprReset"), sprStatus=document.getElementById("sprStatus"),
+    sprPrev=document.getElementById("sprPrev"), rowsBox=document.getElementById("sprRows"),
+    walkSel=document.getElementById("walkRow"), sitSel=document.getElementById("sitRow"),
+    napSel=document.getElementById("napRow"), jumpSel=document.getElementById("jumpRow");
+var cand=null, prevTimer=null;
+
+function setSpr(t,cls){ sprStatus.textContent=t; sprStatus.className="hint "+(cls||""); }
+function chanName(){ return (ch.value||"").trim().toLowerCase().replace(/^@/,"").replace(/[^a-z0-9_]/g,""); }
+
+/* ---- the measure pipeline: scan alpha for rows of frames ---- */
+function measureSheet(img){
+  var W=img.naturalWidth,H=img.naturalHeight;
+  var cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  var ctx=cv.getContext("2d");ctx.drawImage(img,0,0);
+  var d=ctx.getImageData(0,0,W,H).data;
+  function a(x,y){return d[(y*W+x)*4+3];}
+  function bands(o){var b=[],s=-1;for(var i=0;i<o.length;i++){if(o[i]&&s<0)s=i;else if(!o[i]&&s>=0){b.push([s,i-1]);s=-1;}}if(s>=0)b.push([s,o.length-1]);return b;}
+  var rowOcc=[];for(var y=0;y<H;y++){var o=false;for(var x=0;x<W;x++){if(a(x,y)>25){o=true;break;}}rowOcc.push(o);}
+  var rows=bands(rowOcc).map(function(r){
+    var y0=r[0],y1=r[1],co=[];
+    for(var x=0;x<W;x++){var oc=false;for(var y=y0;y<=y1;y++){if(a(x,y)>25){oc=true;break;}}co.push(oc);}
+    return bands(co).map(function(c){return {x:c[0],y:y0,w:c[1]-c[0]+1,h:y1-y0+1};});
+  });
+  return {W:W,H:H,rows:rows.filter(function(r){return r.length>0;})};
+}
+
+function fillRowSelects(){
+  walkSel.innerHTML=""; sitSel.innerHTML="";
+  napSel.innerHTML=""; jumpSel.innerHTML="";
+  napSel.add(new Option("— skip —","")); jumpSel.add(new Option("— skip —",""));
+  cand.rows.forEach(function(r,i){
+    var t="Row "+(i+1)+" — "+r.length+" frame"+(r.length>1?"s":"");
+    walkSel.add(new Option(t,i)); sitSel.add(new Option(t,i));
+    napSel.add(new Option(t,i)); jumpSel.add(new Option(t,i));
+  });
+  var n=cand.rows.length;
+  if(n>=5){ sitSel.value=0; walkSel.value=1; napSel.value=2; jumpSel.value=4; }       // the standard 5-row layout
+  else if(n>=3){ sitSel.value=0; walkSel.value=1; napSel.value=2; jumpSel.value=""; }
+  else {
+    var wi=0; cand.rows.forEach(function(r,i){ if(r.length>cand.rows[wi].length) wi=i; });
+    var si=-1; cand.rows.forEach(function(r,i){ if(si<0 && i!==wi) si=i; }); if(si<0) si=wi;
+    walkSel.value=wi; sitSel.value=si; napSel.value=""; jumpSel.value="";
+  }
+  rowsBox.style.display = n>1 ? "block" : "none";
+}
+function candFrames(){
+  var walk=cand.rows[+walkSel.value]||cand.rows[0];
+  var idleRow=cand.rows[+sitSel.value]||cand.rows[0];
+  var f={walk:walk, sit:idleRow[0], idle:idleRow};
+  if(napSel.value!=="" && cand.rows[+napSel.value]) f.lurk=cand.rows[+napSel.value];
+  if(jumpSel.value!=="" && cand.rows[+jumpSel.value]) f.jump=cand.rows[+jumpSel.value];
+  return f;
+}
+walkSel.onchange=sitSel.onchange=napSel.onchange=jumpSel.onchange=function(){refreshCand();};
+
+function refreshCand(){
+  if(!cand) return;
+  var f=candFrames();
+  var ps=Math.min(1.4, 92/Math.max(1,f.sit.h));
+  var el=sprPrev.querySelector(".spr2");
+  el.style.backgroundImage="url('"+cand.url+"')";
+  el.style.backgroundSize=(cand.sheetW*ps)+"px "+(cand.sheetH*ps)+"px";
+  sprPrev.style.display="flex";
+  clearInterval(prevTimer);
+  var i=0;
+  prevTimer=setInterval(function(){
+    var fr=f.walk[i=(i+1)%f.walk.length];
+    el.style.width=(fr.w*ps)+"px"; el.style.height=(fr.h*ps)+"px";
+    el.style.backgroundPosition="-"+(fr.x*ps).toFixed(1)+"px -"+(fr.y*ps).toFixed(1)+"px";
+  },150);
+  sprSave.disabled=false;
+  setSpr("preview! if the walk looks right, hit save 🐾 (wrong frames? change the dropdowns)");
+}
+
+function handlePNG(file){
+  var url=URL.createObjectURL(file);
+  var img=new Image();
+  img.onload=function(){
+    if(img.naturalWidth>4096||img.naturalHeight>4096){ setSpr("image too big — keep it under 4096px","err"); return; }
+    var m=measureSheet(img);
+    if(!m.rows.length){ setSpr("couldn't find any sprites — is the background transparent?","err"); return; }
+    cand={blob:file, url:url, sheetW:m.W, sheetH:m.H, rows:m.rows};
+    fillRowSelects(); refreshCand();
+  };
+  img.onerror=function(){ setSpr("couldn't read that image","err"); };
+  img.src=url;
+}
+
+function handleZIP(file){
+  if(typeof JSZip==="undefined"){ setSpr("zip support didn't load — try a PNG sheet instead","err"); return; }
+  JSZip.loadAsync(file).then(function(zip){
+    var names=Object.keys(zip.files).filter(function(n){
+      return !zip.files[n].dir && /\.png$/i.test(n) && n.indexOf("__MACOSX")<0;
+    }).sort();
+    if(!names.length){ setSpr("no .png images found inside that zip","err"); return; }
+    // sort frames into animations by filename
+    var used={};
+    function grab(re){ var g=names.filter(function(n){ return !used[n] && re.test(n); }); g.forEach(function(n){used[n]=1;}); return g; }
+    var napN=grab(/sit|nap|sleep/i);
+    var jumpN=grab(/jump|air|fall/i);
+    var idleN=grab(/idle|stand/i);
+    var walkN=grab(/walk|run|move/i);
+    var rest=names.filter(function(n){ return !used[n]; });
+    if(!walkN.length) walkN = rest.length ? rest : names.slice();
+    if(!idleN.length) idleN = [walkN[0]];
+    var rowsOfNames=[idleN, walkN], napIdx=-1, jumpIdx=-1;
+    if(napN.length){ napIdx=rowsOfNames.length; rowsOfNames.push(napN); }
+    if(jumpN.length){ jumpIdx=rowsOfNames.length; rowsOfNames.push(jumpN); }
+    var flat=[]; rowsOfNames.forEach(function(r){ flat=flat.concat(r); });
+    Promise.all(flat.map(function(n){
+      return zip.files[n].async("blob").then(function(b){ return createImageBitmap(b); });
+    })).then(function(imgs){
+      var cw=0,chh=0;
+      imgs.forEach(function(im){ cw=Math.max(cw,im.width); chh=Math.max(chh,im.height); });
+      if(cw>1024||chh>1024){ setSpr("frames too big — keep each under 1024px","err"); return; }
+      var maxCols=0; rowsOfNames.forEach(function(r){ maxCols=Math.max(maxCols,r.length); });
+      var cv=document.createElement("canvas"); cv.width=maxCols*cw; cv.height=rowsOfNames.length*chh;
+      var ctx=cv.getContext("2d"); ctx.imageSmoothingEnabled=false;
+      var rows=[], k=0;
+      rowsOfNames.forEach(function(rn, ri){
+        var rects=[];
+        rn.forEach(function(_, ci){
+          var im=imgs[k++];
+          ctx.drawImage(im, ci*cw+Math.round((cw-im.width)/2), ri*chh+(chh-im.height));
+          rects.push({x:ci*cw, y:ri*chh, w:cw, h:chh});
+        });
+        rows.push(rects);
+      });
+      cv.toBlob(function(b){
+        cand={blob:b, url:URL.createObjectURL(b), sheetW:cv.width, sheetH:cv.height, rows:rows};
+        fillRowSelects();
+        sitSel.value=0; walkSel.value=1;
+        napSel.value = napIdx>=0 ? String(napIdx) : "";
+        jumpSel.value = jumpIdx>=0 ? String(jumpIdx) : "";
+        refreshCand();
+      },"image/png");
+    });
+  }).catch(function(){ setSpr("couldn't open that zip","err"); });
+}
+
+sprFile.onchange=function(){
+  var f=this.files[0]; if(!f) return;
+  cand=null; sprSave.disabled=true; rowsBox.style.display="none";
+  sprPrev.style.display="none"; clearInterval(prevTimer);
+  setSpr("reading…");
+  if(/\.zip$/i.test(f.name)) handleZIP(f);
+  else if(/\.png$/i.test(f.name)) handlePNG(f);
+  else setSpr("please pick a .png sprite sheet or a .zip of png frames","err");
+};
+
+var sprRole=document.getElementById("sprRole");
+var ROLES=["broadcaster","moderator","vip","subscriber"];
+var ROLE_LABEL={default:"Everyone",subscriber:"Subscribers 💜",vip:"VIPs 💎",moderator:"Mods 🛡️",broadcaster:"Broadcaster 👑"};
+function roleKey(name){ var r=sprRole.value; return r==="default" ? name : name+":"+r; }
+function roleFile(name){ var r=sprRole.value; return r==="default" ? name+".png" : name+"-"+r+".png"; }
+
+sprSave.onclick=function(){
+  var name=chanName();
+  if(!name){ setSpr("type your channel name at the top first ✍️","err"); return; }
+  if(!cand) return;
+  sprSave.disabled=true; setSpr("uploading…");
+  var f=candFrames();
+  fetch(SB_URL+"/storage/v1/object/avatar-sheets/"+roleFile(name),{
+    method:"POST",
+    headers:Object.assign({"x-upsert":"true","Content-Type":"image/png"},SB_H),
+    body:cand.blob
+  }).then(function(r){
+    if(!r.ok) throw new Error("upload "+r.status);
+    var publicUrl=SB_URL+"/storage/v1/object/public/avatar-sheets/"+roleFile(name)+"?v="+Date.now();
+    return fetch(SB_URL+"/rest/v1/avatar_config",{
+      method:"POST",
+      headers:Object.assign({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},SB_H),
+      body:JSON.stringify({channel:roleKey(name), sheet_url:publicUrl,
+        frames:{sheetW:cand.sheetW, sheetH:cand.sheetH,
+                walk:f.walk, sit:f.sit, idle:f.idle, lurk:f.lurk, jump:f.jump},
+        updated_at:new Date().toISOString()})
+    });
+  }).then(function(r){
+    if(!r.ok) throw new Error("save "+r.status);
+    setSpr("saved! 🐙 "+ROLE_LABEL[sprRole.value]+" now use this sprite — refresh the browser source in OBS to see it","ok");
+    sprReset.style.display="inline-block"; sprSave.disabled=false;
+    checkSaved();
+  }).catch(function(e){
+    setSpr("couldn't save — "+e.message+" (run RUN-THIS-ONCE-supabase.sql in Supabase first — see README)","err");
+    sprSave.disabled=false;
+  });
+};
+
+sprReset.onclick=function(){
+  var name=chanName(); if(!name) return;
+  fetch(SB_URL+"/rest/v1/avatar_config?channel=eq."+encodeURIComponent(roleKey(name)),{method:"DELETE",headers:SB_H})
+    .then(function(r){
+      if(!r.ok) throw new Error("delete "+r.status);
+      setSpr(ROLE_LABEL[sprRole.value]+" are back on the default sprite ✔","ok");
+      sprReset.style.display="none";
+      checkSaved();
+    }).catch(function(){ setSpr("couldn't reset — try again?","err"); });
+};
+
+/* ===== accessories (gear) — gear sets containing gear pieces ===== */
+/* default gear ships with the site (Eggie's commissioned pack) — keep in sync with index.html */
+var DEF_GSETS={ items:{behind:false,noFlip:false,pieces:{
+  crown:{url:"gear/crown.png",anim:true,cols:7,rows:5,ox:0,oy:0,scale:1,def:true},
+  axe:{url:"gear/axe.png",anim:true,cols:7,rows:5,ox:0,oy:0,scale:1,def:true},
+  guts:{url:"gear/guts.png",anim:true,cols:7,rows:5,ox:0,oy:0,scale:1,def:true}}}};
+function mergedSets(){
+  var out=JSON.parse(JSON.stringify(DEF_GSETS));
+  Object.keys(GSETS).forEach(function(s){
+    var r=GSETS[s];
+    if(!out[s]){ out[s]=r; return; }
+    out[s].behind=!!r.behind; out[s].noFlip=!!r.noFlip;
+    Object.keys(r.pieces||{}).forEach(function(p){ out[s].pieces[p]=r.pieces[p]; });
+  });
+  return out;
+}
+var GSETS={}, GROLES={};
+var GEAR_ROLES=["broadcaster","moderator","vip","subscriber"];
+var gSet=document.getElementById("gSet"), gNewSet=document.getElementById("gNewSet"),
+    gBehind=document.getElementById("gBehind"), gNoFlip=document.getElementById("gNoFlip"),
+    gFile=document.getElementById("gFile"), gName=document.getElementById("gName"),
+    gSaveB=document.getElementById("gSave"), gStatus=document.getElementById("gStatus"),
+    gListEl=document.getElementById("gList"), gPrevWrap=document.getElementById("gPrevWrap"),
+    gOx=document.getElementById("gOx"), gOy=document.getElementById("gOy"), gSc=document.getElementById("gSc"),
+    rgStatus=document.getElementById("rgStatus");
+var gImgNat=null, gImgURL=null;
+var GP=1.15;   // gear preview scale
+
+function setGStatus(t,cls){ gStatus.textContent=t; gStatus.className="hint "+(cls||""); }
+function cleanName(v){ return (v||"").trim().toLowerCase().replace(/[^a-z0-9_]/g,""); }
+function curSetName(){ return cleanName(gNewSet.value) || gSet.value; }
+
+/* preview: the default sprite walking with the gear piece on */
+(function(){
+  var gspr=document.querySelector("#gPrev .gspr");
+  gspr.style.width=(96*GP)+"px"; gspr.style.height=(96*GP)+"px";
+  gspr.style.backgroundImage="url('sheet.png')";
+  gspr.style.backgroundSize=(672*GP)+"px "+(480*GP)+"px";
+  var f=0;
+  setInterval(function(){
+    f=(f+1)%7;
+    gspr.style.backgroundPosition="-"+(f*96*GP)+"px -"+(96*GP)+"px";
+    // frame-anim gear preview walks in lockstep (walk = sheet row 1)
+    if(gImgURL && gImgNat && gAnim.checked){
+      var img=document.querySelector("#gPrev .gimg");
+      var sc=parseFloat(gSc.value), cw=gImgNat.w/7, chh=gImgNat.h/5;
+      img.style.backgroundPosition="-"+Math.round(f*cw*GP*sc)+"px -"+Math.round(1*chh*GP*sc)+"px";
+    }
+  },150);
+})();
+var gAnim=document.getElementById("gAnim");
+function refreshGearPreview(){
+  var img=document.querySelector("#gPrev .gimg");
+  if(!gImgURL || !gImgNat){ img.style.display="none"; return; }
+  var sc=parseFloat(gSc.value), ox=parseInt(gOx.value,10), oy=parseInt(gOy.value,10);
+  document.getElementById("gOxV").textContent=ox;
+  document.getElementById("gOyV").textContent=oy;
+  document.getElementById("gScV").textContent=sc.toFixed(2)+"×";
+  img.className="gimg"+(gBehind.checked?" behind":"");
+  img.style.display="block";
+  img.style.backgroundImage="url('"+gImgURL+"')";
+  img.style.backgroundRepeat="no-repeat";
+  if(gAnim.checked){
+    var cw=gImgNat.w/7, chh=gImgNat.h/5;
+    img.style.width=Math.round(cw*GP*sc)+"px";
+    img.style.height=Math.round(chh*GP*sc)+"px";
+    img.style.backgroundSize=Math.round(gImgNat.w*GP*sc)+"px "+Math.round(gImgNat.h*GP*sc)+"px";
+    img.style.marginLeft=Math.round(ox*GP - cw*GP*sc/2)+"px";
+    img.style.top=Math.round((96*GP - chh*GP*sc)/2 + oy*GP)+"px";
+  } else {
+    img.style.width=Math.round(gImgNat.w*GP*sc)+"px";
+    img.style.height=Math.round(gImgNat.h*GP*sc)+"px";
+    img.style.backgroundSize="100% 100%";
+    img.style.marginLeft=Math.round(ox*GP - gImgNat.w*GP*sc/2)+"px";
+    img.style.top=Math.round(oy*GP)+"px";
+  }
+  gSaveB.disabled=!(gImgURL && cleanName(gName.value) && curSetName());
+}
+[gOx,gOy,gSc,gBehind,gAnim].forEach(function(el){ el.addEventListener("input",refreshGearPreview); });
+gName.addEventListener("input",refreshGearPreview);
+gNewSet.addEventListener("input",refreshGearPreview);
+
+gFile.onchange=function(){
+  var f=this.files[0]; if(!f) return;
+  if(!/\.png$/i.test(f.name)){ setGStatus("gear pieces must be .png with transparency","err"); return; }
+  if(gImgURL) URL.revokeObjectURL(gImgURL);
+  gImgURL=URL.createObjectURL(f);
+  var im=new Image();
+  im.onload=function(){
+    if(im.naturalWidth>512||im.naturalHeight>512){ setGStatus("keep gear under 512px","err"); gImgURL=null; return; }
+    gImgNat={w:im.naturalWidth,h:im.naturalHeight};
+    gPrevWrap.style.display="block";
+    if(!gName.value) gName.value=cleanName(f.name.replace(/\.png$/i,""));
+    refreshGearPreview();
+    setGStatus("drag the sliders until it sits right, then save 🐾");
+  };
+  im.src=gImgURL;
+};
+
+gSet.onchange=function(){
+  gNewSet.value="";
+  var s=GSETS[gSet.value];
+  if(s){ gBehind.checked=!!s.behind; gNoFlip.checked=!!s.noFlip; }
+  paintGearList(); refreshGearPreview();
+};
+
+function paintGearList(){
+  var M=mergedSets();
+  gListEl.innerHTML="";
+  Object.keys(M).forEach(function(s){
+    Object.keys(M[s].pieces||{}).forEach(function(p){
+      var piece=M[s].pieces[p];
+      var d=document.createElement("span"); d.className="piece";
+      var im;
+      if(piece.anim){          // sheet piece: thumbnail = first cell only
+        im=document.createElement("span");
+        im.style.cssText="display:inline-block;width:24px;height:24px;image-rendering:pixelated;"+
+          "background-image:url('"+piece.url+"');background-size:"+((piece.cols||7)*100)+"% "+((piece.rows||5)*100)+"%;background-position:0 0;";
+      } else {
+        im=document.createElement("img"); im.src=piece.url; im.alt="";
+      }
+      var tx=document.createElement("span"); tx.textContent="!"+s+" "+p+(piece.def?" (default)":"");
+      d.appendChild(im); d.appendChild(tx);
+      if(!piece.def){
+        var rm=document.createElement("a"); rm.textContent="✕"; rm.title="remove";
+        rm.onclick=function(){ removePiece(s,p); };
+        d.appendChild(rm);
+      }
+      gListEl.appendChild(d);
+    });
+  });
+  // role gear dropdowns (defaults included)
+  GEAR_ROLES.forEach(function(r){
+    var sel=document.getElementById("rg-"+r);
+    var cur=(GROLES[r] && Object.keys(GROLES[r]).length) ? Object.keys(GROLES[r])[0]+"|"+GROLES[r][Object.keys(GROLES[r])[0]] : "";
+    sel.innerHTML="";
+    sel.add(new Option("— none —",""));
+    Object.keys(M).forEach(function(s){
+      Object.keys(M[s].pieces||{}).forEach(function(p){ sel.add(new Option(s+" → "+p, s+"|"+p)); });
+    });
+    sel.value=cur;
+    if(sel.selectedIndex<0) sel.selectedIndex=0;
+  });
+  // set dropdown (defaults included — uploading into "items" extends it)
+  var keep=gSet.value;
+  gSet.innerHTML='<option value="">➕ new set…</option>';
+  Object.keys(M).forEach(function(s){ gSet.add(new Option(s,s)); });
+  gSet.value=(keep && M[keep])?keep:(Object.keys(M)[0]||"");
+}
+
+function saveGearRow(okMsg, statusFn){
+  var name=chanName();
+  return fetch(SB_URL+"/rest/v1/avatar_config",{
+    method:"POST",
+    headers:Object.assign({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},SB_H),
+    body:JSON.stringify({channel:name+":gear", sheet_url:"gear",
+      frames:{sets:GSETS,_roles:GROLES}, updated_at:new Date().toISOString()})
+  }).then(function(r){
+    if(!r.ok) throw new Error("save "+r.status);
+    if(okMsg) statusFn(okMsg,"ok");
+    paintGearList();
+  });
+}
+
+gSaveB.onclick=function(){
+  var name=chanName();
+  if(!name){ setGStatus("type your channel name at the top first ✍️","err"); return; }
+  var setN=curSetName(), pieceN=cleanName(gName.value);
+  var file=gFile.files[0];
+  if(!setN||!pieceN||!file) return;
+  gSaveB.disabled=true; setGStatus("uploading…");
+  fetch(SB_URL+"/storage/v1/object/avatar-sheets/"+name+"-gear-"+setN+"-"+pieceN+".png",{
+    method:"POST",
+    headers:Object.assign({"x-upsert":"true","Content-Type":"image/png"},SB_H),
+    body:file
+  }).then(function(r){
+    if(!r.ok) throw new Error("upload "+r.status);
+    var url=SB_URL+"/storage/v1/object/public/avatar-sheets/"+name+"-gear-"+setN+"-"+pieceN+".png?v="+Date.now();
+    if(!GSETS[setN]) GSETS[setN]={pieces:{}};
+    GSETS[setN].behind=gBehind.checked; GSETS[setN].noFlip=gNoFlip.checked;
+    var pieceObj={url:url, ox:parseInt(gOx.value,10), oy:parseInt(gOy.value,10), scale:parseFloat(gSc.value)};
+    if(gAnim.checked){ pieceObj.anim=true; pieceObj.cols=7; pieceObj.rows=5; }
+    GSETS[setN].pieces[pieceN]=pieceObj;
+    return saveGearRow("saved! viewers can now type  !"+setN+" "+pieceN+"  🎒", setGStatus);
+  }).then(function(){
+    gSaveB.disabled=false;
+  }).catch(function(e){
+    setGStatus("couldn't save — "+e.message+" (run RUN-THIS-ONCE-supabase.sql in Supabase first — see README)","err");
+    gSaveB.disabled=false;
+  });
+};
+
+function removePiece(s,p){
+  if(!GSETS[s]) return;
+  delete GSETS[s].pieces[p];
+  if(!Object.keys(GSETS[s].pieces).length) delete GSETS[s];
+  GEAR_ROLES.forEach(function(r){ if(GROLES[r] && GROLES[r][s]===p) delete GROLES[r]; });
+  saveGearRow("piece removed ✔", setGStatus).catch(function(){ setGStatus("couldn't remove","err"); });
+}
+
+document.getElementById("rgSave").onclick=function(){
+  var name=chanName();
+  if(!name){ rgStatus.textContent="type your channel name at the top first ✍️"; rgStatus.className="hint err"; return; }
+  GROLES={};
+  GEAR_ROLES.forEach(function(r){
+    var v=document.getElementById("rg-"+r).value;
+    if(v){ var pp=v.split("|"); var o={}; o[pp[0]]=pp[1]; GROLES[r]=o; }
+  });
+  saveGearRow("role gear saved! refresh the browser source in OBS 🎒",
+    function(t,c){ rgStatus.textContent=t; rgStatus.className="hint "+c; })
+    .catch(function(e){ rgStatus.textContent="couldn't save — "+e.message; rgStatus.className="hint err"; });
+};
+
+function loadGear(){
+  var name=chanName(); if(!name) return;
+  fetch(SB_URL+"/rest/v1/avatar_config?channel=eq."+encodeURIComponent(name+":gear")+"&select=frames",{headers:SB_H})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      var f=(rows&&rows[0]&&rows[0].frames)||{};
+      GSETS=f.sets||{}; GROLES=f._roles||{};
+      paintGearList();
+      if(rows&&rows[0]) setGStatus("💾 gear loaded for "+name);
+    }).catch(function(){});
+}
+paintGearList();
+
+/* show which roles already have a saved sprite for this channel */
+function checkSaved(){
+  var name=chanName();
+  if(!name){ sprReset.style.display="none"; return; }
+  var keys=[name].concat(ROLES.map(function(r){return name+":"+r;}));
+  var list=keys.map(function(k){return '"'+k+'"';}).join(",");
+  fetch(SB_URL+"/rest/v1/avatar_config?channel=in.("+encodeURIComponent(list)+")&select=channel",{headers:SB_H})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      if(!rows || !rows.length){ sprReset.style.display="none"; return; }
+      var saved=rows.map(function(row){
+        return row.channel===name ? "Everyone" : ROLE_LABEL[row.channel.slice(name.length+1)] || "?";
+      });
+      var hasThis=rows.some(function(row){ return row.channel===roleKey(name); });
+      sprReset.style.display = hasThis ? "inline-block" : "none";
+      setSpr("💾 custom sprites saved for: "+saved.join(", ")+" — uploading replaces the selected role");
+    }).catch(function(){});
+}
+var curT=null;
+ch.addEventListener("input",function(){ clearTimeout(curT); curT=setTimeout(function(){ checkSaved(); loadGear(); },600); });
+sprRole.addEventListener("change",checkSaved);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "OC Hub",
+  "short_name": "OC Hub",
+  "description": "Eggie's candy-pastel home for original characters 🦄🍬",
+  "display": "standalone",
+  "start_url": ".",
+  "background_color": "#fdf4fa",
+  "theme_color": "#fdf4fa",
+  "icons": [
+    { "src": "982602-holographicowner.png", "sizes": "any", "type": "image/png", "purpose": "any" }
+  ]
+}

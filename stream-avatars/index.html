@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat Buddies 🐙</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;}
+  body.debugbg{background:linear-gradient(160deg,#2a2438,#3d3454);}  /* only with ?debug=1 so you can see avatars outside OBS */
+  #stage{position:fixed;inset:0;}
+
+  .av{position:absolute;left:0;bottom:0;z-index:10;will-change:transform;animation:spawnPop .35s ease-out;}
+  @keyframes spawnPop{from{opacity:0;}to{opacity:1;}}
+  .av.gone{transition:opacity .4s;opacity:0;}
+  .av .sprwrap{position:relative;}
+  .av .spr{position:relative;z-index:2;image-rendering:pixelated;background-repeat:no-repeat;}
+  .av .gear{position:absolute;pointer-events:none;image-rendering:pixelated;}
+  .av .lbl{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% - 6px);z-index:11;
+    white-space:nowrap;font:700 13px system-ui,sans-serif;letter-spacing:.02em;pointer-events:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 6px rgba(0,0,0,.45);}
+  .av .bub{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 14px);z-index:12;display:none;
+    max-width:230px;background:#fff;border:1px solid #e4d4ef;border-radius:13px;border-bottom-left-radius:4px;
+    padding:6px 11px;font:12.5px/1.4 system-ui,sans-serif;color:#3a3550;box-shadow:0 5px 16px rgba(60,40,90,.28);
+    overflow-wrap:break-word;width:max-content;text-align:center;}
+
+  #hud{position:fixed;top:8px;left:8px;z-index:30;display:none;font:600 12px ui-monospace,monospace;color:#fff;
+    background:rgba(40,30,60,.75);border:1px solid #a98fe0;border-radius:10px;padding:7px 11px;line-height:1.6;}
+  #help{position:fixed;inset:0;z-index:40;display:none;place-items:center;font:14px/1.7 system-ui,sans-serif;color:#3a3550;}
+  #help .card{background:#fff;border:1px solid #e4d4ef;border-radius:18px;padding:22px 28px;max-width:520px;
+    box-shadow:0 16px 42px rgba(120,110,160,.3);}
+  #help h1{font-size:17px;margin:0 0 8px;color:#ec7faf;}
+  #help code{background:#f6f0fb;border-radius:6px;padding:1px 6px;color:#a96fd0;}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud"></div>
+<div id="help"><div class="card">
+  <h1>🐙 Chat Buddies</h1>
+  No channel is set up yet!<br>
+  👉 <a href="setup.html"><b>Open the setup page</b></a> — type your channel name, pick a size, and copy your OBS link.<br><br>
+  (Or add <code>?channel=YOURCHANNEL</code> to this address by hand, or <code>?debug=1</code> to test with fake avatars.)
+</div></div>
+
+<script>
+"use strict";
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+   EASY SETTINGS — this is the only part you ever need to touch!
+   Change a value, save the file, run update.ps1. Done 🐙
+   ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+var SETTINGS = {
+
+  channel: "eggieweggievt",   // 👈 your Twitch channel name
+
+  size: 1.6,                  // avatar size — 1 = small, 1.6 = nice on 1080p, 2 = chunky
+
+  bubbles: true,              // show chat messages in little speech bubbles? (true/false)
+
+  maxAvatars: 50,             // most avatars on screen at once (oldest leave first)
+
+  joinOnly: false,            // false = everyone who chats appears
+                              // true  = viewers must type !join to appear
+
+  despawnMinutes: 15,         // avatar fades out after this many quiet minutes
+
+  walkSpeed: 44,              // walking speed in pixels per second
+
+  floor: 0                    // raise everyone off the bottom edge by this many pixels
+};
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+   (everything below just works — URL options like &debug=1 still
+    override these settings if you ever want a one-off tweak)
+   ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
+
+/* ============================================================
+   Default sprite — full animation map from the artist's
+   avatar pack (data.txt): 96×96 grid, 9 fps,
+   row 0 idle ×7 · row 1 walk ×7 · row 2 sit ×7 · row 3 stand ×6 · row 4 jump ×7
+   Custom sprites uploaded on setup.html override this per channel.
+   ============================================================ */
+var DEF_SHEET = "sheet.png", DEF_W = 672, DEF_H = 480;
+var FW = 96, FH = 96;
+function gridRow(r, n){ var a=[]; for (var i=0;i<n;i++) a.push({x:i*FW, y:r*FH, w:FW, h:FH}); return a; }
+var DEF_ANIMS = { idle: gridRow(0,7), walk: gridRow(1,7), lurk: gridRow(2,7), jump: gridRow(4,7) };
+var FACES = "right";
+
+/* Supabase (public keys — same project as Eggie OS) */
+var SB_URL = "https://clpfyxlenotepuceczbh.supabase.co";
+var SB_KEY = "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2";
+var SB_HEADERS = { apikey: SB_KEY, Authorization: "Bearer "+SB_KEY, "Content-Type": "application/json" };
+
+/* Color skins — retired. The colors are privately commissioned full
+   sheets and are NOT published as viewer-equippable skins. A couple
+   ship as debug/live-preview examples only (update.ps1 copies just
+   those two into the public site's skins/ folder). */
+var PREVIEW_SKINS = [
+  { name:"trans", url:"skins/trans.png" },
+  { name:"bi",    url:"skins/bi.png" }
+];
+
+/* Gear — PNG gear pieces grouped into gear sets.
+   Viewers equip with !{set} {piece}, e.g. "!items axe".
+   Two piece kinds:
+     static       — one image:  {url, ox, oy, scale}
+     frame-anim   — a sheet matching the avatar's frame grid:
+                    {url, anim:true, cols, rows, ...}
+   DEFAULT_GEAR_SETS ships with the repo (Eggie's commissioned
+   pack); sets uploaded on setup.html merge on top. */
+var DEFAULT_GEAR_SETS = {
+  items: { behind:false, noFlip:false, pieces:{
+    crown: {url:"gear/crown.png", anim:true, cols:7, rows:5, ox:0, oy:0, scale:1},
+    axe:   {url:"gear/axe.png",   anim:true, cols:7, rows:5, ox:0, oy:0, scale:1},
+    guts:  {url:"gear/guts.png",  anim:true, cols:7, rows:5, ox:0, oy:0, scale:1}
+  }}
+};
+var DEFAULT_ROLE_GEAR = { broadcaster: {items:"crown"} };
+function mergeGear(remoteSets){
+  var out = JSON.parse(JSON.stringify(DEFAULT_GEAR_SETS));
+  Object.keys(remoteSets || {}).forEach(function(s){
+    var r = remoteSets[s];
+    if (!out[s]){ out[s] = r; return; }
+    out[s].behind = !!r.behind; out[s].noFlip = !!r.noFlip;
+    Object.keys(r.pieces || {}).forEach(function(p){ out[s].pieces[p] = r.pieces[p]; });
+  });
+  return out;
+}
+var GEAR = { sets: mergeGear(null), roles: JSON.parse(JSON.stringify(DEFAULT_ROLE_GEAR)) };
+
+/* -------- URL params (optional — they override SETTINGS) -------- */
+var Q = new URLSearchParams(location.search);
+var CHANNEL   = (Q.get("channel") || SETTINGS.channel || "").trim().toLowerCase();
+var MAX       = Math.max(1, Math.min(150, +(Q.get("max") || SETTINGS.maxAvatars)));
+var SCALE     = +(Q.get("scale") || SETTINGS.size);
+var BUBBLES   = Q.has("bubbles") ? Q.get("bubbles") !== "0" : !!SETTINGS.bubbles;
+var CALM_FLAG = Q.get("calm") === "1";
+var DEBUG     = Q.get("debug") === "1";
+var JOIN_ONLY = Q.has("join") ? Q.get("join") === "1" : !!SETTINGS.joinOnly;
+var DESPAWN_MIN = Math.max(1, +(Q.get("despawn") || SETTINGS.despawnMinutes));
+var SPEED     = +(Q.get("speed") || SETTINGS.walkSpeed);
+var FRAME_MS  = 150;
+var IDLE_MS   = 110;                               // ≈ the pack's 9 fps
+var FLOOR     = Math.max(0, +(Q.get("floor") || SETTINGS.floor)); // px lifted off the bottom edge
+var MARGIN    = 12;                                // px kept clear at left/right edges
+
+function calm(){
+  if (CALM_FLAG) return true;
+  try { return matchMedia("(prefers-reduced-motion:reduce)").matches; } catch(e){ return false; }
+}
+
+var screenW = innerWidth, screenH = innerHeight;
+var B_MIN = MARGIN;
+addEventListener("resize", function(){ screenW = innerWidth; screenH = innerHeight; });
+
+var stage = document.getElementById("stage");
+var hud   = document.getElementById("hud");
+var PASTELS = ["#ec7faf","#a98fe0","#7fc8ec","#8fe0b3","#ecc77f","#e08fb4","#9fa8ec","#7fe0d8"];
+
+function hashColor(name){
+  var h = 0; for (var i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) >>> 0;
+  return PASTELS[h % PASTELS.length];
+}
+
+/* ============================================================
+   Roles — chatters use the sprite + gear of their highest role
+   ============================================================ */
+var ROLES = ["broadcaster","moderator","vip","subscriber"];   // + "default" for everyone else
+function roleOf(badges){
+  badges = badges || "";
+  if (badges.indexOf("broadcaster/") >= 0) return "broadcaster";
+  if (badges.indexOf("moderator/")   >= 0) return "moderator";
+  if (badges.indexOf("vip/")         >= 0) return "vip";
+  if (badges.indexOf("subscriber/")  >= 0 || badges.indexOf("founder/") >= 0) return "subscriber";
+  return "default";
+}
+function badgeIcon(role){
+  return role==="broadcaster" ? "👑 " : role==="moderator" ? "🛡️ " : role==="vip" ? "💎 " : role==="subscriber" ? "💜 " : "";
+}
+
+/* ============================================================
+   Sprite sets — one per role (all fall back to "default").
+   Each set carries its own sheet, animations, and skin recolors.
+   ============================================================ */
+function makeSet(url, W, H, walk, sit, extras){
+  var anims = {
+    walk: walk,
+    idle: (extras && extras.idle && extras.idle.length) ? extras.idle : [sit],
+    lurk: (extras && extras.lurk && extras.lurk.length) ? extras.lurk : [sit],
+    jump: (extras && extras.jump && extras.jump.length) ? extras.jump : [sit]
+  };
+  var all = walk.concat([sit], anims.idle, anims.lurk, anims.jump);
+  var maxW = Math.max.apply(null, all.map(function(f){ return f.w; }));
+  var maxH = Math.max.apply(null, all.map(function(f){ return f.h; }));
+  return {
+    url: url, W: W, H: H, anims: anims, sit: sit,
+    sprW: Math.round(maxW*SCALE), sprH: Math.round(maxH*SCALE),
+    bgSize: (W*SCALE)+"px "+(H*SCALE)+"px"
+  };
+}
+var SHEET_SETS = { "default": makeSet(DEF_SHEET, DEF_W, DEF_H, DEF_ANIMS.walk, DEF_ANIMS.idle[0], DEF_ANIMS) };
+function setFor(role){ return SHEET_SETS[role] || SHEET_SETS["default"]; }
+
+/* -------- gear persistence: Map cache → localStorage → Supabase -------- */
+var gearCache = new Map();   // twitch user-id → {set: piece, ...}
+function localGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function localSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function localGear(uid){
+  try { var v = localGet("sa-gear-"+uid); return v ? JSON.parse(v) : null; } catch(e){ return null; }
+}
+function fetchPrefs(uid, cb){
+  fetch(SB_URL+"/rest/v1/avatar_skins?twitch_user_id=eq."+encodeURIComponent(uid)+"&select=gear", {headers: SB_HEADERS})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){ if (rows && rows[0]) cb(rows[0]); })
+    .catch(function(){});
+}
+function saveGearPref(uid, value){
+  gearCache.set(uid, value); localSet("sa-gear-"+uid, JSON.stringify(value));
+  fetch(SB_URL+"/rest/v1/avatar_skins", {
+    method: "POST",
+    headers: Object.assign({Prefer: "resolution=merge-duplicates"}, SB_HEADERS),
+    body: JSON.stringify({ twitch_user_id: uid, gear: value, updated_at: new Date().toISOString() })
+  }).catch(function(){});
+}
+function validGear(g){          // keep only sets/pieces that exist for this channel
+  var out = {}, any = false;
+  if (g && typeof g === "object"){
+    Object.keys(g).forEach(function(s){
+      if (GEAR.sets[s] && GEAR.sets[s].pieces && GEAR.sets[s].pieces[g[s]]){ out[s] = g[s]; any = true; }
+    });
+  }
+  return any ? out : null;
+}
+
+/* ============================================================
+   Avatar — one walking sprite per chatter
+   ============================================================ */
+function Avatar(user, display, color, badges, uid){
+  this.user = user;
+  this.uid = uid || null;
+  this.role = roleOf(badges);
+  this.set = setFor(this.role);
+  this.gear = {};
+  this.lastSeen = performance.now();
+
+  var el = document.createElement("div"); el.className = "av";
+  el.style.bottom = FLOOR + "px";
+
+  var bub = document.createElement("div"); bub.className = "bub";
+  var lbl = document.createElement("div"); lbl.className = "lbl";
+  lbl.textContent = badgeIcon(this.role) + display;          // textContent = safe vs hostile chat
+  lbl.style.color = color || hashColor(user);
+
+  var wrap = document.createElement("div"); wrap.className = "sprwrap";
+  var spr = document.createElement("div"); spr.className = "spr";
+  spr.style.backgroundSize = this.set.bgSize;
+  wrap.appendChild(spr);
+
+  el.appendChild(bub); el.appendChild(lbl); el.appendChild(wrap);
+  stage.appendChild(el);
+  this.el = el; this.wrap = wrap; this.spr = spr; this.bub = bub; this.lbl = lbl;
+  this.noFlipEls = [];
+  this._flipV = "";
+
+  // state
+  var bMax = this.bMax();
+  this.x = B_MIN + Math.random()*(bMax-B_MIN);
+  this.y = 0; this.vx = 0; this.vy = 0;
+  this.dir = Math.random() < .5 ? -1 : 1;
+  this.fi = 0; this.ft = 0; this.jt = 0;
+  this.st = "walk"; this.stt = Math.random()*3000;
+  this.gotoUser = null; this.gotoAction = null;
+  this._bubT = null; this._dead = false;
+  this.applySkin();
+  this.setFrame(this.set.sit); this.render();
+}
+
+Avatar.prototype.bMax = function(){ return Math.max(B_MIN+10, screenW - MARGIN - this.set.sprW); };
+
+Avatar.prototype.applySkin = function(){
+  this.spr.style.backgroundSize = this.set.bgSize;
+  this.spr.style.backgroundImage = "url('"+this.set.url+"')";
+};
+
+/* equip gear — g = {setName: pieceName, ...}; one piece per set */
+Avatar.prototype.setGear = function(g){
+  this.gear = g || {};
+  var self = this;
+  this.noFlipEls = []; this.animGear = [];
+  Array.prototype.slice.call(this.wrap.querySelectorAll(".gear")).forEach(function(n){ n.parentNode.removeChild(n); });
+  Object.keys(this.gear).forEach(function(setName){
+    var gs = GEAR.sets[setName]; if (!gs || !gs.pieces) return;
+    var piece = gs.pieces[self.gear[setName]]; if (!piece || !piece.url) return;
+    var el;
+    if (piece.anim){
+      // frame-anim sheet: same grid as the avatar — cell follows the avatar's frame
+      el = document.createElement("div"); el.className = "gear";
+      el.style.zIndex = gs.behind ? 1 : 3;
+      (function(holder){
+        var im = new Image();
+        im.onload = function(){
+          var cols = piece.cols || 7, rows = piece.rows || 5;
+          var cw = im.naturalWidth/cols, chh = im.naturalHeight/rows;
+          var s = SCALE * (piece.scale || 1);
+          holder.style.width  = Math.round(cw*s)+"px";
+          holder.style.height = Math.round(chh*s)+"px";
+          holder.style.backgroundImage = "url('"+piece.url+"')";
+          holder.style.backgroundSize = Math.round(im.naturalWidth*s)+"px "+Math.round(im.naturalHeight*s)+"px";
+          holder.style.left = "50%";
+          holder.style.marginLeft = Math.round((piece.ox||0)*SCALE - cw*s/2)+"px";
+          holder.style.top = Math.round((self.set.sit.h*SCALE - chh*s)/2 + (piece.oy||0)*SCALE)+"px";
+          self.animGear.push({el: holder, cw: cw, ch: chh, s: s});
+          self.syncGearFrame();
+        };
+        im.src = piece.url;
+      })(el);
+    } else {
+      el = document.createElement("img"); el.className = "gear"; el.alt = "";
+      el.style.zIndex = gs.behind ? 1 : 3;        // sprite sits at z 2
+      (function(img){
+        img.onload = function(){
+          var s = SCALE * (piece.scale || 1);
+          img.style.width  = Math.round(img.naturalWidth*s)+"px";
+          img.style.height = Math.round(img.naturalHeight*s)+"px";
+          img.style.left = "50%";
+          img.style.marginLeft = Math.round((piece.ox||0)*SCALE - img.naturalWidth*s/2)+"px";
+          img.style.top = Math.round((piece.oy||0)*SCALE)+"px";
+        };
+        img.src = piece.url;
+      })(el);
+    }
+    if (gs.noFlip){ self.noFlipEls.push(el); el.style.transform = (self._flipV === "scaleX(-1)") ? "scaleX(-1)" : ""; }
+    self.wrap.appendChild(el);
+  });
+};
+/* keep frame-anim gear cells in lockstep with the avatar's current frame */
+Avatar.prototype.syncGearFrame = function(){
+  var f = this._curF; if (!f || !this.animGear.length) return;
+  var col = Math.round(f.x / Math.max(1, f.w)), row = Math.round(f.y / Math.max(1, f.h));
+  for (var i = 0; i < this.animGear.length; i++){
+    var g = this.animGear[i];
+    g.el.style.backgroundPosition = "-"+Math.round(col*g.cw*g.s)+"px -"+Math.round(row*g.ch*g.s)+"px";
+  }
+};
+
+Avatar.prototype.setFrame = function(f){
+  this._curF = f;
+  this.spr.style.width = (f.w*SCALE)+"px"; this.spr.style.height = (f.h*SCALE)+"px";
+  this.spr.style.backgroundPosition = "-"+(f.x*SCALE).toFixed(1)+"px -"+(f.y*SCALE).toFixed(1)+"px";
+  if (this.animGear && this.animGear.length) this.syncGearFrame();
+};
+Avatar.prototype.facing = function(){
+  var flip = (FACES === "right") ? (this.dir < 0) : (this.dir > 0);
+  return flip ? "scaleX(-1)" : "scaleX(1)";
+};
+Avatar.prototype.setFlip = function(v){
+  if (this._flipV === v) return;
+  this._flipV = v;
+  this.wrap.style.transform = v;
+  var counter = (v === "scaleX(-1)") ? "scaleX(-1)" : "";
+  for (var i = 0; i < this.noFlipEls.length; i++) this.noFlipEls[i].style.transform = counter;
+};
+Avatar.prototype.render = function(){
+  this.el.style.transform = "translate3d("+Math.round(this.x)+"px,"+(-Math.round(this.y))+"px,0)";
+};
+Avatar.prototype.anim = function(name, ms, dt){
+  var frames = this.set.anims[name];
+  this.ft += dt;
+  if (this.ft >= ms){ this.ft = 0; this.fi = (this.fi+1) % frames.length; }
+  this.setFrame(frames[this.fi % frames.length]);
+};
+
+Avatar.prototype.step = function(dt){
+  if (this._dead) return;
+
+  if (calm()){ this.setFrame(this.set.anims.idle[0]); this.setFlip(this.facing()); this.render(); return; }
+
+  this.stt += dt;
+  var bMax = this.bMax();
+
+  if (this.st === "thrown"){
+    this.jt += dt;
+    this.vy -= 2400 * dt/1000;
+    this.y  += this.vy * dt/1000;
+    this.x  += this.vx * dt/1000;
+    var maxX = screenW - this.set.sprW;
+    if (this.x < 0)    { this.x = 0;    this.vx = -this.vx * 0.55; }
+    else if (this.x > maxX){ this.x = maxX; this.vx = -this.vx * 0.55; }
+    var ceil = screenH - this.set.sprH - 20;
+    if (this.y > ceil) { this.y = ceil; this.vy = -this.vy * 0.4; }
+    if (this.y <= 0){
+      this.y = 0;
+      if (Math.abs(this.vy) < 150){
+        this.vy = 0; this.vx *= 0.55;
+        if (Math.abs(this.vx) < 30){
+          this.x = Math.max(B_MIN, Math.min(this.x, bMax));
+          this.st = "walk"; this.stt = 0;
+        }
+      } else { this.vy = -this.vy * 0.5; this.vx *= 0.8; }
+    }
+    var jf = this.set.anims.jump;                              // play the real jump animation once
+    this.setFrame(jf[Math.min(jf.length-1, Math.floor(this.jt/IDLE_MS))]);
+    this.setFlip(this.vx < 0 ? "scaleX(-1)" : "scaleX(1)");
+    this.render(); return;
+  }
+
+  if (this.st === "goto"){
+    var t = avatars.get(this.gotoUser);
+    if (!t || t._dead || this.stt > 8000){ this.st = "walk"; this.stt = 0; }
+    else {
+      var dx = t.x - this.x;
+      this.dir = dx < 0 ? -1 : 1;
+      this.x += this.dir * SPEED * 1.8 * dt/1000;
+      this.anim("walk", 90, dt);
+      this.setFlip(this.facing());
+      if (Math.abs(dx) < this.set.sprW * 0.55){ this.arrive(t); }
+      this.render(); return;
+    }
+  }
+
+  if (this.st === "dance" || this.st === "spin"){
+    var fast = this.st === "spin";
+    this.ft += dt;
+    if (this.ft >= (fast ? 55 : 70)){ this.ft = 0; this.fi = (this.fi+1) % this.set.anims.walk.length; this.dir = -this.dir; }
+    this.setFrame(fast ? this.set.anims.idle[0] : this.set.anims.walk[this.fi]);
+    this.setFlip(this.facing());
+    if (this.stt > (fast ? 1400 : 2600)){ this.st = "walk"; this.stt = 0; }
+    this.render(); return;
+  }
+
+  if (this.st === "lurk"){
+    this.anim("lurk", 160, dt);                                // the cozy sit animation
+    this.setFlip(this.facing());
+    if (this.stt > 60000){ this.st = "walk"; this.stt = 0; }   // nap for a minute
+    this.render(); return;
+  }
+
+  if (this.st === "walk"){
+    this.x += this.dir * SPEED * dt/1000;
+    if (this.x <= B_MIN){ this.x = B_MIN; this.dir = 1; }
+    else if (this.x >= bMax){ this.x = bMax; this.dir = -1; }
+    this.anim("walk", FRAME_MS, dt);
+    this.setFlip(this.facing());
+    if (this.stt > 4500 + Math.random()*4000){ this.st = "sit"; this.stt = 0; this.fi = 0; }
+  } else { // sit = animated idle
+    this.anim("idle", IDLE_MS, dt);
+    this.setFlip(this.facing());
+    if (this.stt > 1800 + Math.random()*2200){ this.st = "walk"; this.stt = 0; this.fi = 0; }
+  }
+  this.render();
+};
+
+Avatar.prototype.arrive = function(t){
+  var act = this.gotoAction;
+  this.st = "walk"; this.stt = 0; this.gotoUser = null; this.gotoAction = null;
+  if (act === "boop"){
+    t.do("jump");
+    this.say("boop! 👉", true);
+  } else if (act === "hug"){
+    this.say("🤗💕", true); t.say("💕", true);
+  } else if (act === "duel"){
+    var win = Math.random() < .5 ? this : t;
+    var lose = (win === this) ? t : this;
+    lose.do("yeet");
+    win.say("🏆 won the duel!", true);
+  }
+};
+
+Avatar.prototype.say = function(text, force){
+  if ((!BUBBLES && !force) || this._dead) return;
+  var t = String(text); if (t.length > 100) t = t.slice(0,100) + "…";
+  this.bub.textContent = t;                                  // textContent = HTML-safe
+  this.bub.style.display = "block";
+  clearTimeout(this._bubT);
+  var self = this;
+  this._bubT = setTimeout(function(){ self.bub.style.display = "none"; }, 6000);
+};
+
+Avatar.prototype.do = function(action){
+  if (this._dead || calm()) return;
+  if (action === "jump"){
+    if (this.st !== "thrown"){ this.vy = 900; this.vx = this.dir * 120; this.st = "thrown"; this.stt = 0; this.jt = 0; }
+  } else if (action === "yeet"){
+    this.vy = 900 + Math.random()*600;
+    this.vx = (Math.random() < .5 ? -1 : 1) * (600 + Math.random()*600);
+    this.st = "thrown"; this.stt = 0; this.jt = 0;
+  } else if (action === "dance" || action === "spin"){
+    if (this.st !== "thrown"){ this.st = action; this.stt = 0; this.ft = 0; }
+  } else if (action === "wave"){
+    this.say("👋", true);
+    if (this.st !== "thrown"){ this.vy = 480; this.vx = 0; this.st = "thrown"; this.stt = 0; this.jt = 0; }
+  } else if (action === "lurk"){
+    if (this.st !== "thrown"){ this.st = "lurk"; this.stt = 0; this.fi = 0; this.say("💤", true); }
+  }
+};
+
+Avatar.prototype.despawn = function(){
+  if (this._dead) return; this._dead = true;
+  clearTimeout(this._bubT);
+  var el = this.el;
+  el.classList.add("gone");
+  setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 450);
+};
+
+/* ============================================================
+   Swarm management — ONE Map, ONE rAF loop
+   ============================================================ */
+var avatars = new Map();   // username → Avatar
+
+function spawn(user, display, color, badges, uid){
+  var a = avatars.get(user);
+  if (a) return a;
+  if (avatars.size >= MAX){                       // FIFO eviction
+    var oldest = avatars.keys().next().value;
+    avatars.get(oldest).despawn(); avatars.delete(oldest);
+  }
+  a = new Avatar(user, display, color, badges, uid);
+  avatars.set(user, a);
+
+  // gear: viewer's saved picks → role default → none
+  var roleGear = validGear(GEAR.roles[a.role]) || {};
+  if (uid){
+    var kGear = gearCache.get(uid) || localGear(uid);
+    a.setGear(validGear(kGear) || roleGear);
+    if (!gearCache.has(uid)){
+      fetchPrefs(uid, function(p){
+        var vg = validGear(p.gear);
+        if (vg){ gearCache.set(uid, vg); localSet("sa-gear-"+uid, JSON.stringify(vg)); if (!a._dead) a.setGear(vg); }
+      });
+    }
+  } else {
+    a.setGear(roleGear);
+  }
+  return a;
+}
+function remove(user){
+  var a = avatars.get(user);
+  if (a){ a.despawn(); avatars.delete(user); }
+}
+
+var last = performance.now(), frames = 0, fpsT = performance.now(), fps = 0;
+function loop(now){
+  var dt = Math.min(60, now - last); last = now;
+  avatars.forEach(function(a){ a.step(dt); });
+  if (DEBUG){
+    frames++;
+    if (now - fpsT >= 500){ fps = Math.round(frames*1000/(now-fpsT)); frames = 0; fpsT = now; paintHud(); }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// idle despawn sweep
+setInterval(function(){
+  var cutoff = performance.now() - DESPAWN_MIN*60000;
+  avatars.forEach(function(a, user){ if (a.lastSeen < cutoff) remove(user); });
+}, 30000);
+
+// pick up skin/gear changes made on the picker page (one query, every 3 min)
+setInterval(function(){
+  var ids = [];
+  avatars.forEach(function(a){ if (a.uid) ids.push(a.uid); });
+  if (!ids.length) return;
+  fetch(SB_URL+"/rest/v1/avatar_skins?twitch_user_id=in.("+ids.map(encodeURIComponent).join(",")+")&select=twitch_user_id,gear",
+        {headers: SB_HEADERS})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      (rows||[]).forEach(function(row){
+        avatars.forEach(function(a){
+          if (a.uid !== row.twitch_user_id) return;
+          var vg = validGear(row.gear);
+          if (vg && JSON.stringify(vg) !== JSON.stringify(a.gear)){ gearCache.set(a.uid, vg); a.setGear(vg); }
+        });
+      });
+    }).catch(function(){});
+}, 180000);
+
+/* ============================================================
+   Twitch — anonymous read-only IRC over WSS (no auth needed)
+   ============================================================ */
+var ircStatus = "off";
+function unescapeTag(v){
+  return String(v||"").replace(/\\(.)/g, function(_, c){
+    return c === "s" ? " " : c === "n" ? "\n" : c === "r" ? "\r" : c === ":" ? ";" : c;
+  });
+}
+var attempts = 0, ws = null;
+function connect(){
+  ircStatus = "connecting…"; paintHud();
+  ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+  ws.onopen = function(){
+    attempts = 0; ircStatus = "connected ✔"; paintHud();
+    ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
+    ws.send("NICK justinfan" + Math.floor(Math.random()*1e5));
+    ws.send("JOIN #" + CHANNEL);
+  };
+  ws.onmessage = function(e){
+    var lines = e.data.split("\r\n");
+    for (var i = 0; i < lines.length; i++){
+      var line = lines[i];
+      if (!line) continue;
+      if (line.indexOf("PING") === 0){ ws.send("PONG :tmi.twitch.tv"); continue; }
+      if (line.indexOf(" RECONNECT") >= 0 && line.indexOf("PRIVMSG") < 0){ try{ ws.close(); }catch(_){} continue; }
+      var m = line.match(/^@([^ ]+) :([^!]+)![^ ]+ PRIVMSG #[^ ]+ :(.*)$/);
+      if (!m) continue;
+      var tags = {};
+      m[1].split(";").forEach(function(kv){
+        var p = kv.indexOf("="); tags[kv.slice(0,p)] = kv.slice(p+1);
+      });
+      handleChat({
+        user:    m[2],
+        display: unescapeTag(tags["display-name"]) || m[2],
+        color:   tags.color || "",
+        badges:  tags.badges || "",
+        id:      tags["user-id"] || "",
+        text:    m[3]
+      });
+    }
+  };
+  ws.onclose = function(){
+    ircStatus = "reconnecting…"; paintHud();
+    attempts++;
+    setTimeout(connect, Math.min(2000*attempts, 30000));
+  };
+  ws.onerror = function(){ try{ ws.close(); }catch(_){} };
+}
+
+var SOLO_ACTS = {jump:1, dance:1, yeet:1, spin:1, wave:1, lurk:1};
+var SOCIAL_ACTS = {boop:1, hug:1, duel:1};
+
+function handleChat(c){
+  var cm = c.text.trim().match(/^!([a-z0-9_]+)(?:\s+@?(\S+))?/i);
+  var cmd = cm ? cm[1].toLowerCase() : null;
+  var arg = cm && cm[2] ? cm[2].toLowerCase() : "";
+
+  var a = avatars.get(c.user);
+  if (!a){
+    if (cmd === "hide") return;
+    if (JOIN_ONLY && cmd !== "join") return;
+    a = spawn(c.user, c.display, c.color, c.badges, c.id);
+  }
+  a.lastSeen = performance.now();
+
+  if (cmd && SOLO_ACTS[cmd]){ a.do(cmd); }
+  else if (cmd && SOCIAL_ACTS[cmd]){
+    var t = avatars.get(arg);
+    if (t && t !== a && !t._dead){
+      a.gotoUser = arg; a.gotoAction = cmd; a.st = "goto"; a.stt = 0;
+    } else {
+      a.say("who? 👀 (they need an avatar on screen)", true);
+    }
+  }
+  else if (cmd === "hide"){ remove(c.user); }
+  else if (cmd === "skin"){
+    a.say("🎨 color skins are getting an artist-made makeover — stay tuned!", true);
+  }
+  else if (cmd === "gear"){
+    var sets = Object.keys(GEAR.sets);
+    a.say(sets.length ? "🎒 gear: !" + sets.join(" … !") + " (then a piece name)" : "no gear uploaded yet!", true);
+  }
+  else if (cmd && GEAR.sets[cmd]){                  // !{set} {piece}, e.g. !items axe
+    var gs = GEAR.sets[cmd];
+    var g = {}; Object.keys(a.gear).forEach(function(k){ g[k] = a.gear[k]; });
+    if (arg === "none"){
+      delete g[cmd];
+      a.setGear(g);
+      if (c.id) saveGearPref(c.id, g);
+    } else if (gs.pieces && gs.pieces[arg]){
+      g[cmd] = arg;
+      a.setGear(g);
+      if (c.id) saveGearPref(c.id, g);
+    } else {
+      a.say("🎒 " + cmd + ": " + Object.keys(gs.pieces || {}).join(", ") + ", none", true);
+    }
+  }
+  else if (cmd === "join"){ /* spawned above — that's the whole command */ }
+  else if (!cmd){ a.say(c.text); }
+}
+
+/* ============================================================
+   Debug mode — 20 fake avatars + FPS meter, no Twitch needed
+   ============================================================ */
+function paintHud(){
+  if (!DEBUG) return;
+  hud.textContent = "fps " + fps + " · avatars " + avatars.size +
+    " · chat: " + (CHANNEL ? ircStatus : "debug only") +
+    " · gear sets " + Object.keys(GEAR.sets).length;
+}
+function startDebug(){
+  if (!window.obsstudio) document.body.classList.add("debugbg");   // dark test bg only OUTSIDE OBS — stays transparent on stream
+  hud.style.display = "block";
+  var NAMES = ["mochi","boba","pudding","taro","clover","sprout","nimbus","pebble","waffle","syrup",
+               "comet","biscuit","noodle","plum","maple","tofu","truffle","dango","poppy","miso"];
+  var DBG_BADGES = ["broadcaster/1","moderator/1","vip/1","subscriber/3","subscriber/1"];
+  // spread every gear piece across the debug crowd so uploads are easy to preview
+  var combos = [];
+  Object.keys(GEAR.sets).forEach(function(s){
+    Object.keys(GEAR.sets[s].pieces || {}).forEach(function(p){ var g = {}; g[s] = p; combos.push(g); });
+  });
+  // a couple of the commissioned color sheets — preview-only examples
+  var previewSets = PREVIEW_SKINS.map(function(p){
+    return makeSet(p.url, DEF_W, DEF_H, DEF_ANIMS.walk, DEF_ANIMS.idle[0], DEF_ANIMS);
+  });
+  NAMES.forEach(function(n, i){
+    var a = spawn("debug_"+n, n, PASTELS[i % PASTELS.length], DBG_BADGES[i] || "", "");
+    a.lastSeen = Infinity;   // debug avatars never idle out
+    if (previewSets.length && i % 3 === 1){ a.set = previewSets[i % previewSets.length]; a.applySkin(); }
+    if (combos.length && i % 2 === 0) a.setGear(combos[(i/2) % combos.length]);
+  });
+  var PHRASES = ["hii!! 🌸","LETS GOOO","so cozy in here","!jump","!dance","!yeet","!spin","!wave","omg hi","pog","💜💜💜","brb tea"];
+  setInterval(function(){
+    var keys = Array.from(avatars.keys());
+    if (!keys.length) return;
+    var a = avatars.get(keys[Math.floor(Math.random()*keys.length)]);
+    if (Math.random() < 0.25 && keys.length > 1){           // social moment: boop/hug/duel someone
+      var other = keys[Math.floor(Math.random()*keys.length)];
+      if (other !== a.user){
+        a.gotoUser = other; a.gotoAction = ["boop","hug","duel"][Math.floor(Math.random()*3)];
+        a.st = "goto"; a.stt = 0;
+        return;
+      }
+    }
+    var p = PHRASES[Math.floor(Math.random()*PHRASES.length)];
+    if (p.charAt(0) === "!") a.do(p.slice(1)); else a.say(p);
+  }, 1800);
+  paintHud();
+}
+
+/* ============================================================
+   Boot — load this channel's saved sprites + gear
+   ============================================================ */
+function boot(){
+  if (DEBUG) startDebug();
+  if (CHANNEL) connect();
+  else if (!DEBUG) document.getElementById("help").style.display = "grid";
+}
+function loadConfigs(done){
+  if (!CHANNEL){ done(); return; }
+  var keys = [CHANNEL, CHANNEL+":gear"].concat(ROLES.map(function(r){ return CHANNEL+":"+r; }));
+  var list = keys.map(function(k){ return '"'+k+'"'; }).join(",");
+  fetch(SB_URL+"/rest/v1/avatar_config?channel=in.("+encodeURIComponent(list)+")&select=channel,sheet_url,frames",
+        {headers: SB_HEADERS})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      (rows||[]).forEach(function(row){
+        if (row.channel === CHANNEL+":gear"){
+          var f = row.frames || {};
+          GEAR.sets = mergeGear(f.sets);
+          GEAR.roles = (f._roles && typeof f._roles === "object") ? f._roles : GEAR.roles;
+          return;
+        }
+        var f2 = row.frames;
+        if (!(row.sheet_url && f2 && f2.walk && f2.walk.length && f2.sit)) return;
+        var role = (row.channel === CHANNEL) ? "default" : row.channel.slice(CHANNEL.length+1);
+        if (role !== "default" && ROLES.indexOf(role) < 0) return;
+        SHEET_SETS[role] = makeSet(row.sheet_url, f2.sheetW, f2.sheetH, f2.walk, f2.sit,
+                                   {idle: f2.idle, lurk: f2.lurk, jump: f2.jump});
+      });
+      done();
+    })
+    .catch(function(){ done(); });   // Supabase down/not set up → default sprite, never a blank stream
+}
+loadConfigs(boot);
+</script>
+</body>
+</html>

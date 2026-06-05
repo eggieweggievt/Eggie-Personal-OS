@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#fdf4fa" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="OC Hub" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" href="982602-holographicowner.png" />
+<link rel="apple-touch-icon" href="982602-holographicowner.png" />
+<title>OC Hub 🦄</title>
+<!-- =========================================================================
+  OC Hub — a gentle candy-pastel home for original characters, for Eggie 🦄
+  Characters · lore · story arcs · ships · idea wall · per-OC ref boards.
+  Built on the Eggie-OS foundation: one file, vanilla JS, Supabase storage.
+  Shares the same Supabase project as the main OS; ALL data here lives under
+  oc-prefixed keys on the sentinel daily_logs row (log_date 2000-01-01).
+========================================================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Fredoka:wght@500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* ---- candy-unicorn theme: token NAMES match the main OS, hues are hers ---- */
+  :root {
+    --bg:#fdf4fa; --bg2:#eef4fd; --panel:#fff; --panel-soft:#fdf8fe;
+    --line:#f4ddef; --line-2:#e6def6; --ink:#5a4663; --ink-soft:#8b7795; --muted:#b5a4c0;
+    --pink:#f49fc6; --pink-deep:#e574ab; --lav:#a795e6; --lav-deep:#8a76d6;
+    --mint:#82d4c3; --peach:#f0cc88; --rose:#f2879c; --blue:#9ec5f2; --blue-deep:#6f9fd8;
+    --shadow:0 6px 22px rgba(190,140,200,.13); --shadow-sm:0 2px 8px rgba(190,140,200,.10);
+    --r:18px; --sans:"Quicksand",ui-rounded,"SF Pro Rounded",system-ui,sans-serif; --display:"Fredoka",var(--sans);
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  /* never let a stray wide element widen the page — keeps `main` truly centered (iPad portrait fix) */
+  html,body{width:100%;max-width:100%;overflow-x:hidden;}
+  main{overflow-x:clip;}
+  body{background:var(--bg);background-image:radial-gradient(80% 50% at 100% 0%,#fbdff0 0%,transparent 60%),radial-gradient(70% 50% at 0% 0%,#ddeafc 0%,transparent 55%),radial-gradient(60% 40% at 50% 100%,#efe6fb 0%,transparent 60%);background-attachment:fixed;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased;min-height:100vh;}
+  /* her unicorn-sky art, muted, behind everything */
+  body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:url("design_03.png") center/cover no-repeat;}
+  body.calm::after{display:none;}
+  /* cute icon helpers */
+  .ti{width:15px;height:15px;vertical-align:-3px;border-radius:4px;margin-right:2px;}
+  .brand-crown{height:24px;width:auto;vertical-align:-5px;filter:drop-shadow(0 1px 3px rgba(167,149,230,.4));}
+  .deco{height:36px;width:auto;image-rendering:auto;}
+  body.calm .deco{display:none;}
+  h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;}
+  .muted{color:var(--muted);} .soft{color:var(--ink-soft);} .pink{color:var(--pink-deep);} .lav{color:var(--lav-deep);} .mint{color:var(--mint);}
+  .num{font-variant-numeric:tabular-nums;} a{color:var(--lav-deep);}
+  button{font-family:inherit;cursor:pointer;font-weight:600;} input,textarea,select{font-family:inherit;font-weight:500;}
+  .label{font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+  /* panels = frosted cakes: white card + a thin candy-stripe icing line on top */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:16px;position:relative;overflow:hidden;}
+  .panel::before{content:"";position:absolute;top:0;left:0;right:0;height:5px;opacity:.55;pointer-events:none;background:repeating-linear-gradient(-45deg,var(--pink) 0 12px,var(--blue) 12px 24px,var(--peach) 24px 36px,var(--lav) 36px 48px);}
+  body.calm .panel::before{display:none;}
+  .inp{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;padding:9px 12px;color:var(--ink);font-size:13px;width:100%;outline:none;}
+  .inp:focus{border-color:var(--pink);box-shadow:0 0 0 3px rgba(244,159,198,.14);}
+  textarea.inp{resize:vertical;}
+  .btn{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;color:var(--ink-soft);font-size:12px;padding:7px 14px;transition:.15s;}
+  .btn:hover{border-color:var(--pink);color:var(--pink-deep);}
+  .btn-pink{background:linear-gradient(135deg,var(--pink),var(--lav));color:#fff;border:none;box-shadow:inset 0 2px 0 rgba(255,255,255,.5),var(--shadow-sm);}  /* gummy gloss */
+  .btn-pink:hover{filter:brightness(1.05);color:#fff;}
+  .pill{font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;letter-spacing:.03em;box-shadow:inset 0 1px 0 rgba(255,255,255,.6);}  /* gumdrop sheen */
+  .pill-pink{background:#fde3f0;color:var(--pink-deep);} .pill-lav{background:#e9e3fb;color:var(--lav-deep);}
+  .pill-mint{background:#ddf4ee;color:#2f9d83;} .pill-peach{background:#faf0d4;color:#bc8f33;} .pill-gray{background:#f3ecf4;color:var(--muted);}
+  .pill-blue{background:#ddebfa;color:var(--blue-deep);}
+  ::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:repeating-linear-gradient(45deg,#f6cfe5 0 8px,#dcd2f5 8px 16px);border-radius:9px;}
+  #rail{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:20;background:rgba(255,255,255,.78);backdrop-filter:blur(12px);border-bottom:2px solid transparent;border-image:linear-gradient(90deg,var(--blue),var(--lav),var(--pink),var(--peach)) 1;gap:10px;flex-wrap:wrap;}
+  /* frosting drip: a scalloped white edge hanging under the rail 🍰 */
+  #rail::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:9px;pointer-events:none;background:radial-gradient(circle at 9px -3px, rgba(255,255,255,.85) 9px, transparent 10px) repeat-x;background-size:18px 9px;}
+  .brand{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px;}
+  .brand-name{background:linear-gradient(120deg,var(--blue-deep),var(--lav-deep) 45%,var(--pink-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;letter-spacing:.02em;font-size:17px;}
+  nav{display:flex;gap:4px;flex-wrap:wrap;}
+  .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
+  .tab.active{background:linear-gradient(135deg,#fde3f0,#e9e3fb);color:var(--pink-deep);} .tab:hover{color:var(--pink-deep);}
+  #rail .right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .chip{font-size:11px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--line-2);color:var(--muted);background:#fff;text-decoration:none;}
+  .chip.on{color:var(--mint);border-color:#bfe9dd;background:#f0fbf8;} .chip.demo{color:var(--lav-deep);border-color:#ddd2f6;background:#f6f1ff;}
+  main{padding:18px;max-width:1380px;margin:0 auto;}
+  /* ---- modular dashboard (port — keep verbatim) ---- */
+  .grid-modular{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));grid-auto-rows:8px;grid-auto-flow:row dense;gap:0 16px;}
+  .home-widget{position:relative;transition:transform .24s cubic-bezier(.2,.8,.25,1);}
+  .home-widget.resizing{transition:none;}
+  #nav .tab{transition:transform .2s cubic-bezier(.2,.8,.25,1);}
+  .drag-clone{position:fixed;left:0;top:0;z-index:9999;pointer-events:none;border-radius:18px;box-shadow:0 16px 38px rgba(140,90,150,.34);opacity:.97;}
+  .home-widget.dragsrc,#nav .tab.dragsrc{visibility:hidden;}
+  .home-widget.reordering{outline:2px dashed var(--lav);outline-offset:3px;border-radius:18px;}
+  .home-widget.resizing{outline:2px dashed var(--pink);outline-offset:3px;border-radius:18px;}
+  .home-widget.min .panel,.home-widget.min section{max-height:50px;overflow:hidden;}
+  .home-tools{position:absolute;top:9px;right:9px;z-index:6;display:flex;gap:3px;}
+  .home-tools button{border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:11px;line-height:1;color:#a394b6;cursor:pointer;padding:4px 6px;opacity:.4;touch-action:none;user-select:none;}
+  .home-tools .home-grip{cursor:grab;}
+  .home-widget:hover .home-tools button,.home-tools button:hover{opacity:.95;}
+  .home-resize{position:absolute;right:3px;bottom:3px;z-index:6;border:none;background:rgba(255,255,255,.6);border-radius:7px;font-size:12px;line-height:1;color:#a394b6;cursor:nwse-resize;padding:2px 5px;opacity:.4;touch-action:none;user-select:none;}
+  .home-widget:hover .home-resize,.home-resize:hover{opacity:.95;}
+  .home-add{border:2px dashed var(--line);border-radius:16px;background:rgba(255,255,255,.4);color:var(--lav-deep);font-size:13px;cursor:pointer;min-height:44px;max-height:48px;grid-column:1/-1;grid-row:span 8;margin-top:2px;}
+  body.locked .home-tools,body.locked .home-resize,body.locked .home-add{display:none!important;}
+  #nav .tab{touch-action:none;user-select:none;-webkit-user-select:none;}
+  #nav .tab.reordering{opacity:.55;}
+  .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap;}
+  .soft-card{background:var(--panel-soft);border:1px solid var(--line);border-radius:14px;padding:12px;}
+  .seg{display:inline-flex;background:#f7eef8;border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap;}
+  .seg button{border:none;background:none;border-radius:999px;padding:5px 11px;font-size:12px;color:var(--ink-soft);}
+  .seg button.on{background:#fff;color:var(--pink-deep);box-shadow:var(--shadow-sm);}
+  .hbtn{text-align:left;border:1.5px solid var(--line-2);border-radius:13px;padding:9px 11px;background:#fff;transition:.15s;}
+  .hbtn.done{border-color:#bfe9dd;background:#f1fbf8;} .hbtn:hover{border-color:var(--pink);}
+  .check{width:18px;height:18px;border-radius:7px;border:2px solid var(--line-2);background:#fff;flex:none;} .check.on{background:var(--mint);border-color:var(--mint);}
+  .chiptog{border:1.5px solid var(--line-2);border-radius:999px;padding:7px 14px;background:#fff;color:var(--ink-soft);font-size:13px;display:inline-flex;align-items:center;gap:8px;}
+  .chiptog.on{background:#fde3f0;border-color:var(--pink);color:var(--pink-deep);}
+  details.acc{border:2px solid var(--line-2);border-radius:14px;background:var(--panel);box-shadow:var(--shadow-sm);margin-bottom:12px;overflow:hidden;}  /* matches the character-sheet boxes */
+  details.acc>summary{list-style:none;cursor:pointer;padding:13px 16px;font-family:var(--display);font-size:15px;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  details.acc>summary::-webkit-details-marker{display:none;}
+  details.acc>summary::after{content:"▸";color:var(--muted);transition:transform .2s;}
+  details.acc[open]>summary::after{transform:rotate(90deg);}
+  details.acc>.acc-body{padding:2px 16px 16px;}
+  .bar{height:7px;border-radius:999px;background:#f2e6f4;overflow:hidden;} .bar>span{display:block;height:100%;border-radius:999px;background:repeating-linear-gradient(45deg,var(--pink) 0 8px,var(--lav) 8px 16px);}  /* candy-cane progress */
+  .spark{display:flex;align-items:flex-end;gap:2px;height:34px;}
+  .spark span{flex:1;background:linear-gradient(180deg,var(--pink),var(--lav));border-radius:3px 3px 0 0;min-height:2px;opacity:.85;}
+  .modal-bg{position:fixed;inset:0;background:rgba(98,68,104,.32);z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;}
+  th{text-align:left;padding:8px 6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);font-weight:700;}
+  td{padding:8px 6px;font-size:13px;border-bottom:1px solid var(--line);}
+  .hidden{display:none!important;} .grow{flex:1;}
+  /* ---- gentle page transition ---- */
+  #view.view-enter{ animation:viewIn .4s cubic-bezier(.22,.61,.36,1) both; }
+  #view.view-enter > *{ animation:panelIn .44s cubic-bezier(.22,.61,.36,1) both; }
+  #view.view-enter > *:nth-child(2){ animation-delay:.06s; }
+  #view.view-enter > *:nth-child(3){ animation-delay:.12s; }
+  #view.view-enter > *:nth-child(4){ animation-delay:.18s; }
+  #view.view-enter > *:nth-child(n+5){ animation-delay:.22s; }
+  @keyframes viewIn{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
+  @keyframes panelIn{ from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:none;} }
+  /* ---- character gallery ---- */
+  .oc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+  .oc-card{border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--shadow-sm);padding:14px;cursor:pointer;transition:transform .15s,border-color .15s;display:flex;flex-direction:column;gap:8px;}
+  .oc-card:hover{border-color:var(--pink);transform:translateY(-2px);}
+  .oc-ava{width:54px;height:54px;border-radius:999px;display:grid;place-items:center;font-size:27px;color:#fff;flex:0 0 auto;box-shadow:inset 0 3px 6px rgba(255,255,255,.55),var(--shadow-sm);}  /* gumball gloss */
+  .oc-dots{display:flex;gap:4px;} .oc-dots span{width:14px;height:14px;border-radius:999px;border:1px solid rgba(0,0,0,.08);}
+  .oc-banner{height:130px;border-radius:12px;background-size:cover;background-position:center top;background-color:#f6effa;}
+  .oc-sw{display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--line);height:54px;}
+  .oc-sw>button{flex:1;border:none;cursor:pointer;position:relative;transition:flex .15s;color:#fff;font:inherit;font-size:10px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.45);}
+  .oc-sw>button:hover{flex:1.4;}
+  /* ---- kanban (story arcs) ---- */
+  .kanban{display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;}
+  @media(max-width:1100px){.kanban{grid-template-columns:repeat(5,190px);}}
+  .kcol{background:var(--bg2);border:1.5px dashed var(--line-2);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:130px;}  /* candy-jar columns */
+  .citem{background:#fff;border:1.5px solid var(--line-2);border-radius:12px;padding:9px;transition:.15s;cursor:grab;box-shadow:var(--shadow-sm);}
+  .citem:hover{border-color:var(--pink);} .citem.dim{opacity:.35;} .citem.hit{border-color:var(--lav);}
+  .drop-hot{outline:2px dashed var(--lav-deep);outline-offset:-2px;}
+  .file-hot{outline:3px dashed var(--pink)!important;outline-offset:-3px;border-radius:14px;background-color:rgba(244,159,198,.08)!important;}
+  .drag-ghost{border-radius:8px;}
+  /* ---- idea wall + inspiration vault ---- */
+  .idea-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .idea-card{position:relative;border-radius:4px 14px 14px 14px;padding:12px 12px 32px;font-size:12.5px;line-height:1.5;min-height:86px;box-shadow:0 3px 10px rgba(140,90,150,.14);word-break:break-word;color:#5f4a64;}
+  .idea-card .ic-tools{position:absolute;bottom:5px;right:6px;display:flex;gap:2px;opacity:.7;}
+  .ic-tools button{border:none;background:rgba(255,255,255,.55);border-radius:6px;font-size:11px;cursor:pointer;padding:2px 5px;color:#6b5a70;}
+  .inspo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .inspo-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column;box-shadow:0 3px 10px rgba(140,90,150,.10);}
+  .inspo-card.done{opacity:.55;}
+  .inspo-thumb{height:104px;background:#f1e9fa center/cover no-repeat;display:grid;place-items:center;font-size:26px;}
+  .inspo-body{padding:9px 11px;display:flex;flex-direction:column;gap:4px;flex:1;}
+  /* ---- character art gallery (with artist credits) ---- */
+  .gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .gal-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column;box-shadow:0 3px 10px rgba(140,90,150,.10);}
+  .gal-thumb{aspect-ratio:1;background:#f1e9fa center/cover no-repeat;display:grid;place-items:center;font-size:24px;cursor:zoom-in;}
+  .gal-body{padding:7px 9px;display:flex;flex-direction:column;gap:2px;}
+  .oc-quote{font-family:var(--display);font-size:14px;color:var(--lav-deep);font-style:italic;margin-top:6px;}
+  /* ---- discord-style profile hero ---- */
+  .oc-hero{position:relative;border-radius:var(--r) var(--r) 0 0;overflow:visible;margin:-16px -16px 0;}
+  .oc-hero-banner{height:190px;border-radius:var(--r) var(--r) 0 0;background-size:cover;background-position:center;}
+  .oc-hero-ava{position:absolute;left:20px;bottom:-34px;border:5px solid #fff;border-radius:999px;box-shadow:var(--shadow-sm);}
+  .oc-hero-ava .oc-ava{display:grid;}
+  .oc-hero-body{padding:44px 4px 0;}
+  @media(max-width:700px){.oc-hero-banner{height:130px;}}
+  /* ---- D&D-style character sheet editor ---- */
+  .sheet{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:18px;}
+  .sheet-box{border:2px solid var(--line-2);border-radius:14px;padding:18px 14px 14px;position:relative;background:rgba(255,255,255,.92);}
+  .sheet-box>h4{position:absolute;top:-9px;left:14px;margin:0;background:#fff;padding:0 9px;font-family:var(--display);letter-spacing:.14em;font-size:11px;color:var(--lav-deep);text-transform:uppercase;border-radius:6px;}
+  .sheet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;}
+  .stat-box{border:2px solid var(--line-2);border-radius:12px;padding:8px 6px 6px;text-align:center;background:#fff;}
+  .stat-box .label{display:block;margin-bottom:3px;}
+  .stat-box input{width:64px;border:none;outline:none;text-align:center;font-family:var(--display);font-size:26px;color:var(--pink-deep);background:none;}
+  .stat-box .st-stars{font-size:12px;color:var(--lav);letter-spacing:2px;min-height:16px;}
+  .sheet-port{width:130px;height:130px;border-radius:999px;border:3px dashed var(--line-2);background:#fdf8fe center/cover no-repeat;display:grid;place-items:center;color:var(--muted);font-size:12px;cursor:pointer;text-align:center;flex:0 0 auto;}
+  .sheet-banner{height:110px;border-radius:12px;border:3px dashed var(--line-2);background:#fdf8fe center/cover no-repeat;display:grid;place-items:center;color:var(--muted);font-size:12px;cursor:pointer;}
+  /* ---- my designs ---- */
+  .dg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
+  .dg-thumb{aspect-ratio:1;background:#f1e9fa center/cover no-repeat;display:grid;place-items:center;font-size:26px;border-radius:12px 12px 0 0;}
+  .fact-row{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line);font-size:12.5px;}
+  .fact-row b{flex:0 0 110px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  /* ---- freeform ref board (per character) ---- */
+  .mb-board{position:relative;background:#fbf7fd;border:1px solid var(--line);border-radius:14px;overflow:hidden;height:520px;background-image:radial-gradient(#ecdcf3 1px,transparent 1px);background-size:22px 22px;}
+  .mb-card{position:absolute;border-radius:12px;box-shadow:0 4px 14px rgba(140,90,150,.18);border:1px solid var(--line);background:#fff;touch-action:none;cursor:grab;overflow:hidden;}
+  .mb-card:active{cursor:grabbing;}
+  .mb-card.img{background-size:cover;background-position:center;}
+  .mb-card.note{background:#fff7da;border-color:#f0e3a8;}
+  .mb-card.note textarea{width:100%;height:100%;border:none;background:none;resize:none;outline:none;padding:9px;font:inherit;font-size:12.5px;color:#5a5230;cursor:text;}
+  .mb-card.swatch{display:flex;align-items:flex-end;justify-content:center;}
+  .mb-card .mb-x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:7px;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:1;opacity:0;transition:opacity .12s;}
+  .mb-card:hover .mb-x{opacity:1;}
+  .mb-card .mb-rz{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;color:#c0a9ce;font-size:11px;display:grid;place-items:center;}
+  .mb-card .mb-hex{background:rgba(0,0,0,.4);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;margin-bottom:5px;cursor:pointer;}
+  /* ---- floating sticky notes ---- */
+  #stickyLayer{position:fixed;inset:0;z-index:80;pointer-events:none;}
+  .sticky{position:absolute;width:184px;height:150px;min-width:140px;min-height:108px;border-radius:12px;overflow:hidden;box-shadow:0 8px 22px rgba(140,90,150,.22);pointer-events:auto;display:flex;flex-direction:column;transform:rotate(-1deg);}
+  .sticky-head{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;cursor:grab;border-radius:12px 12px 0 0;flex:0 0 auto;}
+  .sticky-head:active{cursor:grabbing;}
+  .sticky-dot{width:13px;height:13px;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);cursor:pointer;}
+  .sticky-x{border:none;background:none;font-size:15px;line-height:1;color:rgba(90,70,99,.55);cursor:pointer;}
+  .sticky textarea{flex:1 1 auto;border:none;background:transparent;resize:none;outline:none;font-family:var(--sans);font-size:12.5px;color:#5a4663;padding:6px 10px 12px;}
+  .sticky-resize{position:absolute;right:1px;bottom:0;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;color:rgba(90,70,99,.45);cursor:nwse-resize;user-select:none;touch-action:none;}
+  #addStickyBtn{position:fixed;left:16px;bottom:16px;z-index:81;border:none;border-radius:999px;width:46px;height:46px;font-size:18px;background:linear-gradient(135deg,var(--pink),var(--lav));color:#fff;box-shadow:var(--shadow);}
+  /* ---- glitter & sparkle cursor trail ✨ ---- */
+  .sparkle{position:fixed;pointer-events:none;z-index:9000;will-change:transform,opacity;opacity:0;}
+  .sparkle.star{clip-path:polygon(50% 0%,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0% 50%,38% 38%);}
+  .sparkle.dot{border-radius:50%;}
+  @keyframes sparkleTwinkle{ 0%{opacity:0;transform:translate(0,0) scale(.3) rotate(0deg);} 14%{opacity:var(--o,.9);} 40%{opacity:calc(var(--o,.9)*.45);} 58%{opacity:var(--o,.9);} 100%{opacity:0;transform:translate(var(--dx,8px),var(--dy,34px)) scale(var(--s,1)) rotate(var(--dr,160deg));} }
+  /* ---- touch / iPad ---- */
+  html{-webkit-text-size-adjust:100%;}
+  .citem,[data-act="dragArc"],.sticky-head,.sticky-resize{touch-action:none;}
+  @media (hover:none){
+    .inp,input,textarea,select{font-size:16px;}
+    .tab{padding:7px 13px;}
+    .seg button{padding:7px 11px;}
+    .check{min-width:20px;min-height:20px;}
+    .hbtn,.chiptog,.btn{min-height:34px;}
+    *{-webkit-tap-highlight-color:transparent;}
+    /* on touch, the nav scrolls sideways (pan-x) instead of locking for drag-reorder */
+    #nav .tab{touch-action:pan-x;}
+    .home-tools button,.home-resize{opacity:.85;}   /* no hover on touch — keep the grips visible */
+  }
+  /* ---- iPhone / iPad: notch + home-indicator safe areas, scrollable nav ---- */
+  #rail{padding-top:calc(10px + env(safe-area-inset-top));padding-left:calc(22px + env(safe-area-inset-left));padding-right:calc(22px + env(safe-area-inset-right));}
+  main{padding-bottom:calc(78px + env(safe-area-inset-bottom));}
+  #addStickyBtn{bottom:calc(16px + env(safe-area-inset-bottom));}
+  @media (max-width:880px){
+    nav{flex-wrap:nowrap;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;}
+    nav::-webkit-scrollbar{display:none;}
+    #rail{gap:6px;}
+    #rail>div:first-child{min-width:0;flex:1 1 100%;}
+    .tab{flex:0 0 auto;white-space:nowrap;}
+    main{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right));}
+    .oc-hero-banner{height:120px;}
+    .oc-hero-ava{left:14px;}
+    .modal-bg{padding:10px;align-items:flex-end;}
+    .modal-bg .panel{max-height:86vh!important;}
+  }
+  /* ---- modal safety net: no input row can poke past the panel edge (covers future modals too) ---- */
+  .modal-bg .panel div[style*="display:flex"]{flex-wrap:wrap;}
+  input[type="date"],input[type="time"]{min-width:0;max-width:100%;}
+  select.inp{max-width:100%;}
+  .modal-bg .inp{min-width:0;}
+  .seg{flex-wrap:wrap;}
+  /* ---- phone tightening (≤640px) ---- */
+  @media(max-width:640px){
+    main{padding:12px 10px calc(76px + env(safe-area-inset-bottom,0px));}
+    #rail{padding-top:calc(8px + env(safe-area-inset-top,0px));padding-left:10px;padding-right:10px;gap:6px;}
+    .brand-name{display:none;}                 /* crown only */
+    .panel{padding:13px;border-radius:15px;}
+    .grid-modular{gap:0 10px;}
+    .toast{bottom:calc(78px + env(safe-area-inset-bottom,0px));}
+    .sheet-grid{grid-template-columns:1fr 1fr;}
+    .oc-hero-ava{bottom:-26px;} .oc-hero-body{padding-top:36px;}
+  }
+  /* ---- native-app feel ---- */
+  *{-webkit-tap-highlight-color:transparent;}
+  body{overscroll-behavior-y:none;}            /* no whole-page rubber-band */
+  nav,.kanban{overscroll-behavior-x:contain;}  /* inner swipes don't yank the page */
+  .btn,.chip,.chiptog,.hbtn,.seg>button,.check,.pill,.tab{touch-action:manipulation;}  /* no dbl-tap-zoom delay (drag handles keep touch-action:none) */
+  #nav .tab{touch-action:pan-x;}               /* re-assert after the manipulation rule above */
+  .btn:active,.chiptog:active,.hbtn:active,.seg>button:active,.chip:active{transform:scale(.96);transition:transform .06s ease;}
+  .btn,.chiptog,.hbtn{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+  @media (pointer:coarse){ .btn{padding:9px 15px;} #rail{backdrop-filter:blur(8px);} }  /* fatter targets · lighter blur scrolls smoother */
+  /* ---- accessibility ---- */
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
+  body.calm *{animation:none!important;transition:none!important;}
+  body.calm{background-image:none;background:#f7f3f7;--pink:#cda1bd;--pink-deep:#ab819f;--lav:#aea2d4;--lav-deep:#8d7eba;--mint:#85bfb1;--rose:#cf9ba6;--peach:#d8bd95;--blue:#a9c0dd;}
+  body.text-lg{font-size:16px;} body.text-lg .label{font-size:11.5px;} body.text-lg .citem,body.text-lg .pill{font-size:13px;}
+</style>
+</head>
+<body>
+<div id="rail">
+  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+    <span class="brand"><img class="brand-crown" src="982602-holographicowner.png" alt="" /> <span class="brand-name">OC Hub</span></span>
+    <nav id="nav"></nav>
+  </div>
+  <div class="right">
+    <a class="chip" id="mainOsChip" href="#">🐙 main OS</a>
+    <span id="status" class="chip">…</span>
+    <button id="lockChip" class="chip" data-act="toggleLock" title="Lock / unlock the layout">🔓</button>
+    <button class="chip" data-act="goSettings" title="Comfort + settings">⚙️</button>
+  </div>
+</div>
+<main><div id="view"></div></main>
+<div id="modal"></div>
+<div id="toast"></div>
+<div id="stickyLayer"></div>
+<button id="addStickyBtn" data-act="addSticky" title="New sticky note">🗒️+</button>
+<input type="file" id="mbFile" accept="image/*" multiple style="display:none" />
+<input type="file" id="galFile" accept="image/*" multiple style="display:none" />
+<input type="file" id="pfpFile" accept="image/*" style="display:none" />
+<input type="file" id="sheetPfpFile" accept="image/*" style="display:none" />
+<input type="file" id="sheetBannerFile" accept="image/*" style="display:none" />
+<input type="file" id="dgFile" accept="image/*" style="display:none" />
+<input type="file" id="dgMultiFile" accept="image/*" multiple style="display:none" />
+
+<script>
+"use strict";
+/* ===================== CONFIG ===================== */
+const CONFIG = {
+  url: "https://clpfyxlenotepuceczbh.supabase.co",
+  anonKey: "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2",
+  userId: "eggie",
+  readOnly: false,
+  mainOs: "https://eggieweggievt.github.io/Eggie-Personal-OS/",
+  creator: { name:"Eggie", emoji:"🦄" },
+};
+/* ===================== SUPABASE / DEMO ===================== */
+let DEMO = !CONFIG.url || !CONFIG.anonKey || CONFIG.anonKey.includes("YOUR");
+/* if the supabase-js CDN script didn't load (ad-blocker, offline, flaky network),
+   fall back to demo data instead of crashing with a null client */
+if(!DEMO && !window.supabase){ DEMO=true; console.warn("supabase-js didn't load — running on demo data. Check ad-blockers / network, then refresh."); setTimeout(()=>{ try{ toast("Couldn't reach the cloud — showing demo data. Refresh to retry 🌸"); }catch(e){} }, 800); }
+let RO = CONFIG.readOnly || DEMO;
+const SB = (!DEMO && window.supabase) ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
+const UID = CONFIG.userId;
+const TODAY = new Date().toLocaleDateString("en-CA");
+/* OC Hub's OWN storage row. The main OS reads/writes "2000-01-01" as a whole blob,
+   so sharing it meant a stale Eggie-OS tab could overwrite OC data (it did, once).
+   "2000-01-02" belongs to this hub alone — the two apps can never clobber each other again. */
+const SENTINEL = "2000-01-02";
+const SHARED_SENTINEL = "2000-01-01";
+const OC_KEYS = ["ocs","ocLore","ocShips","ocArcs","ocIdeas","ocInspo","ocRpInfo","ocJournals","ocDesigns","ocStickies","ocLayouts","ocAppConfig"];
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(36).slice(2));
+
+/* ===================== CONSTANTS ===================== */
+const ARC_STAGES=[["spark","🍬 Spark"],["outline","🍡 Outline"],["drafting","🧁 Drafting"],["revising","🍭 Revising"],["done","🍰 Done"]];
+const SHIP_TYPES=["romance","friends","rivals","family","found family","enemies","mentor","complicated"];
+const STAT_KEYS=[["str","STR"],["dex","DEX"],["con","CON"],["int","INT"],["wis","WIS"],["cha","CHA"]];
+const ESO_KEYS=[["sign","Sign"],["card","Tarot card"],["gem","Gem"],["element","Element"],["tn","TN"],["god","God"]];
+const RP_STATUS={open:["RP Open","pill-mint"],closed:["RP Closed","pill-gray"],payment:["Payment Plan","pill-peach"]};
+const stars=v=>{v=Math.max(0,Math.min(5,Number(v)||0));return "★".repeat(v)+"☆".repeat(5-v);};
+const rpPill=o=>{const r=RP_STATUS[o&&o.rpStatus];return r?`<span class="pill ${r[1]}">${r[0]}</span>`:"";};
+const IDEA_TINTS=["#fff3b0","#ffd6e8","#d6f5e9","#e0d6fb","#d4e6fb"];
+const STICKY_COLS=["#fff3b0","#ffd6e8","#d6f5e9","#e0d6fb","#d4e6fb"];
+
+/* ===================== DEMO STORE ===================== */
+const demo = { days:{} };
+demo.days[SENTINEL] = {
+  ocs:[
+    { id:"oc1", name:"Peppermint", emoji:"🦄", pronouns:"she/her", species:"candy unicorn", role:"protagonist",
+      palette:["#f9b8d8","#bcd9f7","#cdbdf2","#f7e6b0"],
+      summary:"A pastel patissier unicorn who bakes feelings into cakes. Sweet on the outside, surprisingly stubborn underneath the frosting.",
+      voice:"Soft-spoken, lots of food metaphors, says \"oh crumbs\" when flustered.",
+      quote:"every feeling deserves frosting", adjectives:["soft","stubborn","sweet"], rpStatus:"open", banner:"design_03.png",
+      nickname:"Pep", gender:"unicorn girl", origin:"the Sugarveil Market", age:"looks 19, is actually a century-old sourdough starter of a soul", birthday:"March 3", zodiac:"Pisces", height:"5'2\" (horn adds 4 inches)", orientation:"demiromantic", occupation:"patissier at the Sugarveil Market", alignment:"chaotic cozy",
+      stats:{str:2,dex:3,con:2,int:3,wis:2,cha:5},
+      esoterica:{sign:"Pisces",card:"The Star",gem:"rose quartz",element:"sugar (honorary)",tn:"",god:"the Oven Eternal"},
+      personality:"Leads with kindness, digs in hooves when told something can't be done. Hums while she works. Goes quiet when hurt instead of saying so — the frosting gets very precise on those days.",
+      favorites:["strawberry shortcake","thunderstorm baking","her chipped mixing bowl"],
+      likes:["rainy mornings","perfect meringue peaks","tiny spoons"], dislikes:["fondant (controversial)","loud kitchens","being rushed"],
+      fears:"an oven that never preheats", strengths:"infinite patience with dough, none with rudeness", flaws:"cannot say no to a custom order", abilities:"feelings-infused baking · sugar-crystal magic",
+      voiceClaim:"(add an Actor — Role here)", aesthetic:"pastel bakery-core", themeSong:"", playlist:"",
+      backstory:"Hatched from a sugar-crystal geode under the Sugarveil Market. Raised by the night-shift bakers; learned that a perfect bake can hold a feeling the way a jar holds jam.",
+      designNotes:"horn always pink→lilac gradient · heart pupils · cream sock markings on all four legs",
+      adopt:{ designer:"(original artist)", designerUrl:"", from:"adopt auction", date:"2026-01-01", method:"purchase", price:"$—", terms:"resale ≤ paid + commissioned art value" },
+      trivia:[{id:"tv1",text:"her horn fizzes like sherbet when she lies",date:"2026-05-01"}], gallery:[], ownLog:[{id:"ol1",text:"adopted! receipt screenshot saved",date:"2026-01-01"}],
+      tags:["sweet","magical","baker"], refs:[ {id:"r1",type:"swatch",color:"#f9b8d8",x:24,y:24,w:92,h:92}, {id:"r2",type:"note",text:"heart-shaped pupils when she sees a perfect bake 🍰",x:140,y:40,w:180,h:110} ], created_at:"2026-01-01" },
+    { id:"oc2", name:"Mochi", emoji:"🌊", pronouns:"they/them", species:"sea-witch axolotl", role:"deuteragonist",
+      palette:["#a8d8e8","#e8b8d8","#f0e0c0","#c0b0e0"],
+      summary:"A sleepy tidepool witch who trades secrets for snacks. Knows everyone's business; tells no one (for free).",
+      voice:"Slow, drifting sentences… trails off a lot… surprisingly sharp when it counts.",
+      tags:["witchy","cozy","mysterious"], refs:[], created_at:"2026-01-02" },
+    { id:"oc3", name:"Juniper", emoji:"🌿", pronouns:"he/him", species:"forest spirit", role:"rival",
+      palette:["#b8d8b0","#e8d8a8","#a89888","#d8b8c8"],
+      summary:"A grumpy old-growth spirit stuck in a sapling's body. Hates noise, loves Peppermint's lemon scones (won't admit it).",
+      voice:"Short, dry sentences. Calls everyone 'seedling'.",
+      tags:["grumpy","nature","tsundere"], refs:[], created_at:"2026-01-03" },
+  ],
+  ocLore:[
+    { id:"l1", title:"The Sugarveil Market", tags:["setting"], linkedOcIds:["oc1","oc2"], body:"A floating night market that only appears when the tide and the moon agree. Peppermint runs a stall; Mochi 'inspects' the snacks." },
+    { id:"l2", title:"Why unicorn magic tastes like mint", tags:["magic","worldbuilding"], linkedOcIds:["oc1"], body:"Unicorn mana crystallises as sugar. Overuse it and everything you touch turns sticky for a day." },
+  ],
+  ocShips:[ { id:"sh1", aId:"oc1", bId:"oc3", type:"rivals", trust:3, notes:"Bake-off rivalry that is absolutely a slow burn." } ],
+  ocArcs:[
+    { id:"a1", title:"The Great Sugarveil Bake-Off", stage:"drafting", ocIds:["oc1","oc3"], beats:[ {id:"b1",text:"Pep enters on a dare",done:true}, {id:"b2",text:"Juniper enters out of spite",done:true}, {id:"b3",text:"The oven catastrophe",done:false} ] },
+    { id:"a2", title:"Mochi's tide-debt", stage:"spark", ocIds:["oc2"], beats:[] },
+  ],
+  ocIdeas:[ {id:"i1",text:"Pep's horn glows when she lies — she is a terrible liar",added:"2026-06-01"}, {id:"i2",text:"scene: rainy day at the stall, juniper 'happens' to walk by",added:"2026-06-02"} ],
+  ocInspo:[ {id:"v1",url:"https://coolors.co/",note:"palette tool",done:false,added:"2026-06-01"} ],
+  ocRpInfo:{ body:"Semi-literate to literate · replies within a few days · fade-to-black only · no permanent character death without discussion 💗", starters:"bakery meet-cutes · rivals stuck sharing one umbrella · found-family road trips" },
+  ocJournals:[ {id:"j1",date:"2026-06-01",title:"Pep finally yelled at someone",ocIds:["oc1"],body:"RP recap: she defended Juniper's scones to a rude customer and then was embarrassed about it for three in-game days. Growth!"} ],
+  ocDesigns:[ {id:"d1",name:"moth librarian (unnamed)",status:"keep",designer:"@somebody",price:"$25",imgs:[],notes:"bought on impulse, zero regrets. needs a name and a tragic backstory."} ],
+  ocStickies:[], ocLayouts:{},
+};
+
+/* ===================== DATA LAYER (cache = no reload flicker) ===================== */
+const DB = {
+  _c:{},
+  bust(){ this._c={}; },
+  async daily(date){ if(DEMO||!SB) return demo.days[date]||{}; const k="d"+date;
+    if(this._c[k]) return this._c[k];
+    const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle();
+    let n={}; try{ n=data&&data.notes?JSON.parse(data.notes):{}; }catch(e){}
+    return this._c[k]=n; },
+  async saveDaily(date,fn){ if(RO&&DEMO){ const cur=demo.days[date]||{}; demo.days[date]=fn({...cur}); return demo.days[date]; }
+    if(RO) return;
+    const cur=await this.daily(date); const next=fn({...cur});
+    this._c["d"+date]=next;            // optimistic: cache first → re-render is instant
+    await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),
+      updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
+    if(date===SENTINEL){ try{ localStorage.setItem("oc-backup",JSON.stringify({t:Date.now(),data:next})); }catch(e){} }   // auto-backup on this device, every save
+    return next; },
+};
+/* every OC-hub mutation goes through here — all data lives on oc-prefixed sentinel keys */
+async function ocMut(key,fn){ const next=await DB.saveDaily(SENTINEL,n=>({...n,[key]:fn(n[key]||[])})); SENT=next||SENT; }
+async function ocSet(key,val){ const next=await DB.saveDaily(SENTINEL,n=>({...n,[key]:val})); SENT=next||SENT; }
+function mergeCfg(o){ if(!o)return; if(o.mainOs)CONFIG.mainOs=o.mainOs; if(o.creator)Object.assign(CONFIG.creator,o.creator); }
+
+/* ===================== STATE + ROUTER ===================== */
+const ICO=f=>`<img class="ti" src="${f}" alt="">`;
+const TABS=[["home","🏠 Home"],["chars",ICO("7330-member.png")+"Characters"],["gallery",ICO("35911-pinkbow.png")+"Gallery"],["lore",ICO("463880-pinkemojistaff.png")+"Lore"],["arcs",ICO("29335-pinkemojistaff.png")+"Story arcs"],["ships",ICO("674881-pinkletterwings.png")+"Ships"],["ideas",ICO("940895-pinkemojistaff.png")+"Ideas"],["rp",ICO("4901_roleplay.png")+"RP Info"],["journal",ICO("794527-pinkemojistaff.png")+"Journals"],["designs",ICO("489178-pinkemojistaff.png")+"My Designs"],["settings","⚙️ Settings"]];
+const state={ tab:"home", selOC:null, charQ:"", loreQ:"" };
+let SENT={}, STICKIES=[];
+function setTab(t){ state.tab=t; if(t!=="chars"){state.selOC=null;state.editOC=null;} render(); }
+function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
+function applySettings(){
+  try{
+    document.body.classList.toggle("calm",localStorage.getItem("oc-calm")==="1");
+    document.body.classList.toggle("text-lg",localStorage.getItem("oc-text")==="1");
+    const locked=localStorage.getItem("oc-layout-locked")==="1";
+    document.body.classList.toggle("locked",locked);
+    const lc=document.getElementById("lockChip"); if(lc){ lc.textContent=locked?"🔒":"🔓"; lc.className="chip"+(locked?" on":""); }
+  }catch(e){}
+}
+/* nav (tab order persists per device) */
+function renderNav(){
+  let order=TABS.map(t=>t[0]);
+  try{ const saved=JSON.parse(localStorage.getItem("oc-tab-order")||"null"); if(saved&&saved.length){ order=saved.filter(k=>TABS.some(t=>t[0]===k)); TABS.forEach(t=>{if(!order.includes(t[0]))order.push(t[0]);}); } }catch(e){}
+  const map=Object.fromEntries(TABS);
+  document.getElementById("nav").innerHTML=order.map(k=>`<button class="tab ${state.tab===k?'active':''}" data-act="tab" data-tab="${k}">${map[k]}</button>`).join("");
+}
+/* ===================== RENDER LOOP (single innerHTML swap) ===================== */
+async function render(){
+  renderNav();
+  const st=document.getElementById("status"); if(st){ st.textContent=DEMO?"demo":"● live"; st.className="chip "+(DEMO?"demo":"on"); }
+  const mc=document.getElementById("mainOsChip"); if(mc)mc.href=CONFIG.mainOs;
+  const view=document.getElementById("view");
+  const tabChanged=state._animTab!==state.tab;
+  if(!tabChanged) view.classList.remove("view-enter");
+  const sy=window.scrollY;
+  if(!view.innerHTML) view.innerHTML=`<div class="label">loading…</div>`;
+  try{
+    SENT=await DB.daily(SENTINEL);
+    mergeCfg(SENT.ocAppConfig); STICKIES=SENT.ocStickies||[];
+    let html;
+    if(state.tab==="home") html=renderHome();
+    else if(state.tab==="chars") html=state.editOC?renderCharSheet():(state.selOC?renderCharDetail():renderChars());
+    else if(state.tab==="gallery") html=renderGalleryTab();
+    else if(state.tab==="rp") html=renderRpInfo();
+    else if(state.tab==="journal") html=renderJournals();
+    else if(state.tab==="designs") html=renderDesigns();
+    else if(state.tab==="lore") html=renderLore();
+    else if(state.tab==="arcs") html=renderArcs();
+    else if(state.tab==="ships") html=renderShips();
+    else if(state.tab==="ideas") html=renderIdeas();
+    else if(state.tab==="settings") html=renderSettings();
+    view.innerHTML=html;                          // ONE swap — never partial DOM surgery
+    postRender(); renderStickies();
+    if(tabChanged){ animateView(); state._animTab=state.tab; }
+    else window.scrollTo(0,sy);                   // keep place on toggles/edits
+  }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🦄</h3><p class="soft">${esc(e.message)}</p></div>`; }
+}
+function postRender(){
+  if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); }
+  /* live-search inputs get replaced by the innerHTML swap — give the keyboard back */
+  if(state._refocus){ const el=document.getElementById(state._refocus); if(el){ el.focus(); try{el.setSelectionRange(el.value.length,el.value.length);}catch(e){} } state._refocus=null; }
+}
+addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
+
+/* ===================== HELPERS ===================== */
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function toast(msg){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span></div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
+function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening";}
+function seedPick(list,seed){ let h=0; for(let i=0;i<seed.length;i++)h=(h*31+seed.charCodeAt(i))>>>0; return list.length?list[h%list.length]:null; }
+function ocById(id){ return (SENT.ocs||[]).find(o=>o.id===id); }
+function ocGrad(o){ const p=(o&&o.palette&&o.palette.length)?o.palette:["#f49fc6","#a795e6"]; return `linear-gradient(135deg,${p[0]},${p[1]||p[0]})`; }
+/* avatar: real profile picture when set, palette-gradient emoji otherwise */
+function avaHTML(o,size,fs){ const st=`width:${size}px;height:${size}px;font-size:${fs}px;`;
+  if(o&&o.pfp) return `<span class="oc-ava" style="${st}background:url('${esc(o.pfp)}') center/cover no-repeat #fdf6fb"></span>`;
+  return `<span class="oc-ava" style="${st}background:${ocGrad(o)}">${o?(o.emoji||"🎭"):"?"}</span>`; }
+function ocChip(id){ const o=ocById(id); return o?`<span class="pill pill-lav" title="${esc(o.name)}">${o.emoji||"🎭"} ${esc(o.name)}</span>`:""; }
+function shipPill(t){ return {romance:"pill-pink",friends:"pill-mint",rivals:"pill-peach",family:"pill-blue","found family":"pill-blue",enemies:"pill-gray",mentor:"pill-lav",complicated:"pill-lav"}[t]||"pill-gray"; }
+function closeModal(){ document.getElementById("modal").innerHTML=""; }
+
+/* ===================== MODULAR PAGE ENGINE (ported) ===================== */
+function layoutFor(tab){ const L=(SENT.ocLayouts&&SENT.ocLayouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
+function modularPage(tab, labels, items, defCols){
+  const L=layoutFor(tab), map=Object.fromEntries(items);
+  let order=L.order.length?L.order.filter(k=>map[k]!=null):[];
+  items.forEach(it=>{ if(!order.includes(it[0]))order.push(it[0]); });
+  const sz=k=>{ const r=L.size[k]; return (typeof r==="number")?{c:r}:(r||{}); };
+  const dc=k=>{ if(defCols&&typeof defCols==="object") return defCols[k]||defCols._||6; return defCols||(items.length<=2?12:6); };
+  const cells=order.filter(k=>!L.hidden[k]).map(k=>{ const s=sz(k), cols=Math.max(3,s.c||dc(k)), min=!!L.min[k];
+    return `<div class="home-widget ${min?'min':''}" data-w="${k}" data-h="${s.h||''}" data-c="${cols}" style="grid-column:span ${cols}">
+      <div class="home-tools"><button class="home-grip" title="drag to move">⠿</button><button data-act="homeMin" data-w="${k}" title="${min?'expand':'minimize'}">${min?'＋':'–'}</button><button data-act="homeHide" data-w="${k}" title="remove">✕</button></div>
+      <span class="home-resize" title="drag to resize ⤡">⤡</span>${map[k]}</div>`; }).join("");
+  const hiddenN=Object.keys(L.hidden).filter(k=>L.hidden[k]&&map[k]).length;
+  return `<div class="grid-modular" data-tab="${tab}" data-labels="${esc(JSON.stringify(labels))}">${cells}<button class="home-add" data-act="manageCards">＋ cards${hiddenN?` · ${hiddenN} hidden`:""}</button></div>`;
+}
+/* JS masonry: pack each widget's row-span to its content so there are no gaps */
+function layoutHome(){
+  const grid=document.querySelector(".grid-modular"); if(!grid)return;
+  const rowH=8, gap=16;
+  const colCount=(((getComputedStyle(grid).gridTemplateColumns)||"").match(/\S+/g)||[]).length||1;
+  grid.querySelectorAll(".home-widget").forEach(w=>{
+    if(w.classList.contains("resizing"))return;
+    const want=parseInt(w.dataset.c||"0")||colCount;
+    let span=Math.max(1,Math.min(want,colCount));
+    if(colCount<=9 && span>colCount/2) span=colCount;   // iPad-portrait centering fix — keep
+    const cur=/span (\d+)/.exec(w.style.gridColumn||"");
+    if(!cur||+cur[1]!==span) w.style.gridColumn="span "+span;
+  });
+  grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return;
+    let h;
+    if(w.classList.contains("min")){ h=50; }
+    else { const sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; h=panel.getBoundingClientRect().height; }
+    if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));
+  });
+}
+async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.ocLayouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,ocLayouts:layouts}; }); SENT=await DB.daily(SENTINEL); }
+const WLABEL={spotlight:"Character spotlight",cast:"The cast",ideas:"Plot bunnies",arcs:"Story arcs",lore:"Recent lore",ships:"Ships",quick:"Quick add"};
+let _mcTab="home", _mcLabels=WLABEL;
+function manageCardsModal(tab, labels){
+  _mcTab=tab||"home"; _mcLabels=labels||WLABEL; const L=layoutFor(_mcTab), hidden=L.hidden||{};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🧩 Cards on this page</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 6px">Toggle which cards show here. You can also minimize, move or resize them right on the page. 🌸</p>
+    ${Object.keys(_mcLabels).map(k=>`<button class="hbtn ${hidden[k]?'':'done'}" data-act="cardToggle" data-w="${k}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:6px"><span class="check ${hidden[k]?'':'on'}"></span><span class="grow" style="font-size:12.5px;text-align:left">${esc(_mcLabels[k])}</span></button>`).join("")}
+  </div></div>`;
+}
+
+/* ===================== HOME ===================== */
+function renderHome(){
+  const ocs=SENT.ocs||[], ideas=SENT.ocIdeas||[], arcs=SENT.ocArcs||[], lore=SENT.ocLore||[], ships=SENT.ocShips||[];
+  const W={};
+  /* spotlight: a different character each day */
+  const spot=seedPick(ocs,TODAY);
+  W.spotlight=spot?`<section class="panel"><div class="card-head"><span class="label">🍰 Today's sweetheart</span><button class="btn" data-act="openOC" data-id="${spot.id}">open</button></div>
+    <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      ${avaHTML(spot,72,36)}
+      <div class="grow" style="min-width:200px">
+        <h2 style="font-size:20px">${esc(spot.name)}</h2>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0 8px"><span class="pill pill-blue">${esc(spot.species||"?")}</span><span class="pill pill-lav">${esc(spot.pronouns||"")}</span>${spot.role?`<span class="pill pill-pink">${esc(spot.role)}</span>`:""}</div>
+        <p class="soft" style="font-size:12.5px;margin:0">${esc(spot.summary||"No summary yet — open them and give them a story 🌸")}</p>
+        <div class="oc-dots" style="margin-top:8px">${(spot.palette||[]).map(c=>`<span style="background:${esc(c)}" title="${esc(c)}"></span>`).join("")}</div>
+      </div>
+    </div></section>`:`<section class="panel"><div class="card-head"><span class="label">✨ Character spotlight</span></div><p class="soft" style="font-size:12.5px;margin:0">No characters yet — add your first one in 🎭 Characters 🦄</p></section>`;
+  W.cast=`<section class="panel"><div class="card-head"><span class="label">🎭 The cast</span><span class="pill pill-lav">${ocs.length}</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${ocs.map(o=>`<button title="${esc(o.name)}" data-act="openOC" data-id="${o.id}" style="border:none;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:3px;width:58px">${avaHTML(o,50,25)}<span style="font-size:10.5px;color:var(--ink-soft);max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.name)}</span></button>`).join("")||`<span class="soft" style="font-size:12.5px">empty stage 🌙</span>`}</div>
+    <button class="btn" data-act="goTab" data-tab="chars" style="margin-top:10px">open gallery</button></section>`;
+  W.ideas=`<section class="panel"><div class="card-head"><span class="label">💡 Plot bunnies</span><span class="pill pill-peach">${ideas.length}</span></div>
+    ${ideas.slice(-4).reverse().map(i=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(i.text)}</span></div>`).join("")||`<div class="soft" style="font-size:12.5px">no ideas parked yet — they multiply, you'll see 🐰</div>`}
+    <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="homeIdea" placeholder="park a plot bunny…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="homeIdeaAdd" ${RO?"disabled":""}>+</button></div></section>`;
+  const inFlight=arcs.filter(a=>a.stage!=="done");
+  W.arcs=`<section class="panel"><div class="card-head"><span class="label">📚 Story arcs</span><button class="btn" data-act="goTab" data-tab="arcs">open board</button></div>
+    ${ARC_STAGES.map(([k,l])=>{const n=arcs.filter(a=>a.stage===k).length;const max=Math.max(1,...ARC_STAGES.map(([k2])=>arcs.filter(a=>a.stage===k2).length));return `<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span style="width:86px;font-size:11.5px" class="soft">${l}</span><div class="bar grow"><span style="width:${(n/max)*100}%"></span></div><span class="label num">${n}</span></div>`;}).join("")}
+    ${inFlight.length?`<div class="soft-card" style="margin-top:8px;font-size:12.5px">✍️ in flight: ${inFlight.slice(0,2).map(a=>esc(a.title)).join(" · ")}${inFlight.length>2?` +${inFlight.length-2}`:""}</div>`:""}</section>`;
+  W.lore=`<section class="panel"><div class="card-head"><span class="label">📖 Recent lore</span><button class="btn" data-act="goTab" data-tab="lore">open</button></div>
+    ${lore.slice(-3).reverse().map(l=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><div style="font-size:13px;font-weight:600">${esc(l.title)}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${(l.linkedOcIds||[]).map(ocChip).join("")}</div></div>`).join("")||`<div class="soft" style="font-size:12.5px">the world is unwritten 🌍</div>`}</section>`;
+  W.ships=`<section class="panel"><div class="card-head"><span class="label">💞 Ships</span><button class="btn" data-act="goTab" data-tab="ships">open</button></div>
+    ${ships.slice(-3).reverse().map(s=>{const a=ocById(s.aId),b=ocById(s.bId);return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span style="font-size:13px">${a?esc(a.name):"?"} 💞 ${b?esc(b.name):"?"}</span><span class="pill ${shipPill(s.type)}">${esc(s.type)}</span></div>`;}).join("")||`<div class="soft" style="font-size:12.5px">no ships sailing yet ⛵</div>`}</section>`;
+  W.quick=`<section class="panel"><div class="card-head"><span class="label">⚡ Quick add</span><img class="deco" src="7052-kawaiikittywand.gif" alt=""/></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="addOC" ${RO?"disabled":""}>🎭 character</button><button class="btn" data-act="loreNew" ${RO?"disabled":""}>📖 lore</button><button class="btn" data-act="shipNew" ${RO?"disabled":""}>💞 ship</button><button class="btn" data-act="goTab" data-tab="arcs">📚 arc</button></div>
+    <p class="soft" style="font-size:11.5px;margin:10px 0 0">${greeting()}, ${esc(CONFIG.creator.name)} ${CONFIG.creator.emoji} — your little worlds are safe here, sweet as syrup 🍬</p></section>`;
+  const DEF=["spotlight","cast","ideas","arcs","lore","ships","quick"];
+  return modularPage("home", WLABEL, DEF.map(k=>[k,W[k]]), {spotlight:8,cast:4,ideas:4,arcs:8,lore:4,ships:4,quick:4,_:4});
+}
+/* ===================== CHARACTERS ===================== */
+function renderChars(){
+  const q=(state.charQ||"").toLowerCase();
+  const ocs=(SENT.ocs||[]).filter(o=>!q||(o.name+" "+(o.species||"")+" "+(o.tags||[]).join(" ")).toLowerCase().includes(q));
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px">🎭 Characters</h2><button class="btn btn-pink" data-act="addOC" ${RO?"disabled":""}>＋ new character</button></div>
+      <input class="inp" id="charSearch" placeholder="search name, species, tags…" value="${esc(state.charQ||"")}" /></div>
+    <div class="oc-grid">${ocs.map(o=>`<div class="oc-card" data-act="openOC" data-id="${o.id}">
+      ${(o.banner||o.pfp)?`<div class="oc-banner" style="background-image:url('${esc(o.banner||o.pfp)}')"></div>`:""}
+      <div style="display:flex;gap:10px;align-items:center">${avaHTML(o,54,27)}
+        <div><div style="font-family:var(--display);font-size:16px">${esc(o.name)}</div><div class="label" style="margin-top:1px">${esc(o.species||"")}${o.pronouns?` · ${esc(o.pronouns)}`:""}</div></div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${rpPill(o)}${o.role?`<span class="pill pill-pink">${esc(o.role)}</span>`:""}</div>
+      <p class="soft" style="font-size:12px;margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(o.summary||"")}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:auto">
+        <div class="oc-dots">${(o.palette||[]).slice(0,5).map(c=>`<span style="background:${esc(c)}"></span>`).join("")}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${(o.tags||[]).slice(0,3).map(t=>`<span class="pill pill-gray">${esc(t)}</span>`).join("")}</div>
+      </div></div>`).join("")||`<div class="panel" style="grid-column:1/-1"><p class="soft" style="font-size:13px;margin:0">No characters${q?" match that search":" yet"} — every cast starts with one 🌱</p></div>`}</div>
+  </div>`;
+}
+function renderCharDetail(){
+  const o=ocById(state.selOC);
+  if(!o){ state.selOC=null; return renderChars(); }
+  const lore=(SENT.ocLore||[]).filter(l=>(l.linkedOcIds||[]).includes(o.id));
+  const ships=(SENT.ocShips||[]).filter(s=>s.aId===o.id||s.bId===o.id);
+  const arcs=(SENT.ocArcs||[]).filter(a=>(a.ocIds||[]).includes(o.id));
+  const ad=o.adopt||{};
+  const fact=(k,v)=>v?`<div class="fact-row"><b>${k}</b><span>${esc(v)}</span></div>`:"";
+  const chips=(arr,cls)=>(arr||[]).map(t=>`<span class="pill ${cls}" style="margin:2px">${esc(t)}</span>`).join("");
+  const link=(u,txt)=>u?`<a href="${esc(u)}" target="_blank" rel="noopener" style="font-size:12.5px">${esc(txt||u)}</a>`:"";
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel">
+      <div class="oc-hero">
+        <div class="oc-hero-banner" style="${o.banner?`background-image:url('${esc(o.banner)}')`:`background:${ocGrad(o)}`}"></div>
+        <div class="oc-hero-ava">${avaHTML(o,92,46)}</div>
+      </div>
+      <div class="oc-hero-body">
+        <div class="card-head" style="align-items:flex-start">
+          <div><h2 style="font-size:24px">${esc(o.name)}</h2>
+            ${(o.adjectives&&o.adjectives.length)?`<div class="label" style="margin-top:2px;color:var(--lav-deep)">✦ ${o.adjectives.map(esc).join(" ✦ ")} ✦</div>`:""}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">${rpPill(o)}<span class="pill pill-blue">${esc(o.species||"?")}</span><span class="pill pill-lav">${esc(o.pronouns||"")}</span>${o.role?`<span class="pill pill-pink">${esc(o.role)}</span>`:""}${(o.tags||[]).map(t=>`<span class="pill pill-gray">${esc(t)}</span>`).join("")}</div>
+            ${o.quote?`<div class="oc-quote">“${esc(o.quote)}”</div>`:""}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="backToChars">← back</button><button class="btn" data-act="editOC" data-id="${o.id}" ${RO?"disabled":""}>✏️ open sheet</button><button class="btn" data-act="delOC" data-id="${o.id}" ${RO?"disabled":""}>🗑</button></div>
+        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="soft-card"><div class="label">🌸 Summary</div><p class="soft" style="font-size:13px;margin:5px 0 0;white-space:pre-wrap">${esc(o.summary||"—")}</p></div>
+        <div class="soft-card"><div class="label">🗣️ Voice</div><p class="soft" style="font-size:13px;margin:5px 0 0;white-space:pre-wrap">${esc(o.voice||"—")}</p></div>
+      </div>
+      ${(o.nickname||o.age||o.birthday||o.zodiac||o.gender||o.height||o.origin||o.orientation||o.occupation||o.alignment)?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 18px;margin-top:10px">
+        ${fact("Nickname",o.nickname)}${fact("Age",o.age)}${fact("Birthday",o.birthday)}${fact("Zodiac",o.zodiac)}${fact("Gender",o.gender)}${fact("Height",o.height)}${fact("Origin",o.origin)}${fact("Orientation",o.orientation)}${fact("Occupation",o.occupation)}${fact("Alignment",o.alignment)}</div>`:""}
+      ${o.stats&&STAT_KEYS.some(([k])=>o.stats[k])?`<div class="soft-card" style="margin-top:10px"><div class="label" style="margin-bottom:4px">🎲 Stats</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:2px 16px">${STAT_KEYS.map(([k,l])=>`<div style="display:flex;justify-content:space-between;font-size:13px"><b style="font-size:11px;letter-spacing:.08em;color:var(--muted)">${l}</b><span style="color:var(--pink-deep);letter-spacing:2px">${stars(o.stats[k])}</span></div>`).join("")}</div></div>`:""}
+      ${(o.palette&&o.palette.length)?`<div class="label" style="margin:12px 0 6px">🎨 Palette · tap to copy</div><div class="oc-sw">${o.palette.map(c=>`<button style="background:${esc(c)}" data-act="copyText" data-t="${esc(c)}">${esc(c)}</button>`).join("")}</div>`:""}
+      </div>
+    </div>
+    <details class="acc" open><summary>💗 Personality</summary><div class="acc-body">
+      ${o.personality?`<p class="soft" style="font-size:13px;line-height:1.65;white-space:pre-wrap;margin:0 0 10px">${esc(o.personality)}</p>`:""}
+      ${(o.favorites&&o.favorites.length)?`<div class="label" style="margin-bottom:4px">Favorites</div><div>${chips(o.favorites,"pill-pink")}</div>`:""}
+      ${(o.likes&&o.likes.length)?`<div class="label" style="margin:8px 0 4px">Likes</div><div>${chips(o.likes,"pill-mint")}</div>`:""}
+      ${(o.dislikes&&o.dislikes.length)?`<div class="label" style="margin:8px 0 4px">Dislikes</div><div>${chips(o.dislikes,"pill-peach")}</div>`:""}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 18px;margin-top:8px">
+        ${fact("Fears",o.fears)}${fact("Strengths",o.strengths)}${fact("Flaws",o.flaws)}${fact("Abilities",o.abilities)}</div>
+      ${(!o.likes||!o.likes.length)&&(!o.dislikes||!o.dislikes.length)&&!o.fears&&!o.strengths&&!o.flaws&&!o.abilities?`<p class="soft" style="font-size:12.5px;margin:0">Nothing here yet — hit ✏️ edit and fill in their heart 💗</p>`:""}
+    </div></details>
+    <details class="acc"><summary><span><img class="ti" src="4901_roleplay.png" alt=""> Vibes — voice, music, aesthetic</span></summary><div class="acc-body">
+      ${fact("Voice claim",o.voiceClaim)}
+      ${o.themeSong?`<div class="fact-row"><b>Theme song</b>${link(o.themeSong,"🎵 listen")}</div>`:""}
+      ${o.playlist?`<div class="fact-row"><b>Playlist</b>${link(o.playlist,"🎧 open playlist")}</div>`:""}
+      ${fact("Aesthetic",o.aesthetic)}
+      ${o.esoterica&&ESO_KEYS.some(([k])=>o.esoterica[k])?`<div class="label" style="margin:10px 0 4px">🔮 Esoterica</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 18px">${ESO_KEYS.map(([k,l])=>o.esoterica[k]?`<div class="fact-row"><b>${l}</b><span>${esc(o.esoterica[k])}</span></div>`:"").join("")}</div>`:""}
+      ${!o.voiceClaim&&!o.themeSong&&!o.playlist&&!o.aesthetic&&!(o.esoterica&&ESO_KEYS.some(([k])=>o.esoterica[k]))?`<p class="soft" style="font-size:12.5px;margin:0">No vibes set — add a voice claim, theme song, playlist or esoterica via ✏️ edit 🎶</p>`:""}
+    </div></details>
+    <details class="acc"><summary>📖 Story & trivia</summary><div class="acc-body">
+      ${o.backstory?`<div class="label" style="margin-bottom:4px">Backstory</div><p class="soft" style="font-size:13px;line-height:1.65;white-space:pre-wrap;margin:0 0 10px">${esc(o.backstory)}</p>`:""}
+      <div class="label" style="margin-bottom:4px">✨ Trivia & headcanons</div>
+      ${(o.trivia||[]).slice().reverse().map(t=>`<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line)"><span class="label num" style="flex:0 0 76px">${esc(t.date||"")}</span><span class="grow" style="font-size:12.5px">${esc(t.text)}</span><button class="btn" style="padding:2px 8px" data-act="triviaDel" data-id="${t.id}" ${RO?"disabled":""}>✕</button></div>`).join("")||`<p class="soft" style="font-size:12px;margin:0 0 6px">characters grow one little fact at a time 🌱</p>`}
+      <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="triviaText" placeholder="a tiny new fact about them…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="triviaAdd" ${RO?"disabled":""}>＋</button></div>
+    </div></details>
+    <details class="acc"><summary>👑 Adopt credits & ownership</summary><div class="acc-body">
+      ${ad.designer?`<div class="soft-card" style="margin-bottom:8px">🎨 <b>Designed by ${ad.designerUrl?`<a href="${esc(ad.designerUrl)}" target="_blank" rel="noopener">${esc(ad.designer)}</a>`:esc(ad.designer)}</b> — always credit the designer when posting 💗</div>`:`<p class="soft" style="font-size:12.5px;margin:0 0 8px">No designer credit yet — for adopts, add the original artist via ✏️ edit 🎨</p>`}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 18px">
+        ${fact("Obtained from",ad.from)}${fact("Obtained on",ad.date)}${fact("Method",ad.method)}${fact("Price",ad.price)}</div>
+      ${ad.terms?`<div class="label" style="margin:8px 0 4px">Resale / trade terms (designer's TOS)</div><p class="soft" style="font-size:12px;white-space:pre-wrap;margin:0">${esc(ad.terms)}</p>`:""}
+      <div class="label" style="margin:10px 0 4px">📜 Ownership log</div>
+      ${(o.ownLog||[]).slice().reverse().map(t=>`<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line)"><span class="label num" style="flex:0 0 76px">${esc(t.date||"")}</span><span class="grow" style="font-size:12.5px">${esc(t.text)}</span><button class="btn" style="padding:2px 8px" data-act="ownDel" data-id="${t.id}" ${RO?"disabled":""}>✕</button></div>`).join("")||`<p class="soft" style="font-size:12px;margin:0 0 6px">log purchases, transfers and proof notes here 🧾</p>`}
+      <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="ownText" placeholder="e.g. bought from @artist for $40, receipt saved…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="ownAdd" ${RO?"disabled":""}>＋</button></div>
+    </div></details>
+    <div class="panel" id="galPanel"><div class="card-head"><span class="label"><img class="ti" src="35911-pinkbow.png" alt=""> Art gallery · with artist credits · drag images here ✨</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="inp" id="galUrl" placeholder="image URL…" style="width:150px" ${RO?"disabled":""}/>
+        <input class="inp" id="galArtist" placeholder="artist credit" style="width:120px" ${RO?"disabled":""}/>
+        <button class="btn" data-act="galAddUrl" ${RO?"disabled":""}>＋ add</button>
+        <button class="btn" data-act="galUpload" ${RO?"disabled":""}>📷 upload</button>
+      </div></div>
+      <div class="gal-grid">${(o.gallery||[]).slice().reverse().map(g=>`<div class="gal-card">
+        <div class="gal-thumb" data-act="galView" data-oc="${o.id}" data-id="${g.id}" style="background-image:url('${esc(g.url)}')"></div>
+        <div class="gal-body"><span style="font-size:11.5px">🎨 ${esc(g.artist||"unknown artist")}</span><span class="label num">${esc(g.date||"")}</span></div></div>`).join("")||`<p class="soft" style="font-size:12.5px;grid-column:1/-1;margin:0">every piece of art they collect lives here — credit the artist with each one 🖼️</p>`}</div>
+    </div>
+    <div class="panel"><div class="card-head"><span class="label">🖼️ Reference board</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input class="inp" id="mbImgUrl" placeholder="image URL…" style="width:180px" ${RO?"disabled":""}/>
+        <button class="btn" data-act="mbAddImage" ${RO?"disabled":""}>＋ image</button>
+        <button class="btn" data-act="mbUpload" ${RO?"disabled":""}>📷 upload</button>
+        <button class="btn" data-act="mbAddNote" ${RO?"disabled":""}>＋ note</button>
+        <button class="btn" data-act="mbAddColor" ${RO?"disabled":""}>＋ swatch</button>
+        <button class="btn" data-act="mbExport">⬇ PNG</button>
+      </div></div>
+      ${o.designNotes?`<div class="soft-card" style="margin-bottom:10px"><div class="label">📐 Design notes — must-haves for artists</div><p class="soft" style="font-size:12.5px;white-space:pre-wrap;margin:4px 0 0">${esc(o.designNotes)}</p></div>`:""}
+      <div class="mb-board" id="ocBoard">${(o.refs||[]).map(mbCardHTML).join("")}</div>
+      <p class="soft" style="font-size:11px;margin:8px 0 0">drag cards anywhere · drag the ◢ corner to resize · uploads are saved with the character 🌸</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">
+      <div class="panel"><div class="card-head"><span class="label">📖 Lore featuring them</span></div>
+        ${lore.map(l=>`<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">${esc(l.title)}</div>`).join("")||`<div class="soft" style="font-size:12.5px">none yet</div>`}</div>
+      <div class="panel"><div class="card-head"><span class="label">💞 Their ships</span></div>
+        ${ships.map(s=>{const other=ocById(s.aId===o.id?s.bId:s.aId);return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:13px">${other?`${other.emoji||"🎭"} ${esc(other.name)}`:"?"}</span><span class="pill ${shipPill(s.type)}">${esc(s.type)}</span></div>`;}).join("")||`<div class="soft" style="font-size:12.5px">none yet</div>`}</div>
+      <div class="panel"><div class="card-head"><span class="label">📚 Their arcs</span></div>
+        ${arcs.map(a=>{const st=ARC_STAGES.find(s=>s[0]===a.stage);return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:13px">${esc(a.title)}</span><span class="pill pill-lav">${st?st[1]:a.stage}</span></div>`;}).join("")||`<div class="soft" style="font-size:12.5px">none yet</div>`}</div>
+    </div>
+  </div>`;
+}
+/* ===== full-page character sheet editor (D&D-sheet style) ===== */
+let _pend={};   // pending pfp/banner uploads before save
+let _sheetPrefill=null;   // set when a design from 🏷️ My Designs is being promoted
+function renderCharSheet(){
+  const isNew=state.editOC==="new";
+  const o=isNew?(_sheetPrefill||{}):(ocById(state.editOC)||{}); const ad=o.adopt||{};
+  _pend={}; if(o.pfp&&isNew)_pend.pfp=o.pfp;   // carry the design's art into the new character
+  const pal=(o.palette&&o.palette.length?o.palette:["#f49fc6","#9ec5f2","#a795e6","#f0cc88"]).slice(0,4);
+  while(pal.length<4)pal.push("#ffffff");
+  const F=(id2,lbl,val,ph)=>`<div class="grow" style="min-width:130px"><div class="label">${lbl}</div><input class="inp" id="${id2}" value="${esc(val||"")}" placeholder="${esc(ph||"")}" /></div>`;
+  const T=(id2,lbl,val,rows,ph)=>`<div class="label" style="margin-top:8px">${lbl}</div><textarea class="inp" id="${id2}" rows="${rows||2}" placeholder="${esc(ph||"")}">${esc(val||"")}</textarea>`;
+  return `<div class="sheet">
+    <input type="hidden" id="oc_id" value="${esc(o.id||"")}" />
+    <div class="card-head"><h2 style="font-size:21px">${isNew?"🌱 New character sheet":"📜 "+esc(o.name||"Character")+"'s sheet"}</h2>
+      <div style="display:flex;gap:8px"><button class="btn" data-act="sheetCancel">✕ cancel</button><button class="btn btn-pink" data-act="saveOC">💾 save character</button></div></div>
+
+    <div class="sheet-box"><h4>Portrait & banner</h4>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+        <div class="sheet-port" id="sheetPort" data-act="sheetPfp" style="${o.pfp?`background-image:url('${esc(o.pfp)}');border-style:solid;color:transparent`:""}">${o.pfp?"":"📷<br>profile pic<br>(tap to upload)"}</div>
+        <div class="grow" style="min-width:240px"><div class="sheet-banner" id="sheetBan" data-act="sheetBanner" style="${o.banner?`background-image:url('${esc(o.banner)}');border-style:solid;color:transparent`:""}">${o.banner?"":"🖼️ banner (tap to upload — like a Discord profile)"}</div></div>
+      </div>
+      <p class="soft" style="font-size:11px;margin:8px 0 0">you can also open any gallery art later and ⭐ set it as the profile pic or banner</p>
+    </div>
+
+    <div class="sheet-box"><h4>Who they are</h4>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:180px"><div class="label">Name</div><input class="inp" id="oc_name" value="${esc(o.name||"")}" style="font-family:var(--display);font-size:17px" /></div><div style="width:84px"><div class="label">Emoji</div><input class="inp" id="oc_emoji" value="${esc(o.emoji||"")}" placeholder="🦄" /></div><div style="width:160px"><div class="label">RP status</div><select class="inp" id="oc_rpStatus"><option value="">—</option><option value="open" ${o.rpStatus==="open"?"selected":""}>RP Open</option><option value="closed" ${o.rpStatus==="closed"?"selected":""}>RP Closed</option><option value="payment" ${o.rpStatus==="payment"?"selected":""}>Payment Plan</option></select></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${F("oc_species","Species / race",o.species)}${F("oc_pronouns","Pronouns",o.pronouns)}${F("oc_role","Role",o.role,"protagonist…")}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${F("oc_adjectives","Three adjectives",(o.adjectives||[]).join(", "),"soft, stubborn, sweet")}${F("oc_quote","Signature quote",o.quote,"something they'd say")}</div>
+      ${T("oc_summary","About / summary",o.summary,3)}
+      ${T("oc_voice","Voice / how they talk",o.voice,2)}
+      <div class="label" style="margin-top:8px">Tags (comma separated)</div><input class="inp" id="oc_tags" value="${esc((o.tags||[]).join(", "))}" />
+      <div class="label" style="margin-top:8px">Palette</div><div style="display:flex;gap:8px">${pal.map((c,i)=>`<input type="color" id="oc_pal${i}" value="${esc(c)}" style="width:46px;height:38px;border:1px solid var(--line-2);border-radius:10px;background:#fff;padding:2px" />`).join("")}</div>
+    </div>
+
+    <div class="sheet-box"><h4>🎲 Ability scores (0–5)</h4>
+      <div class="sheet-grid" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">${STAT_KEYS.map(([k,l])=>`<div class="stat-box"><span class="label">${l}</span><input id="oc_st_${k}" type="number" min="0" max="5" value="${(o.stats&&o.stats[k])||0}" data-stat="${k}" /><div class="st-stars" id="st_stars_${k}">${stars(o.stats&&o.stats[k])}</div></div>`).join("")}</div>
+    </div>
+
+    <div class="sheet-box"><h4>🪪 Identity</h4>
+      <div class="sheet-grid">${F("oc_nickname","Nickname",o.nickname)}${F("oc_age","Age",o.age)}${F("oc_birthday","Birthday",o.birthday)}${F("oc_gender","Gender",o.gender)}${F("oc_zodiac","Zodiac",o.zodiac)}${F("oc_height","Height",o.height)}${F("oc_origin","Origin",o.origin)}${F("oc_orientation","Orientation",o.orientation)}${F("oc_occupation","Occupation",o.occupation)}${F("oc_alignment","Alignment / MBTI",o.alignment,"chaotic cozy…")}</div>
+    </div>
+
+    <div class="sheet-box"><h4>💗 Personality</h4>
+      ${T("oc_personality","Personality (free-form)",o.personality,4)}
+      <div class="sheet-grid" style="margin-top:8px">
+        <div><div class="label">Favorites (comma separated)</div><input class="inp" id="oc_favorites" value="${esc((o.favorites||[]).join(", "))}" /></div>
+        <div><div class="label">Likes</div><input class="inp" id="oc_likes" value="${esc((o.likes||[]).join(", "))}" /></div>
+        <div><div class="label">Dislikes</div><input class="inp" id="oc_dislikes" value="${esc((o.dislikes||[]).join(", "))}" /></div>
+      </div>
+      <div class="sheet-grid" style="margin-top:8px">${F("oc_fears","Fears",o.fears)}${F("oc_strengths","Strengths",o.strengths)}${F("oc_flaws","Flaws",o.flaws)}${F("oc_abilities","Abilities / powers",o.abilities)}</div>
+    </div>
+
+    <div class="sheet-box"><h4>🔮 Esoterica & vibes</h4>
+      <div class="sheet-grid">${ESO_KEYS.map(([k,l])=>`<div><div class="label">${l}</div><input class="inp" id="oc_eso_${k}" value="${esc((o.esoterica&&o.esoterica[k])||"")}" /></div>`).join("")}</div>
+      <div class="sheet-grid" style="margin-top:8px">${F("oc_voiceClaim","Voice claim",o.voiceClaim,"Actor — Role")}${F("oc_aesthetic","Aesthetic",o.aesthetic)}${F("oc_themeSong","Theme song (link)",o.themeSong,"https://…")}${F("oc_playlist","Playlist (link)",o.playlist,"https://…")}</div>
+    </div>
+
+    <div class="sheet-box"><h4>📖 Story</h4>${T("oc_backstory","Backstory",o.backstory,6)}</div>
+
+    <div class="sheet-box"><h4>🎨 Design & adopt credits</h4>
+      ${T("oc_designNotes","Design notes — must-haves for artists",o.designNotes,3,"e.g. horn always pink→lilac; heart pupils; cream sock markings")}
+      <div class="sheet-grid" style="margin-top:8px">${F("oc_adDesigner","Designed by",ad.designer,"original artist")}${F("oc_adDesignerUrl","Designer link",ad.designerUrl,"https://…")}${F("oc_adFrom","Obtained from",ad.from)}${F("oc_adDate","Obtained on",ad.date,"YYYY-MM-DD")}${F("oc_adMethod","Method",ad.method,"purchase / trade / gift / MYO")}${F("oc_adPrice","Price",ad.price,"$…")}</div>
+      ${T("oc_adTerms","Resale / trade terms (designer's TOS)",ad.terms,2)}
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-act="sheetCancel">✕ cancel</button><button class="btn btn-pink" data-act="saveOC" style="padding:10px 22px">💾 save character</button></div>
+  </div>`;
+}
+async function saveOCFromModal(){
+  const v=id=>{const e=document.getElementById(id);return e?e.value.trim():"";};
+  const csv=id=>v(id).split(",").map(s=>s.trim()).filter(Boolean);
+  const name=v("oc_name"); if(!name){ toast("They need a name 🌸"); return; }
+  const id=v("oc_id");
+  const patch={ name, emoji:v("oc_emoji")||"🎭", species:v("oc_species"), pronouns:v("oc_pronouns"), role:v("oc_role"),
+    summary:v("oc_summary"), voice:v("oc_voice"), quote:v("oc_quote"),
+    adjectives:csv("oc_adjectives").slice(0,3), rpStatus:v("oc_rpStatus"),
+    tags:csv("oc_tags"), palette:[0,1,2,3].map(i=>v("oc_pal"+i)).filter(Boolean),
+    nickname:v("oc_nickname"), age:v("oc_age"), birthday:v("oc_birthday"), zodiac:v("oc_zodiac"), height:v("oc_height"),
+    gender:v("oc_gender"), origin:v("oc_origin"),
+    orientation:v("oc_orientation"), occupation:v("oc_occupation"), alignment:v("oc_alignment"),
+    stats:Object.fromEntries(STAT_KEYS.map(([k])=>[k,Math.max(0,Math.min(5,parseInt(v("oc_st_"+k))||0))])),
+    esoterica:Object.fromEntries(ESO_KEYS.map(([k])=>[k,v("oc_eso_"+k)])),
+    personality:v("oc_personality"), favorites:csv("oc_favorites"),
+    likes:csv("oc_likes"), dislikes:csv("oc_dislikes"),
+    fears:v("oc_fears"), strengths:v("oc_strengths"), flaws:v("oc_flaws"), abilities:v("oc_abilities"),
+    voiceClaim:v("oc_voiceClaim"), aesthetic:v("oc_aesthetic"), themeSong:v("oc_themeSong"), playlist:v("oc_playlist"),
+    backstory:v("oc_backstory"), designNotes:v("oc_designNotes"),
+    adopt:{ designer:v("oc_adDesigner"), designerUrl:v("oc_adDesignerUrl"), from:v("oc_adFrom"), date:v("oc_adDate"), method:v("oc_adMethod"), price:v("oc_adPrice"), terms:v("oc_adTerms") } };
+  if(_pend.pfp!==undefined)patch.pfp=_pend.pfp;
+  if(_pend.banner!==undefined)patch.banner=_pend.banner;
+  if(id){ await ocMut("ocs",a=>a.map(x=>x.id===id?{...x,...patch}:x)); state.selOC=id; }
+  else { const nid=uid();
+    const seed={id:nid,refs:[],trivia:[],gallery:[],ownLog:[],created_at:TODAY};
+    if(_sheetPrefill&&_sheetPrefill._designImgs&&_sheetPrefill._designImgs.length){ seed.gallery=_sheetPrefill._designImgs.map(u=>({id:uid(),url:u,artist:patch.adopt.designer||"",date:TODAY})); }
+    await ocMut("ocs",a=>[...a,{...seed,...patch}]);
+    if(_sheetPrefill&&_sheetPrefill._fromDesign){ await ocMut("ocDesigns",a=>a.filter(x=>x.id!==_sheetPrefill._fromDesign)); toast("They've stepped out of the shelf and into the world 🌱"); }
+    state.selOC=nid; state.tab="chars"; }
+  _pend={}; _sheetPrefill=null; state.editOC=null; closeModal(); toast("Sheet saved 💗"); render();
+}
+async function ocPatch(id,fn){ await ocMut("ocs",a=>a.map(x=>x.id===id?fn({...x}):x)); }
+/* ---- ref board cards (stored on the character: oc.refs) ---- */
+function mbCardHTML(c){
+  const pos=`left:${c.x||0}px;top:${c.y||0}px;width:${c.w||160}px;height:${c.h||160}px`;
+  if(c.type==="img") return `<div class="mb-card img" data-mb="${c.id}" style="${pos};background-image:url('${esc(c.url)}')"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+  if(c.type==="note") return `<div class="mb-card note" data-mb="${c.id}" style="${pos}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><textarea data-mbnote="${c.id}" placeholder="jot a note…" ${RO?"disabled":""}>${esc(c.text||"")}</textarea><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+  return `<div class="mb-card swatch" data-mb="${c.id}" style="${pos};background:${esc(c.color||"#f49fc6")}"><button class="mb-x" data-act="mbDel" data-id="${c.id}">×</button><span class="mb-hex" data-act="copyText" data-t="${esc(c.color||"")}">${esc(c.color||"")}</span><span class="mb-rz" data-mbrz="${c.id}">◢</span></div>`;
+}
+async function refMut(fn){ const id=state.selOC; if(!id)return; await ocMut("ocs",a=>a.map(o=>o.id===id?{...o,refs:fn(o.refs||[])}:o)); }
+async function mbUpdate(cid,patch){ await refMut(r=>r.map(c=>c.id===cid?{...c,...patch}:c)); }
+/* uploaded photos → downscaled data-URL so they persist in the DB (no CORS pain) */
+function mbFileToDataURL(file){ return new Promise((res,rej)=>{ const img=new Image(); const u=URL.createObjectURL(file);
+  img.onload=()=>{ const MAX=900; let w=img.width,h=img.height; if(Math.max(w,h)>MAX){ const s=MAX/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=h; cv.getContext("2d").drawImage(img,0,0,w,h); URL.revokeObjectURL(u);
+    const png=(file.type==="image/png"); res({url:cv.toDataURL(png?"image/png":"image/jpeg",0.82), ar:w/h}); };
+  img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error("couldn't read image")); };
+  img.src=u; }); }
+function mbWrapText(ctx,text,x,y,maxW,lh){ let yy=y; String(text).split("\n").forEach(para=>{ const words=para.split(/\s+/); let line=""; words.forEach(w=>{ const test=line?line+" "+w:w; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,yy); line=w; yy+=lh; } else line=test; }); ctx.fillText(line,x,yy); yy+=lh; }); }
+async function exportBoardPNG(){
+  const o=ocById(state.selOC); const boardEl=document.getElementById("ocBoard");
+  const cards=(o&&o.refs)||[];
+  if(!cards.length){ toast("Board's empty — add something first 🌸"); return; }
+  const BW=Math.round((boardEl&&boardEl.clientWidth)||900), BH=Math.round((boardEl&&boardEl.clientHeight)||520), scale=2;
+  const cv=document.createElement("canvas"); cv.width=BW*scale; cv.height=BH*scale; const ctx=cv.getContext("2d"); ctx.scale(scale,scale);
+  ctx.fillStyle="#fbf7fd"; ctx.fillRect(0,0,BW,BH);
+  ctx.fillStyle="#ecdcf3"; for(let y=0;y<BH;y+=22)for(let x=0;x<BW;x+=22){ ctx.beginPath(); ctx.arc(x,y,1,0,7); ctx.fill(); }
+  const imgs={}; let failed=0;
+  await Promise.all(cards.filter(c=>c.type==="img").map(c=>new Promise(res=>{ const im=new Image(); im.crossOrigin="anonymous"; im.onload=()=>{imgs[c.id]=im;res();}; im.onerror=()=>{failed++;res();}; im.src=c.url; })));
+  const rr=(x,y,w,h,r)=>{ r=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); };
+  cards.forEach(c=>{ const x=c.x||0,y=c.y||0,w=c.w||160,h=c.h||160; ctx.save();
+    ctx.shadowColor="rgba(140,90,150,.18)"; ctx.shadowBlur=10; ctx.shadowOffsetY=3;
+    if(c.type==="img"){ rr(x,y,w,h,12); ctx.fillStyle="#f1e7f6"; ctx.fill(); ctx.shadowColor="transparent"; ctx.save(); rr(x,y,w,h,12); ctx.clip(); const im=imgs[c.id];
+        if(im){ const ar=im.width/im.height, br=w/h; let dw,dh,dx,dy; if(ar>br){ dh=h; dw=h*ar; dx=x-(dw-w)/2; dy=y; } else { dw=w; dh=w/ar; dx=x; dy=y-(dh-h)/2; } ctx.drawImage(im,dx,dy,dw,dh); }
+        else { ctx.fillStyle="#c0a9ce"; ctx.font="13px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("🖼 image",x+w/2,y+h/2); }
+        ctx.restore(); }
+    else if(c.type==="note"){ rr(x,y,w,h,12); ctx.fillStyle="#fff7da"; ctx.fill(); ctx.shadowColor="transparent"; ctx.strokeStyle="#f0e3a8"; ctx.lineWidth=1; rr(x,y,w,h,12); ctx.stroke(); ctx.fillStyle="#5a5230"; ctx.font="12.5px sans-serif"; ctx.textAlign="left"; ctx.textBaseline="top"; ctx.save(); rr(x,y,w,h,12); ctx.clip(); mbWrapText(ctx,c.text||"",x+9,y+9,w-18,17); ctx.restore(); }
+    else { rr(x,y,w,h,12); ctx.fillStyle=c.color||"#f49fc6"; ctx.fill(); ctx.shadowColor="transparent"; ctx.font="10px sans-serif"; const lw=ctx.measureText(c.color||"").width+12; ctx.fillStyle="rgba(0,0,0,.4)"; rr(x+w/2-lw/2,y+h-22,lw,16,6); ctx.fill(); ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(c.color||"",x+w/2,y+h-14); }
+    ctx.restore(); });
+  try{ cv.toBlob(b=>{ if(!b){ toast("Couldn't make the PNG 🌸"); return; } const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=((o&&o.name)||"ref-board").toLowerCase().replace(/\s+/g,"-")+"-board.png"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); toast(failed?("Saved 🎨 — "+failed+" image"+(failed>1?"s":"")+" couldn't embed (that site blocks it)"):"Board saved as PNG 🎨"); },"image/png"); }
+  catch(err){ toast("Some images block PNG export — uploads always work 🌸"); }
+}
+function randHex(){ const h=Math.floor(Math.random()*360), s=42+Math.random()*42, l=44+Math.random()*26;
+  const c=(1-Math.abs(2*l/100-1))*s/100, x=c*(1-Math.abs((h/60)%2-1)), m=l/100-c/2; let r,g,b;
+  if(h<60){r=c;g=x;b=0;}else if(h<120){r=x;g=c;b=0;}else if(h<180){r=0;g=c;b=x;}else if(h<240){r=0;g=x;b=c;}else if(h<300){r=x;g=0;b=c;}else{r=c;g=0;b=x;}
+  const t=v=>("0"+Math.round((v+m)*255).toString(16)).slice(-2); return "#"+t(r)+t(g)+t(b); }
+
+/* ===================== GLOBAL GALLERY (every character's art in one place) ===================== */
+function renderGalleryTab(){
+  const ocs=SENT.ocs||[];
+  const sel=state.galOC||"all";
+  const pieces=[];
+  ocs.forEach(o=>{ (o.gallery||[]).forEach(g=>{ if(sel==="all"||o.id===sel) pieces.push({o,g}); }); });
+  pieces.sort((a,b)=>String(b.g.date||"").localeCompare(String(a.g.date||"")));
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px"><img class="ti" src="35911-pinkbow.png" alt=""> Art gallery</h2><span class="pill pill-pink">${pieces.length} piece${pieces.length===1?"":"s"}</span></div>
+      <div class="seg"><button class="${sel==="all"?'on':''}" data-act="galFilter" data-v="all">everyone</button>${ocs.map(o=>`<button class="${sel===o.id?'on':''}" data-act="galFilter" data-v="${o.id}">${o.emoji||"🎭"} ${esc(o.name)}</button>`).join("")}</div>
+      <p class="soft" style="font-size:12px;margin:8px 0 0">add art from a character's profile (🎭 Characters → open them → Art gallery) — everything shows up here 🖼️</p></div>
+    <div class="gal-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${pieces.map(({o,g})=>`<div class="gal-card">
+      <div class="gal-thumb" data-act="galView" data-oc="${o.id}" data-id="${g.id}" style="background-image:url('${esc(g.url)}');aspect-ratio:1/1.1"></div>
+      <div class="gal-body"><div style="display:flex;align-items:center;gap:6px">${avaHTML(o,22,11)}<span style="font-size:12px;font-weight:600">${esc(o.name)}</span></div>
+      <span style="font-size:11.5px">🎨 ${esc(g.artist||"unknown artist")}</span><span class="label num">${esc(g.date||"")}</span></div></div>`).join("")||`<div class="panel" style="grid-column:1/-1;text-align:center"><img class="deco" src="7052-kawaiikittywand.gif" alt="" style="height:44px"/><p class="soft" style="font-size:13px;margin:6px 0 0">no art shelved yet — open a character and add their first piece 🌸</p></div>`}</div>
+  </div>`;
+}
+function galViewModal(ocId,gid){
+  const o=ocById(ocId); if(!o)return; const g=(o.gallery||[]).find(x=>x.id===gid); if(!g)return;
+  const isHttp=/^https?:/i.test(g.url||"");
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:760px;width:100%;max-height:94vh;overflow:auto">
+    <div class="card-head"><div style="display:flex;align-items:center;gap:8px">${avaHTML(o,30,15)}<h3 style="font-size:16px">${esc(o.name)}</h3><span class="label">🎨 ${esc(g.artist||"unknown artist")}${g.date?" · "+esc(g.date):""}</span></div><button class="btn" data-act="closeModal">✕</button></div>
+    <img src="${esc(g.url)}" alt="" style="max-width:100%;max-height:68vh;display:block;margin:0 auto;border-radius:12px"/>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:center">
+      <button class="btn btn-pink" data-act="setPfp" data-oc="${o.id}" data-id="${g.id}" ${RO?"disabled":""}>⭐ set as profile pic</button>
+      <button class="btn" data-act="setBanner" data-oc="${o.id}" data-id="${g.id}" ${RO?"disabled":""}>🖼 set as banner</button>
+      ${isHttp?`<a class="btn" href="${esc(g.url)}" target="_blank" rel="noopener" style="text-decoration:none">↗ open original</a>`:""}
+      <button class="btn" data-act="galDelG" data-oc="${o.id}" data-id="${g.id}" ${RO?"disabled":""}>🗑 delete</button>
+    </div></div></div>`;
+}
+
+/* ===================== LORE ===================== */
+function renderLore(){
+  const q=(state.loreQ||"").toLowerCase();
+  const lore=(SENT.ocLore||[]).filter(l=>!q||(l.title+" "+(l.body||"")+" "+(l.tags||[]).join(" ")).toLowerCase().includes(q));
+  return `<div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px">📖 Lore & worldbuilding</h2><div style="display:flex;align-items:center;gap:8px"><img class="deco" src="6128-pink-teacup.gif" alt=""/><button class="btn btn-pink" data-act="loreNew" ${RO?"disabled":""}>＋ new entry</button></div></div>
+      <input class="inp" id="loreSearch" placeholder="search lore…" value="${esc(state.loreQ||"")}" /></div>
+    ${lore.slice().reverse().map(l=>`<details class="acc"><summary><span>${esc(l.title)}</span><span style="display:flex;gap:4px;flex-wrap:wrap;margin-left:auto;margin-right:8px">${(l.tags||[]).map(t=>`<span class="pill pill-peach">${esc(t)}</span>`).join("")}</span></summary>
+      <div class="acc-body">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${(l.linkedOcIds||[]).map(ocChip).join("")}</div>
+        <p class="soft" style="font-size:13px;line-height:1.65;white-space:pre-wrap;margin:0">${esc(l.body||"")}</p>
+        <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" data-act="loreEdit" data-id="${l.id}" ${RO?"disabled":""}>✏️ edit</button><button class="btn" data-act="loreDel" data-id="${l.id}" ${RO?"disabled":""}>🗑 delete</button></div>
+      </div></details>`).join("")||`<div class="panel"><p class="soft" style="font-size:13px;margin:0">The world is a blank page${q?" (for that search)":""} — start anywhere, it all connects later 🌍</p></div>`}
+  </div>`;
+}
+function loreModal(l){
+  l=l||{}; const linked=l.linkedOcIds||[];
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:520px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">${l.id?"✏️ Edit":"📖 New"} lore</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <input type="hidden" id="lo_id" value="${esc(l.id||"")}" />
+    <div class="sheet-box" style="margin-top:6px"><h4>📖 The entry</h4>
+      <div class="label">Title</div><input class="inp" id="lo_title" value="${esc(l.title||"")}" />
+      <div class="label" style="margin-top:8px">The lore</div><textarea class="inp" id="lo_body" rows="7">${esc(l.body||"")}</textarea>
+      <div class="label" style="margin-top:8px">Tags (comma separated)</div><input class="inp" id="lo_tags" value="${esc((l.tags||[]).join(", "))}" placeholder="setting, magic, history" /></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>🎭 Cast</h4>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${(SENT.ocs||[]).map(o=>`<button class="chiptog ${linked.includes(o.id)?'on':''}" data-act="loreLink" data-id="${o.id}"><span class="check ${linked.includes(o.id)?'on':''}"></span>${o.emoji||"🎭"} ${esc(o.name)}</button>`).join("")||`<span class="soft" style="font-size:12px">no characters yet</span>`}</div></div>
+    <button class="btn btn-pink" data-act="saveLore" style="margin-top:14px;width:100%">💾 save lore</button>
+  </div></div>`;
+}
+let _loreLinks=[];
+async function saveLoreFromModal(){
+  const title=document.getElementById("lo_title").value.trim(); if(!title){ toast("Give it a title 🌸"); return; }
+  const id=document.getElementById("lo_id").value;
+  const patch={ title, body:document.getElementById("lo_body").value.trim(),
+    tags:document.getElementById("lo_tags").value.split(",").map(s=>s.trim()).filter(Boolean), linkedOcIds:_loreLinks.slice() };
+  if(id) await ocMut("ocLore",a=>a.map(x=>x.id===id?{...x,...patch}:x));
+  else await ocMut("ocLore",a=>[...a,{id:uid(),...patch}]);
+  closeModal(); toast("Lore woven in 📖"); render();
+}
+
+/* ===================== STORY ARCS (kanban) ===================== */
+function renderArcs(){
+  const arcs=SENT.ocArcs||[];
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px">📚 Story arcs</h2><span class="label">drag cards between stages · tap a card to open</span></div>
+      <div style="display:flex;gap:8px"><input class="inp" id="newArc" placeholder="a new story arc…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="addArc" ${RO?"disabled":""}>＋ add</button></div></div>
+    <div class="kanban">${ARC_STAGES.map(([k,l])=>{
+      const items=arcs.filter(a=>a.stage===k);
+      return `<div class="kcol" data-act="dropArcStage" data-stage="${k}"><div class="label" style="padding:2px 4px">${l} · ${items.length}</div>
+        ${items.map(a=>{const done=(a.beats||[]).filter(b=>b.done).length,total=(a.beats||[]).length;
+          return `<div class="citem" draggable="true" data-act="dragArc" data-id="${a.id}">
+          <div style="font-size:13px;font-weight:600" data-act="openArc" data-id="${a.id}">${esc(a.title)}</div>
+          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:5px">${(a.ocIds||[]).map(oid=>{const o=ocById(oid);return o?`<span title="${esc(o.name)}" style="font-size:14px">${o.emoji||"🎭"}</span>`:"";}).join("")}</div>
+          ${total?`<div class="bar" style="margin-top:6px"><span style="width:${(done/total)*100}%"></span></div><div class="label num" style="margin-top:3px">${done}/${total} beats</div>`:""}
+        </div>`;}).join("")}</div>`;}).join("")}</div>
+  </div>`;
+}
+function arcModal(a){
+  if(!a)return;
+  const linked=a.ocIds||[];
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:500px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">📚 ${esc(a.title)}</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div class="sheet-box" style="margin-top:6px"><h4>📚 The arc</h4>
+      <div class="label">Title</div><input class="inp" id="arc_title" value="${esc(a.title)}" data-arcid="${a.id}" ${RO?"disabled":""}/>
+      <div class="label" style="margin-top:10px">Stage</div>
+      <div class="seg" style="margin-top:4px">${ARC_STAGES.map(([k,l])=>`<button class="${a.stage===k?'on':''}" data-act="arcStage" data-id="${a.id}" data-v="${k}" ${RO?"disabled":""}>${l}</button>`).join("")}</div></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>🎭 Who's in it</h4>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${(SENT.ocs||[]).map(o=>`<button class="chiptog ${linked.includes(o.id)?'on':''}" data-act="arcLink" data-id="${a.id}" data-oc="${o.id}" ${RO?"disabled":""}><span class="check ${linked.includes(o.id)?'on':''}"></span>${o.emoji||"🎭"} ${esc(o.name)}</button>`).join("")}</div></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>✨ Story beats</h4>
+      ${(a.beats||[]).map(b=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0"><button class="check ${b.done?'on':''}" data-act="beatDone" data-id="${a.id}" data-bid="${b.id}" ${RO?"disabled":""}></button><span class="grow" style="font-size:12.5px;${b.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(b.text)}</span><button class="btn" style="padding:2px 8px" data-act="beatDel" data-id="${a.id}" data-bid="${b.id}" ${RO?"disabled":""}>✕</button></div>`).join("")}
+      <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="newBeat" placeholder="next beat…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="beatAdd" data-id="${a.id}" ${RO?"disabled":""}>＋</button></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:14px"><button class="btn" data-act="arcDel" data-id="${a.id}" ${RO?"disabled":""}>🗑 delete arc</button><button class="btn btn-pink" data-act="closeModal">done</button></div>
+  </div></div>`;
+}
+async function arcMutOne(id,fn){ await ocMut("ocArcs",a=>a.map(x=>x.id===id?fn({...x}):x)); }
+
+/* ===================== SHIPS ===================== */
+function renderShips(){
+  const ships=SENT.ocShips||[];
+  return `<div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px">💞 Ships & relationships</h2><button class="btn btn-pink" data-act="shipNew" ${RO?"disabled":""}>＋ new ship</button></div>
+      <p class="soft" style="font-size:12.5px;margin:0">Every kind of bond counts — rivals, found family, the slow burns 🌸</p></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+    ${ships.map(s=>{const a=ocById(s.aId),b=ocById(s.bId);return `<div class="panel">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+        ${avaHTML(a,44,22)}
+        <span style="font-size:18px">💞</span>
+        ${avaHTML(b,44,22)}</div>
+      <div style="text-align:center;font-family:var(--display);font-size:15px;margin-top:6px">${a?esc(a.name):"?"} × ${b?esc(b.name):"?"}</div>
+      <div style="text-align:center;margin-top:4px"><span class="pill ${shipPill(s.type)}">${esc(s.type)}</span></div>
+      ${s.trust!=null&&s.trust!==""?`<div style="margin-top:8px"><div class="label" style="text-align:center;margin-bottom:3px">trust ${Number(s.trust)}/10</div><div class="bar"><span style="width:${Math.max(0,Math.min(10,Number(s.trust)))*10}%"></span></div></div>`:""}
+      ${s.notes?`<p class="soft" style="font-size:12px;margin:8px 0 0;text-align:center">${esc(s.notes)}</p>`:""}
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:10px"><button class="btn" data-act="shipEdit" data-id="${s.id}" ${RO?"disabled":""}>✏️</button><button class="btn" data-act="shipDel" data-id="${s.id}" ${RO?"disabled":""}>🗑</button></div>
+    </div>`;}).join("")||`<div class="panel" style="grid-column:1/-1;text-align:center"><img class="deco" src="57451-icecreamtruck.gif" alt="" style="height:44px"/><p class="soft" style="font-size:13px;margin:6px 0 0">No ships sailing yet — add at least two characters, then let sparks fly ⛵</p></div>`}</div>
+  </div>`;
+}
+function shipModal(s){
+  s=s||{};
+  const sel=(idName,val)=>`<select class="inp" id="${idName}">${(SENT.ocs||[]).map(o=>`<option value="${o.id}" ${o.id===val?"selected":""}>${o.emoji||"🎭"} ${esc(o.name)}</option>`).join("")}</select>`;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%"><div class="card-head"><h3 style="font-size:16px">${s.id?"✏️ Edit":"💞 New"} ship</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <input type="hidden" id="sh_id" value="${esc(s.id||"")}" />
+    <div class="sheet-box" style="margin-top:6px"><h4>💞 The bond</h4>
+      <div style="display:flex;gap:10px"><div class="grow"><div class="label">Character A</div>${sel("sh_a",s.aId)}</div><div class="grow"><div class="label">Character B</div>${sel("sh_b",s.bId)}</div></div>
+      <div class="label" style="margin-top:8px">Kind of bond</div><select class="inp" id="sh_type">${SHIP_TYPES.map(t=>`<option ${s.type===t?"selected":""}>${t}</option>`).join("")}</select>
+      <div class="label" style="margin-top:8px">Trust level · ${s.trust!=null&&s.trust!==""?s.trust:5}/10</div><input type="range" id="sh_trust" min="0" max="10" step="1" value="${s.trust!=null&&s.trust!==""?s.trust:5}" style="width:100%;accent-color:var(--pink)" />
+      <div class="label" style="margin-top:8px">Notes</div><textarea class="inp" id="sh_notes" rows="3">${esc(s.notes||"")}</textarea></div>
+    <button class="btn btn-pink" data-act="saveShip" style="margin-top:14px;width:100%">💾 save ship</button>
+  </div></div>`;
+}
+
+/* ===================== IDEAS (sticky wall + inspo vault) ===================== */
+function renderIdeas(){
+  const ideas=SENT.ocIdeas||[], inspo=SENT.ocInspo||[];
+  return `<div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px">💡 Plot bunnies & scene ideas</h2><div style="display:flex;align-items:center;gap:8px"><img class="deco" src="3937-molanglollipop.png" alt=""/><span class="pill pill-peach">${ideas.length}</span></div></div>
+      <div style="display:flex;gap:8px"><input class="inp" id="ideaText" placeholder="a scene, a what-if, a tiny detail…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="ocIdeaAdd" ${RO?"disabled":""}>park it</button></div>
+      <div class="idea-grid" style="margin-top:12px">${ideas.slice().reverse().map((i,ix)=>`<div class="idea-card" style="background:${IDEA_TINTS[ix%IDEA_TINTS.length]}">${esc(i.text)}
+        <div class="ic-tools"><button title="make it an arc" data-act="ideaToArc" data-id="${i.id}" ${RO?"disabled":""}>📚</button><button title="delete" data-act="ocIdeaDel" data-id="${i.id}" ${RO?"disabled":""}>🗑</button></div></div>`).join("")||`<div class="soft" style="font-size:12.5px;grid-column:1/-1">no ideas parked yet — they tend to arrive in the shower 🚿</div>`}</div>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🔗 Inspiration vault</h2><span class="label">links, refs, things that feel like your world</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp grow" id="inspoUrl" placeholder="https://…" style="min-width:200px" ${RO?"disabled":""}/><input class="inp grow" id="inspoNote" placeholder="why it sparks ✨" style="min-width:160px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="ocInspoAdd" ${RO?"disabled":""}>save</button></div>
+      <div class="inspo-grid" style="margin-top:12px">${inspo.slice().reverse().map(v=>{const isImg=/\.(png|jpe?g|gif|webp)(\?|$)/i.test(v.url||"");
+        return `<div class="inspo-card ${v.done?'done':''}"><a href="${esc(v.url)}" target="_blank" rel="noopener" class="inspo-thumb" style="${isImg?`background-image:url('${esc(v.url)}')`:""};text-decoration:none">${isImg?"":"🔗"}</a>
+        <div class="inspo-body"><div style="font-size:12px;word-break:break-all;color:var(--lav-deep)">${esc((v.url||"").replace(/^https?:\/\//,"").slice(0,40))}</div>${v.note?`<div class="soft" style="font-size:11.5px">${esc(v.note)}</div>`:""}
+        <div style="display:flex;gap:6px;margin-top:auto"><button class="btn" style="padding:3px 9px" data-act="ocInspoDone" data-id="${v.id}" ${RO?"disabled":""}>${v.done?"↺":"✓ used"}</button><button class="btn" style="padding:3px 9px" data-act="ocInspoDel" data-id="${v.id}" ${RO?"disabled":""}>🗑</button></div></div></div>`;}).join("")||`<div class="soft" style="font-size:12.5px;grid-column:1/-1">nothing vaulted yet 🌙</div>`}</div>
+    </div>
+  </div>`;
+}
+
+/* ===================== RP INFO ===================== */
+function renderRpInfo(){
+  const rp=SENT.ocRpInfo||{};
+  const ocs=SENT.ocs||[];
+  return `<div class="sheet" style="max-width:860px">
+    <div class="card-head"><h2 style="font-size:20px"><img class="ti" src="4901_roleplay.png" alt=""> RP Info</h2><button class="btn btn-pink" data-act="rpSave" ${RO?"disabled":""}>💾 save</button></div>
+    <div class="sheet-box"><h4>📜 Rules, preferences & limits</h4>
+      <textarea class="inp" id="rpBody" rows="8" placeholder="how you RP: platforms, response pace, comfort zones, hard limits, who to contact…" ${RO?"disabled":""}>${esc(rp.body||"")}</textarea>
+    </div>
+    <div class="sheet-box"><h4>✨ Starters & prompts you love</h4>
+      <textarea class="inp" id="rpStarters" rows="4" placeholder="scenarios, dynamics and tropes you're always up for…" ${RO?"disabled":""}>${esc(rp.starters||"")}</textarea>
+    </div>
+    <div class="sheet-box"><h4>🎭 Who's open right now</h4>
+      ${ocs.map(o=>`<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)">${avaHTML(o,30,15)}<span class="grow" style="font-size:13px;font-weight:600">${esc(o.name)}</span>${rpPill(o)||`<span class="pill pill-gray">unset</span>`}</div>`).join("")||`<p class="soft" style="font-size:12.5px;margin:0">no characters yet 🌙</p>`}
+      <p class="soft" style="font-size:11px;margin:8px 0 0">set per character on their sheet</p>
+    </div>
+  </div>`;
+}
+
+/* ===================== JOURNALS ===================== */
+function renderJournals(){
+  const js=SENT.ocJournals||[];
+  return `<div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px"><img class="ti" src="794527-pinkemojistaff.png" alt=""> Journals</h2><button class="btn btn-pink" data-act="jrNew" ${RO?"disabled":""}>＋ new entry</button></div>
+      <p class="soft" style="font-size:12.5px;margin:0">diary entries, RP recaps, dreams about your little guys — dated and linked to whoever it's about 📔</p></div>
+    ${js.slice().reverse().map(j=>`<details class="acc"><summary><span>${esc(j.title)}</span><span class="label num" style="margin-left:auto;margin-right:8px">${esc(j.date||"")}</span></summary>
+      <div class="acc-body">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">${(j.ocIds||[]).map(ocChip).join("")}</div>
+        <p class="soft" style="font-size:13px;line-height:1.65;white-space:pre-wrap;margin:0">${esc(j.body||"")}</p>
+        <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" data-act="jrEdit" data-id="${j.id}" ${RO?"disabled":""}>✏️ edit</button><button class="btn" data-act="jrDel" data-id="${j.id}" ${RO?"disabled":""}>🗑 delete</button></div>
+      </div></details>`).join("")||`<div class="panel" style="text-align:center"><img class="deco" src="6128-pink-teacup.gif" alt="" style="height:40px"/><p class="soft" style="font-size:13px;margin:6px 0 0">no entries yet — first page of a very cute diary 📔</p></div>`}
+  </div>`;
+}
+let _jrLinks=[];
+function jrModal(j){
+  j=j||{};
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:520px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">${j.id?"✏️ Edit":"📔 New"} journal entry</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <input type="hidden" id="jr_id" value="${esc(j.id||"")}" />
+    <div class="sheet-box" style="margin-top:6px"><h4>📔 The entry</h4>
+      <div style="display:flex;gap:10px"><div class="grow"><div class="label">Title</div><input class="inp" id="jr_title" value="${esc(j.title||"")}" /></div><div style="width:140px"><div class="label">Date</div><input class="inp" id="jr_date" type="date" value="${esc(j.date||TODAY)}" /></div></div>
+      <div class="label" style="margin-top:8px">Entry</div><textarea class="inp" id="jr_body" rows="8">${esc(j.body||"")}</textarea></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>🎭 Who it's about</h4>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${(SENT.ocs||[]).map(o=>`<button class="chiptog ${_jrLinks.includes(o.id)?'on':''}" data-act="jrLink" data-id="${o.id}"><span class="check ${_jrLinks.includes(o.id)?'on':''}"></span>${o.emoji||"🎭"} ${esc(o.name)}</button>`).join("")}</div></div>
+    <button class="btn btn-pink" data-act="saveJr" style="margin-top:14px;width:100%">💾 save entry</button>
+  </div></div>`;
+}
+
+/* ===================== MY DESIGNS ===================== */
+const DG_STATUS={keep:["forever home","pill-mint"],uft:["up for trade","pill-blue"],ufs:["up for sale","pill-peach"],nfs:["NFS / NFT","pill-gray"]};
+function renderDesigns(){
+  const ds=SENT.ocDesigns||[];
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel"><div class="card-head"><h2 style="font-size:20px"><img class="ti" src="489178-pinkemojistaff.png" alt=""> My Designs</h2><button class="btn btn-pink" data-act="dgNew" ${RO?"disabled":""}>＋ add design</button></div>
+      <p class="soft" style="font-size:12.5px;margin:0">designs you own that aren't full characters (yet) — adopts, MYOs, concepts — with credits and trade status 🏷️</p></div>
+    <div class="dg-grid">${ds.slice().reverse().map(d=>{const st=DG_STATUS[d.status]||null;const n=[d.img,...(d.imgs||[])].filter(Boolean).length;return `<div class="gal-card" data-dgid="${d.id}">
+      <div class="dg-thumb" style="position:relative;${d.img?`background-image:url('${esc(d.img)}')`:""}" data-act="${n?"dgView":"dgEdit"}" data-id="${d.id}">${d.img?"":"🎨"}${n>1?`<span class="pill pill-lav" style="position:absolute;bottom:6px;right:6px">🗂️ ${n} files</span>`:""}</div>
+      <div class="gal-body"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><span style="font-size:13px;font-weight:600">${esc(d.name||"unnamed")}</span>${st?`<span class="pill ${st[1]}">${st[0]}</span>`:""}</div>
+        ${d.designer?`<span style="font-size:11.5px">🎨 ${esc(d.designer)}</span>`:""}
+        ${d.price?`<span class="label">worth ${esc(d.price)}</span>`:""}
+        ${d.notes?`<span class="soft" style="font-size:11.5px">${esc(d.notes)}</span>`:""}
+        <div style="display:flex;gap:6px;margin-top:4px"><button class="btn" style="padding:3px 9px" data-act="dgEdit" data-id="${d.id}" ${RO?"disabled":""}>✏️</button><button class="btn btn-pink" style="padding:3px 9px" data-act="dgPromote" data-id="${d.id}" ${RO?"disabled":""} title="opens a character sheet pre-filled from this design">🌱 make character</button><button class="btn" style="padding:3px 9px" data-act="dgDel" data-id="${d.id}" ${RO?"disabled":""}>🗑</button></div>
+      </div></div>`;}).join("")||`<div class="panel" style="grid-column:1/-1;text-align:center"><img class="deco" src="3937-molanglollipop.png" alt="" style="height:40px"/><p class="soft" style="font-size:13px;margin:6px 0 0">no designs shelved yet — adopts you collect can live here before they become full characters 🌱</p></div>`}</div>
+  </div>`;
+}
+let _dgImg, _dgImgs=[];
+function dgStrip(){
+  const row=document.getElementById("dgImgsRow"); if(!row)return;
+  row.innerHTML=_dgImgs.map((u,i)=>`<div style="position:relative;flex:0 0 auto"><img src="${esc(u)}" style="width:74px;height:74px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"/><button data-dgx="${i}" style="position:absolute;top:-6px;right:-6px;border:none;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;width:20px;height:20px;font-size:11px;line-height:1;cursor:pointer">×</button></div>`).join("")||`<span class="soft" style="font-size:11.5px">no extra files yet — adopts usually come with alts, refs and unwatermarked versions 🗂️</span>`;
+}
+function dgModal(d){
+  d=d||{}; _dgImg=undefined; _dgImgs=(d.imgs||[]).slice();
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">${d.id?"✏️ Edit":"🏷️ New"} design</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <input type="hidden" id="dg_id" value="${esc(d.id||"")}" />
+    <div class="sheet-box" style="margin-top:6px"><h4>🖼️ The design</h4>
+      <div class="sheet-banner" id="dgImgBox" data-act="dgUpload" style="height:140px;${d.img?`background-image:url('${esc(d.img)}');border-style:solid;color:transparent`:""}">${d.img?"":"🖼️ tap to upload the cover"}</div></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>🗂️ All files & versions</h4>
+      <div id="dgImgsRow" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
+      <button class="btn" data-act="dgMultiUpload" style="margin-top:10px" ${RO?"disabled":""}>＋ add files (you can pick several)</button></div>
+    <div class="sheet-box" style="margin-top:16px"><h4>🏷️ Details & credits</h4>
+      <div style="display:flex;gap:10px"><div class="grow"><div class="label">Name</div><input class="inp" id="dg_name" value="${esc(d.name||"")}" /></div><div style="width:150px"><div class="label">Status</div><select class="inp" id="dg_status">${Object.entries(DG_STATUS).map(([k,[l]])=>`<option value="${k}" ${d.status===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
+      <div style="display:flex;gap:10px;margin-top:8px"><div class="grow"><div class="label">Designed by</div><input class="inp" id="dg_designer" value="${esc(d.designer||"")}" /></div><div style="width:120px"><div class="label">Worth / price</div><input class="inp" id="dg_price" value="${esc(d.price||"")}" placeholder="$…" /></div></div>
+      <div class="label" style="margin-top:8px">Notes (terms, ideas, vibes)</div><textarea class="inp" id="dg_notes" rows="3">${esc(d.notes||"")}</textarea></div>
+    <button class="btn btn-pink" data-act="saveDg" style="margin-top:14px;width:100%">💾 save design</button>
+  </div></div>`;
+  dgStrip();
+}
+function dgViewModal(did){
+  const d=(SENT.ocDesigns||[]).find(x=>x.id===did); if(!d)return;
+  const all=[d.img,...(d.imgs||[])].filter(Boolean);
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:760px;width:100%;max-height:94vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">🗂️ ${esc(d.name||"design")} · ${all.length} file${all.length===1?"":"s"}</h3><div style="display:flex;gap:8px"><button class="btn" data-act="dgEdit" data-id="${d.id}" ${RO?"disabled":""}>✏️ edit</button><button class="btn" data-act="closeModal">✕</button></div></div>
+    ${d.designer?`<p class="soft" style="font-size:12px;margin:0 0 10px">🎨 designed by ${esc(d.designer)}</p>`:""}
+    ${all.map((u,i)=>`<div style="margin-bottom:14px"><img src="${esc(u)}" alt="" style="max-width:100%;max-height:64vh;display:block;margin:0 auto;border-radius:12px"/>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:6px">${i===0&&u===d.img?`<span class="pill pill-pink">cover</span>`:`<button class="btn" style="padding:3px 10px" data-act="dgCover" data-id="${d.id}" data-u="${esc(u)}" ${RO?"disabled":""}>⭐ make cover</button>`}${u!==d.img?`<button class="btn" style="padding:3px 10px" data-act="dgImgDel" data-id="${d.id}" data-u="${esc(u)}" ${RO?"disabled":""}>🗑</button>`:""}</div></div>`).join("")||`<p class="soft" style="font-size:13px">no files yet — hit ✏️ edit to add some 🖼️</p>`}
+  </div></div>`;
+}
+
+/* ===================== SETTINGS ===================== */
+function renderSettings(){
+  const calm=localStorage.getItem("oc-calm")==="1", big=localStorage.getItem("oc-text")==="1", locked=localStorage.getItem("oc-layout-locked")==="1";
+  return `<div class="sheet" style="max-width:780px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2 style="font-size:22px;font-family:var(--display)">⚙️ Settings</h2><span class="label">everything in one cozy place 🌸</span></div>
+    <div class="sheet-box"><h4>🌙 Comfort & display</h4>
+      <div style="display:flex;justify-content:flex-end"><img class="deco" src="3672-sanrio-bandaid.png" alt="" style="height:26px"/></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="chiptog ${calm?'on':''}" data-act="setCalm"><span class="check ${calm?'on':''}"></span>🌙 Calm mode — stop motion + soften colours</button>
+        <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Stays on this device · your "reduce motion" setting is always honoured too.</p>
+    </div>
+    <div class="sheet-box"><h4>🦄 You & this hub</h4>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:140px"><div class="label">Name</div><input class="inp" id="cf_name" value="${esc(CONFIG.creator.name)}"/></div><div style="width:90px"><div class="label">Emoji</div><input class="inp" id="cf_emoji" value="${esc(CONFIG.creator.emoji)}"/></div></div>
+      <div class="label" style="margin-top:8px">Main OS link (the 🐙 chip up top)</div><input class="inp" id="cf_mainos" value="${esc(CONFIG.mainOs)}"/>
+      <button class="btn btn-pink" data-act="saveConfig" style="margin-top:12px" ${RO?"disabled":""}>💾 save</button>
+    </div>
+    <div class="sheet-box"><h4>🧩 Layout</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="chiptog ${locked?'on':''}" data-act="toggleLock"><span class="check ${locked?'on':''}"></span>${locked?'🔒 layout locked':'🔓 layout unlocked'}</button>
+        <button class="btn" data-act="resetLayout" ${RO?"disabled":""}>↺ reset layout (tabs + cards)</button>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Lock keeps cards from wiggling while you tap · reset puts every page back to its defaults.</p>
+    </div>
+    <div class="sheet-box"><h4>💾 Data</h4>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn" data-act="exportData">⬇️ export all my OC data (backup)</button><button class="btn" data-act="restoreBackup" ${RO?"disabled":""}>♻️ restore this device's auto-backup</button><span class="chip ${DEMO?'demo':'on'}">${DEMO?'demo data':'● live · synced'}</span></div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Your hub keeps its own private database row (the main OS can't touch it), and every save also keeps an automatic backup on this device. ${(()=>{ try{ const b=JSON.parse(localStorage.getItem("oc-backup")||"null"); return b? "Last auto-backup here: "+new Date(b.t).toLocaleString()+"." : "No auto-backup on this device yet — it appears after your first save."; }catch(e){ return ""; } })()}</p>
+    </div>
+  </div>`;
+}
+function exportData(){
+  const keys=["ocs","ocLore","ocShips","ocArcs","ocIdeas","ocInspo","ocRpInfo","ocJournals","ocDesigns","ocStickies","ocLayouts","ocAppConfig"];
+  const out={}; keys.forEach(k=>{ if(SENT[k]!=null)out[k]=SENT[k]; });
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
+  const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download="oc-hub-backup-"+TODAY+".json";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1200); toast("Backup downloaded 💾");
+}
+
+/* ===================== STICKY NOTES ===================== */
+function saveStickies(){ ocSet("ocStickies",STICKIES).catch(e=>console.error("sticky save",e)); }
+function addSticky(text){
+  if(RO){ toast("Demo mode — connect Supabase to save 🌸"); return; }
+  STICKIES.push({id:uid(),text:text||"",x:80+Math.random()*120,y:120+Math.random()*80,w:184,h:150,color:STICKY_COLS[STICKIES.length%STICKY_COLS.length]});
+  saveStickies(); renderStickies();
+}
+function renderStickies(){
+  const layer=document.getElementById("stickyLayer"); if(!layer)return;
+  layer.innerHTML=(STICKIES||[]).map(n=>`<div class="sticky" data-sid="${n.id}" style="left:${n.x||90}px;top:${n.y||120}px;width:${n.w||184}px;height:${n.h||150}px;background:${n.color||'#fff3b0'}">
+    <div class="sticky-head" data-act="stickyDrag"><button class="sticky-dot" data-act="stickyColor" data-id="${n.id}" title="cycle colour"></button><button class="sticky-x" data-act="delSticky" data-id="${n.id}">×</button></div>
+    <textarea data-act="stickyEdit" data-id="${n.id}" placeholder="jot it down…" ${RO?"disabled":""}>${esc(n.text||"")}</textarea>
+    <span class="sticky-resize" data-act="stickyResize">◢</span></div>`).join("");
+}
+
+/* ===================== EVENTS (one dispatcher for everything) ===================== */
+const WRITE_ACTS=["addOC","saveOC","delOC","editOC","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","loreNew","saveLore","loreDel","loreEdit","loreLink","addArc","arcStage","arcLink","beatAdd","beatDone","beatDel","arcDel","shipNew","saveShip","shipEdit","shipDel","ocIdeaAdd","ocIdeaDel","ideaToArc","ocInspoAdd","ocInspoDel","ocInspoDone","homeIdeaAdd","homeMin","homeHide","cardToggle","resetLayout","saveConfig","addSticky","delSticky","stickyColor","triviaAdd","triviaDel","ownAdd","ownDel","galAddUrl","galDel","galUpload","setPfp","setBanner","galDelG","pfpUpload","pfpClear","sheetPfp","sheetBanner","rpSave","jrNew","jrEdit","jrLink","saveJr","jrDel","dgNew","dgEdit","dgUpload","dgMultiUpload","dgCover","dgImgDel","saveDg","dgDel","dgPromote","restoreBackup"];
+document.addEventListener("click",async(e)=>{
+  const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
+  if(RO && WRITE_ACTS.includes(act)){ toast("Demo mode — connect Supabase to save 🌸"); return; }
+  if(act==="tab")return setTab(el.dataset.tab);
+  if(act==="goTab"){ if(el.dataset.tab&&TABS.some(t=>t[0]===el.dataset.tab)) setTab(el.dataset.tab); return; }
+  if(act==="goSettings")return setTab("settings");
+  if(act==="closeModal"){ if(e.target===el){closeModal();render();} return; }
+  if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
+
+  /* characters */
+  if(act==="addOC"){ _sheetPrefill=null; state.editOC="new"; state.selOC=null; state.tab="chars"; return render(); }
+  if(act==="openOC"){ state.selOC=id; state.editOC=null; state.tab="chars"; return render(); }
+  if(act==="backToChars"){ state.selOC=null; state.editOC=null; return render(); }
+  if(act==="editOC"){ state.editOC=id; return render(); }
+  if(act==="sheetCancel"){ _pend={}; _sheetPrefill=null; state.editOC=null; return render(); }
+  if(act==="sheetPfp"){ const f=document.getElementById("sheetPfpFile"); if(f){f.value="";f.click();} return; }
+  if(act==="sheetBanner"){ const f=document.getElementById("sheetBannerFile"); if(f){f.value="";f.click();} return; }
+  if(act==="saveOC")return saveOCFromModal();
+  if(act==="delOC"){ if(!confirm("Delete this character? Their lore links, ships and arcs stay (unlinked)."))return;
+    await ocMut("ocs",a=>a.filter(x=>x.id!==id));
+    await ocMut("ocShips",a=>a.filter(s=>s.aId!==id&&s.bId!==id));
+    await ocMut("ocLore",a=>a.map(l=>({...l,linkedOcIds:(l.linkedOcIds||[]).filter(x=>x!==id)})));
+    await ocMut("ocArcs",a=>a.map(x=>({...x,ocIds:(x.ocIds||[]).filter(y=>y!==id)})));
+    state.selOC=null; toast("Gone, gently 🕊️"); return render(); }
+
+  /* ref board */
+  if(act==="mbAddImage"){ const i=document.getElementById("mbImgUrl"); const u=(i&&i.value||"").trim(); if(!u){toast("Paste an image URL 🌸");return;} const ox=24+Math.floor(Math.random()*60), oy=24+Math.floor(Math.random()*50); await refMut(r=>[...r,{id:uid(),type:"img",url:u,x:ox,y:oy,w:180,h:180}]); return render(); }
+  if(act==="mbAddNote"){ const ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50); await refMut(r=>[...r,{id:uid(),type:"note",text:"",x:ox,y:oy,w:170,h:120}]); return render(); }
+  if(act==="mbAddColor"){ const o=ocById(state.selOC); const col=(o&&o.palette&&o.palette[0])||randHex(); const ox=40+Math.floor(Math.random()*60), oy=40+Math.floor(Math.random()*50); await refMut(r=>[...r,{id:uid(),type:"swatch",color:col,x:ox,y:oy,w:92,h:92}]); return render(); }
+  if(act==="mbDel"){ await refMut(r=>r.filter(c=>c.id!==id)); return render(); }
+  if(act==="mbUpload"){ const f=document.getElementById("mbFile"); if(f){ f.value=""; f.click(); } return; }
+  if(act==="mbExport"){ try{ await exportBoardPNG(); }catch(err){ toast("Export hiccuped 🌸"); } return; }
+
+  /* trivia · gallery · ownership log (on the open character) */
+  if(act==="triviaAdd"){ const i=document.getElementById("triviaText"); const t=(i&&i.value||"").trim(); if(!t)return; await ocPatch(state.selOC,o=>({...o,trivia:[...(o.trivia||[]),{id:uid(),text:t,date:TODAY}]})); toast("Fact filed ✨"); return render(); }
+  if(act==="triviaDel"){ await ocPatch(state.selOC,o=>({...o,trivia:(o.trivia||[]).filter(t=>t.id!==id)})); return render(); }
+  if(act==="ownAdd"){ const i=document.getElementById("ownText"); const t=(i&&i.value||"").trim(); if(!t)return; await ocPatch(state.selOC,o=>({...o,ownLog:[...(o.ownLog||[]),{id:uid(),text:t,date:TODAY}]})); toast("Logged 🧾"); return render(); }
+  if(act==="ownDel"){ await ocPatch(state.selOC,o=>({...o,ownLog:(o.ownLog||[]).filter(t=>t.id!==id)})); return render(); }
+  if(act==="galAddUrl"){ const u=((document.getElementById("galUrl")||{}).value||"").trim(); const artist=((document.getElementById("galArtist")||{}).value||"").trim(); if(!u){toast("Paste an image URL 🌸");return;} await ocPatch(state.selOC,o=>({...o,gallery:[...(o.gallery||[]),{id:uid(),url:u,artist,date:TODAY}]})); toast("Art shelved 🖼️"); return render(); }
+  if(act==="galDel"){ await ocPatch(state.selOC,o=>({...o,gallery:(o.gallery||[]).filter(g=>g.id!==id)})); return render(); }
+  if(act==="galUpload"){ const f=document.getElementById("galFile"); if(f){ f.value=""; f.click(); } return; }
+  if(act==="galFilter"){ state.galOC=el.dataset.v; return render(); }
+  if(act==="galView")return galViewModal(el.dataset.oc,id);
+  if(act==="setPfp"){ const oc=el.dataset.oc; const o=ocById(oc); const g=o&&(o.gallery||[]).find(x=>x.id===id); if(g){ await ocPatch(oc,x=>({...x,pfp:g.url})); toast("Profile pic set ⭐"); } closeModal(); return render(); }
+  if(act==="setBanner"){ const oc=el.dataset.oc; const o=ocById(oc); const g=o&&(o.gallery||[]).find(x=>x.id===id); if(g){ await ocPatch(oc,x=>({...x,banner:g.url})); toast("Banner set 🖼️"); } closeModal(); return render(); }
+  if(act==="galDelG"){ const oc=el.dataset.oc; await ocPatch(oc,x=>({...x,gallery:(x.gallery||[]).filter(g=>g.id!==id)})); closeModal(); toast("Deleted"); return render(); }
+  if(act==="pfpUpload"){ const f=document.getElementById("pfpFile"); if(f){ f.value=""; f.click(); } return; }
+  if(act==="pfpClear"){ await ocPatch(state.selOC,x=>({...x,pfp:""})); toast("Back to the emoji gumball 🦄"); return render(); }
+
+  /* lore */
+  if(act==="loreNew"){ _loreLinks=[]; return loreModal(null); }
+  if(act==="loreEdit"){ const l=(SENT.ocLore||[]).find(x=>x.id===id); _loreLinks=(l&&l.linkedOcIds||[]).slice(); return loreModal(l); }
+  if(act==="loreLink"){ const i=_loreLinks.indexOf(id); i>=0?_loreLinks.splice(i,1):_loreLinks.push(id); el.classList.toggle("on"); el.querySelector(".check").classList.toggle("on"); return; }
+  if(act==="saveLore")return saveLoreFromModal();
+  if(act==="loreDel"){ if(!confirm("Delete this lore entry?"))return; await ocMut("ocLore",a=>a.filter(x=>x.id!==id)); toast("Unwritten 🌫️"); return render(); }
+
+  /* arcs */
+  if(act==="addArc"){ const i=document.getElementById("newArc"); const t=(i&&i.value||"").trim(); if(!t){toast("Name the arc 🌸");return;} await ocMut("ocArcs",a=>[...a,{id:uid(),title:t,stage:"spark",ocIds:[],beats:[]}]); i.value=""; toast("Arc sparked 💡"); return render(); }
+  if(act==="openArc"){ e.stopPropagation(); return arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); }
+  if(act==="arcStage"){ await arcMutOne(id,a=>({...a,stage:el.dataset.v})); arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); return render(); }
+  if(act==="arcLink"){ const oc=el.dataset.oc; await arcMutOne(id,a=>{const s=(a.ocIds||[]).slice();const i2=s.indexOf(oc);i2>=0?s.splice(i2,1):s.push(oc);return {...a,ocIds:s};}); arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); return render(); }
+  if(act==="beatAdd"){ const i=document.getElementById("newBeat"); const t=(i&&i.value||"").trim(); if(!t)return; await arcMutOne(id,a=>({...a,beats:[...(a.beats||[]),{id:uid(),text:t,done:false}]})); arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); return render(); }
+  if(act==="beatDone"){ const bid=el.dataset.bid; await arcMutOne(id,a=>({...a,beats:(a.beats||[]).map(b=>b.id===bid?{...b,done:!b.done}:b)})); arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); return render(); }
+  if(act==="beatDel"){ const bid=el.dataset.bid; await arcMutOne(id,a=>({...a,beats:(a.beats||[]).filter(b=>b.id!==bid)})); arcModal((SENT.ocArcs||[]).find(a=>a.id===id)); return render(); }
+  if(act==="arcDel"){ if(!confirm("Delete this arc?"))return; await ocMut("ocArcs",a=>a.filter(x=>x.id!==id)); closeModal(); toast("Arc archived 🌙"); return render(); }
+
+  /* ships */
+  if(act==="shipNew"){ if((SENT.ocs||[]).length<2){toast("Ships need two characters first 🌸");return;} return shipModal(null); }
+  if(act==="shipEdit")return shipModal((SENT.ocShips||[]).find(s=>s.id===id));
+  if(act==="saveShip"){
+    const sid=document.getElementById("sh_id").value, aId=document.getElementById("sh_a").value, bId=document.getElementById("sh_b").value;
+    if(aId===bId){ toast("Pick two different characters 🌸"); return; }
+    const patch={ aId, bId, type:document.getElementById("sh_type").value, trust:Number(document.getElementById("sh_trust").value), notes:document.getElementById("sh_notes").value.trim() };
+    if(sid) await ocMut("ocShips",a=>a.map(x=>x.id===sid?{...x,...patch}:x));
+    else await ocMut("ocShips",a=>[...a,{id:uid(),...patch}]);
+    closeModal(); toast("Ship launched ⛵"); return render(); }
+  if(act==="shipDel"){ await ocMut("ocShips",a=>a.filter(x=>x.id!==id)); toast("Sunk, respectfully 🌊"); return render(); }
+
+  /* ideas + inspo */
+  if(act==="ocIdeaAdd"){ const i=document.getElementById("ideaText"); const t=(i&&i.value||"").trim(); if(!t){toast("What's the idea? 🌸");return;} await ocMut("ocIdeas",a=>[...a,{id:uid(),text:t,added:TODAY}]); i.value=""; toast("Bunny parked 🐰"); return render(); }
+  if(act==="homeIdeaAdd"){ const i=document.getElementById("homeIdea"); const t=(i&&i.value||"").trim(); if(!t)return; await ocMut("ocIdeas",a=>[...a,{id:uid(),text:t,added:TODAY}]); i.value=""; toast("Bunny parked 🐰"); return render(); }
+  if(act==="ocIdeaDel"){ await ocMut("ocIdeas",a=>a.filter(x=>x.id!==id)); return render(); }
+  if(act==="ideaToArc"){ const idea=(SENT.ocIdeas||[]).find(x=>x.id===id); if(idea){ await ocMut("ocArcs",a=>[...a,{id:uid(),title:idea.text.slice(0,80),stage:"spark",ocIds:[],beats:[]}]); toast("Promoted to a story arc 📚"); } return render(); }
+  if(act==="ocInspoAdd"){ const u=((document.getElementById("inspoUrl")||{}).value||"").trim(); const note=((document.getElementById("inspoNote")||{}).value||"").trim(); if(!u){toast("Paste the link 🌸");return;} await ocMut("ocInspo",a=>[...a,{id:uid(),url:u,note,done:false,added:TODAY}]); toast("Vaulted ✨"); return render(); }
+  if(act==="ocInspoDel"){ await ocMut("ocInspo",a=>a.filter(x=>x.id!==id)); return render(); }
+  if(act==="ocInspoDone"){ await ocMut("ocInspo",a=>a.map(x=>x.id===id?{...x,done:!x.done}:x)); return render(); }
+
+  /* rp info · journals · designs */
+  if(act==="rpSave"){ await ocSet("ocRpInfo",{ body:((document.getElementById("rpBody")||{}).value||"").trim(), starters:((document.getElementById("rpStarters")||{}).value||"").trim() }); toast("RP info saved 🎭"); return render(); }
+  if(act==="jrNew"){ _jrLinks=[]; return jrModal(null); }
+  if(act==="jrEdit"){ const j=(SENT.ocJournals||[]).find(x=>x.id===id); _jrLinks=(j&&j.ocIds||[]).slice(); return jrModal(j); }
+  if(act==="jrLink"){ const i=_jrLinks.indexOf(id); i>=0?_jrLinks.splice(i,1):_jrLinks.push(id); el.classList.toggle("on"); el.querySelector(".check").classList.toggle("on"); return; }
+  if(act==="saveJr"){ const title=((document.getElementById("jr_title")||{}).value||"").trim(); if(!title){toast("Give it a title 🌸");return;}
+    const jid=document.getElementById("jr_id").value;
+    const patch={ title, date:document.getElementById("jr_date").value||TODAY, body:document.getElementById("jr_body").value.trim(), ocIds:_jrLinks.slice() };
+    if(jid) await ocMut("ocJournals",a=>a.map(x=>x.id===jid?{...x,...patch}:x));
+    else await ocMut("ocJournals",a=>[...a,{id:uid(),...patch}]);
+    closeModal(); toast("Entry kept 📔"); return render(); }
+  if(act==="jrDel"){ if(!confirm("Delete this entry?"))return; await ocMut("ocJournals",a=>a.filter(x=>x.id!==id)); toast("Torn out, gently 🌙"); return render(); }
+  if(act==="dgNew")return dgModal(null);
+  if(act==="dgEdit")return dgModal((SENT.ocDesigns||[]).find(x=>x.id===id));
+  if(act==="dgView")return dgViewModal(id);
+  if(act==="dgCover"){ const u=el.dataset.u; await ocMut("ocDesigns",a=>a.map(x=>{ if(x.id!==id)return x; const imgs=[x.img,...(x.imgs||[])].filter(Boolean).filter(z=>z!==u); return {...x,img:u,imgs}; })); toast("Cover set ⭐"); dgViewModal(id); return render(); }
+  if(act==="dgImgDel"){ const u=el.dataset.u; await ocMut("ocDesigns",a=>a.map(x=>x.id===id?{...x,imgs:(x.imgs||[]).filter(z=>z!==u)}:x)); dgViewModal(id); return render(); }
+  if(act==="dgMultiUpload"){ const f=document.getElementById("dgMultiFile"); if(f){f.value="";f.click();} return; }
+  if(act==="dgUpload"){ const f=document.getElementById("dgFile"); if(f){f.value="";f.click();} return; }
+  if(act==="saveDg"){ const name=((document.getElementById("dg_name")||{}).value||"").trim(); if(!name){toast("Name the design 🌸");return;}
+    const did=document.getElementById("dg_id").value;
+    const patch={ name, status:document.getElementById("dg_status").value, designer:document.getElementById("dg_designer").value.trim(), price:document.getElementById("dg_price").value.trim(), notes:document.getElementById("dg_notes").value.trim() };
+    if(_dgImg!==undefined)patch.img=_dgImg;
+    patch.imgs=_dgImgs.slice();
+    if(did) await ocMut("ocDesigns",a=>a.map(x=>x.id===did?{...x,...patch}:x));
+    else await ocMut("ocDesigns",a=>[...a,{id:uid(),added:TODAY,...patch}]);
+    closeModal(); toast("Design shelved 🏷️"); return render(); }
+  if(act==="dgDel"){ await ocMut("ocDesigns",a=>a.filter(x=>x.id!==id)); toast("Removed"); return render(); }
+  if(act==="dgPromote"){ const d=(SENT.ocDesigns||[]).find(x=>x.id===id); if(d){
+    /* open a fresh character sheet pre-filled from the design — build their world, then 💾 save.
+       the design leaves My Designs only once the sheet is saved. */
+    _sheetPrefill={ name:d.name||"", emoji:"🌱", pfp:d.img||"", summary:d.notes||"",
+      adopt:{ designer:d.designer||"", designerUrl:"", from:"", date:d.added||"", method:"", price:d.price||"", terms:d.notes||"" },
+      _fromDesign:d.id, _designImgs:[d.img,...(d.imgs||[])].filter(Boolean) };
+    state.editOC="new"; state.selOC=null; state.tab="chars"; toast("Sheet started from your design — fill in their world 🌱"); }
+    return render(); }
+
+  /* layout + settings */
+  if(act==="homeMin"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.min=Object.assign({},L.min,{[k]:!L.min[k]});}); return render(); }
+  if(act==="homeHide"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.hidden=Object.assign({},L.hidden,{[k]:true});}); toast("Card hidden — restore it from ＋ cards 🌸"); return render(); }
+  if(act==="manageCards"){ const g=el.closest(".grid-modular"); let labels=WLABEL; try{labels=JSON.parse(g.dataset.labels);}catch(err){} return manageCardsModal(g?g.dataset.tab:"home", labels); }
+  if(act==="cardToggle"){ const k=el.dataset.w; await setLayout(_mcTab,L=>{ L.hidden=Object.assign({},L.hidden); L.hidden[k]=!L.hidden[k]; if(!L.hidden[k]&&!L.order.includes(k))L.order=[...L.order,k]; }); manageCardsModal(_mcTab,_mcLabels); return render(); }
+  if(act==="toggleLock"){ localStorage.setItem("oc-layout-locked",localStorage.getItem("oc-layout-locked")==="1"?"0":"1"); applySettings(); toast(localStorage.getItem("oc-layout-locked")==="1"?"Layout locked 🔒":"Layout unlocked 🔓"); if(state.tab==="settings")render(); return; }
+  if(act==="resetLayout"){ try{localStorage.removeItem("oc-tab-order");}catch(err){} await ocSet("ocLayouts",{}); toast("Layout reset 🌸"); return render(); }
+  if(act==="setCalm"){ localStorage.setItem("oc-calm",localStorage.getItem("oc-calm")==="1"?"0":"1"); applySettings(); return render(); }
+  if(act==="setText"){ localStorage.setItem("oc-text",localStorage.getItem("oc-text")==="1"?"0":"1"); applySettings(); return render(); }
+  if(act==="saveConfig"){ const cfg={ mainOs:document.getElementById("cf_mainos").value.trim(), creator:{ name:document.getElementById("cf_name").value.trim()||"Eggie", emoji:document.getElementById("cf_emoji").value.trim()||"🦄" } }; await ocSet("ocAppConfig",cfg); mergeCfg(cfg); toast("Saved 💗"); return render(); }
+  if(act==="exportData")return exportData();
+  if(act==="restoreBackup"){
+    let b=null; try{ b=JSON.parse(localStorage.getItem("oc-backup")||"null"); }catch(e){}
+    if(!b||!b.data){ toast("No auto-backup on this device yet 🌸"); return; }
+    if(!confirm("Restore everything from this device's auto-backup ("+new Date(b.t).toLocaleString()+")? This overwrites what's in the cloud with the backup."))return;
+    await DB.saveDaily(SENTINEL,n=>{ const out={...n}; OC_KEYS.forEach(k=>{ if(b.data[k]!=null)out[k]=b.data[k]; }); return out; });
+    toast("Restored from backup ♻️💗"); return render(); }
+
+  /* stickies */
+  if(act==="addSticky"){ addSticky(""); return; }
+  if(act==="stickyColor"){ const n=STICKIES.find(s=>s.id===id); if(n){const i=STICKY_COLS.indexOf(n.color); n.color=STICKY_COLS[(i+1)%STICKY_COLS.length]; saveStickies(); renderStickies();} return; }
+  if(act==="delSticky"){ STICKIES=STICKIES.filter(s=>s.id!==id); saveStickies(); renderStickies(); return; }
+});
+/* live-typed inputs (search, sticky text, board notes, file upload) */
+document.addEventListener("input",e=>{
+  if(e.target&&e.target.id==="charSearch"){ state.charQ=e.target.value; state._refocus="charSearch"; clearTimeout(window._cqT); window._cqT=setTimeout(render,200); }
+  if(e.target&&e.target.id==="loreSearch"){ state.loreQ=e.target.value; state._refocus="loreSearch"; clearTimeout(window._lqT); window._lqT=setTimeout(render,200); }
+});
+document.addEventListener("change",e=>{
+  if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
+  if(e.target&&e.target.dataset&&e.target.dataset.mbnote&&!RO){ const idn=e.target.dataset.mbnote; mbUpdate(idn,{text:e.target.value}).catch(()=>{}); }
+  if(e.target&&e.target.dataset&&e.target.dataset.arcid&&!RO){ arcMutOne(e.target.dataset.arcid,a=>({...a,title:e.target.value.trim()||a.title})).then(render); }
+  if(e.target&&e.target.id==="mbFile"&&e.target.files&&e.target.files.length){ if(RO){toast("Demo mode — connect Supabase to save 🌸");return;} (async()=>{ const files=[...e.target.files]; let added=0;
+    for(const f of files){ try{ const {url,ar}=await mbFileToDataURL(f); const w=180, h=Math.max(100,Math.min(260,Math.round(180/ar)));
+      const ox=24+Math.floor(Math.random()*70)+added*16, oy=24+Math.floor(Math.random()*50)+added*16;
+      await refMut(r=>[...r,{id:uid(),type:"img",url,x:ox,y:oy,w,h}]); added++;
+    }catch(err){ console.error(err); } }
+    toast(added?("Added "+added+" photo"+(added>1?"s":"")+" 🖼️"):"Couldn't read that image 🌸"); render(); })(); }
+  if(e.target&&e.target.id==="galFile"&&e.target.files&&e.target.files.length){ if(RO){toast("Demo mode — connect Supabase to save 🌸");return;} (async()=>{ const files=[...e.target.files]; let added=0;
+    const artist=((document.getElementById("galArtist")||{}).value||"").trim();
+    for(const f of files){ try{ const {url}=await mbFileToDataURL(f);
+      await ocPatch(state.selOC,o=>({...o,gallery:[...(o.gallery||[]),{id:uid(),url,artist,date:TODAY}]})); added++;
+    }catch(err){ console.error(err); } }
+    toast(added?("Shelved "+added+" piece"+(added>1?"s":"")+" 🖼️"):"Couldn't read that image 🌸"); render(); })(); }
+  if(e.target&&e.target.id==="pfpFile"&&e.target.files&&e.target.files[0]){ if(RO){toast("Demo mode — connect Supabase to save 🌸");return;} (async()=>{
+    try{ const {url}=await mbFileToDataURL(e.target.files[0]); await ocPatch(state.selOC,o=>({...o,pfp:url})); toast("Looking adorable ⭐"); render(); }
+    catch(err){ toast("Couldn't read that image 🌸"); } })(); }
+  /* sheet editor: stash uploads until 💾 save (preview updates in place — no re-render, your typing is safe) */
+  if(e.target&&e.target.id==="sheetPfpFile"&&e.target.files&&e.target.files[0]){ (async()=>{
+    try{ const {url}=await mbFileToDataURL(e.target.files[0]); _pend.pfp=url; const el2=document.getElementById("sheetPort"); if(el2){el2.style.backgroundImage=`url('${url}')`; el2.style.borderStyle="solid"; el2.style.color="transparent";} toast("Portrait ready — hit 💾 save"); }
+    catch(err){ toast("Couldn't read that image 🌸"); } })(); }
+  if(e.target&&e.target.id==="sheetBannerFile"&&e.target.files&&e.target.files[0]){ (async()=>{
+    try{ const {url}=await mbFileToDataURL(e.target.files[0]); _pend.banner=url; const el2=document.getElementById("sheetBan"); if(el2){el2.style.backgroundImage=`url('${url}')`; el2.style.borderStyle="solid"; el2.style.color="transparent";} toast("Banner ready — hit 💾 save"); }
+    catch(err){ toast("Couldn't read that image 🌸"); } })(); }
+});
+document.addEventListener("change",e=>{
+  if(e.target&&e.target.id==="dgFile"&&e.target.files&&e.target.files[0]){ (async()=>{
+    try{ const {url}=await mbFileToDataURL(e.target.files[0]); _dgImg=url; const box=document.getElementById("dgImgBox"); if(box){box.style.backgroundImage=`url('${url}')`; box.style.borderStyle="solid"; box.style.color="transparent";} toast("Cover ready — hit 💾 save"); }
+    catch(err){ toast("Couldn't read that image 🌸"); } })(); }
+  if(e.target&&e.target.id==="dgMultiFile"&&e.target.files&&e.target.files.length){ (async()=>{
+    let added=0;
+    for(const f of [...e.target.files]){ try{ const {url}=await mbFileToDataURL(f); _dgImgs.push(url); added++; }catch(err){ console.error(err); } }
+    dgStrip(); toast(added?("Added "+added+" file"+(added>1?"s":"")+" — hit 💾 save 🗂️"):"Couldn't read those 🌸"); })(); }
+});
+/* remove a pending design file from the editor strip */
+document.addEventListener("click",e=>{ const x=e.target.closest("[data-dgx]"); if(!x)return; if(RO){toast("Demo mode — connect Supabase to save 🌸");return;} _dgImgs.splice(parseInt(x.dataset.dgx),1); dgStrip(); });
+/* live star preview on the sheet's ability scores */
+document.addEventListener("input",e=>{ if(e.target&&e.target.dataset&&e.target.dataset.stat){ const s=document.getElementById("st_stars_"+e.target.dataset.stat); if(s)s.textContent=stars(e.target.value); } });
+/* Enter-key submits: input id → its add button */
+document.addEventListener("keydown",(e)=>{
+  if(e.key!=="Enter")return; const t=e.target; if(!t||!t.id)return;
+  const map={ ideaText:'[data-act="ocIdeaAdd"]', homeIdea:'[data-act="homeIdeaAdd"]', newArc:'[data-act="addArc"]', newBeat:'[data-act="beatAdd"]', inspoUrl:'[data-act="ocInspoAdd"]', inspoNote:'[data-act="ocInspoAdd"]', mbImgUrl:'[data-act="mbAddImage"]', triviaText:'[data-act="triviaAdd"]', ownText:'[data-act="ownAdd"]', galUrl:'[data-act="galAddUrl"]', galArtist:'[data-act="galAddUrl"]' };
+  if(map[t.id]){ const b=document.querySelector(map[t.id]); if(b)b.click(); }
+});
+
+/* ===== kanban: desktop HTML5 drag + suppress native drag for pencil/touch ===== */
+let dragId=null,_lastPtr="mouse";
+document.addEventListener("pointerdown",e=>{ _lastPtr=e.pointerType||"mouse"; },true);
+document.addEventListener("dragstart",e=>{ if(_lastPtr!=="mouse"){ e.preventDefault(); return; } const a=e.target.closest('[data-act="dragArc"]'); if(a)dragId=a.dataset.id; });
+document.addEventListener("dragover",e=>{ if(dragId&&e.target.closest('[data-act="dropArcStage"]'))e.preventDefault(); });
+document.addEventListener("drop",async e=>{
+  if(RO||!dragId)return; const col=e.target.closest('[data-act="dropArcStage"]'); if(!col)return;
+  e.preventDefault(); await arcMutOne(dragId,a=>({...a,stage:col.dataset.stage})); dragId=null; render();
+});
+/* ===== kanban: touch/pencil ghost drag (HTML5 DnD doesn't fire on touch) ===== */
+(function(){
+  let TD=null, swallowClick=false;
+  document.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse"||RO)return; const k=e.target.closest('[data-act="dragArc"]'); if(!k)return; TD={id:k.dataset.id,el:k,sx:e.clientX,sy:e.clientY,moved:false,ghost:null}; },true);
+  document.addEventListener("pointermove",e=>{ if(!TD||e.pointerType==="mouse")return; const dx=e.clientX-TD.sx,dy=e.clientY-TD.sy;
+    if(!TD.moved){ if(Math.abs(dx)+Math.abs(dy)<8)return; TD.moved=true; const r=TD.el.getBoundingClientRect(); const g=TD.el.cloneNode(true); g.classList.add("drag-ghost"); g.style.cssText="position:fixed;left:0;top:0;z-index:9998;pointer-events:none;opacity:.85;box-shadow:0 8px 22px rgba(110,80,120,.35);width:"+r.width+"px;"; TD.ox=e.clientX-r.left; TD.oy=e.clientY-r.top; document.body.appendChild(g); TD.ghost=g; try{TD.el.setPointerCapture(e.pointerId);}catch(er){} }
+    e.preventDefault(); TD.ghost.style.transform="translate("+(e.clientX-TD.ox)+"px,"+(e.clientY-TD.oy)+"px)";
+    document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot"));
+    const elp=document.elementFromPoint(e.clientX,e.clientY); const tg=elp&&elp.closest('[data-act="dropArcStage"]'); if(tg)tg.classList.add("drop-hot"); },true);
+  document.addEventListener("pointerup",async e=>{ if(!TD||e.pointerType==="mouse")return; const d=TD; TD=null; if(d.ghost)d.ghost.remove(); document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); if(!d.moved)return; swallowClick=true; setTimeout(()=>swallowClick=false,350);
+    const elp=document.elementFromPoint(e.clientX,e.clientY); const tg=elp&&elp.closest('[data-act="dropArcStage"]'); if(tg){ try{ await arcMutOne(d.id,a=>({...a,stage:tg.dataset.stage})); render(); }catch(er){console.error(er);} } },true);
+  document.addEventListener("pointercancel",()=>{ if(!TD)return; if(TD.ghost)TD.ghost.remove(); document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); TD=null; },true);
+  document.addEventListener("click",e=>{ if(swallowClick){ e.stopPropagation(); e.preventDefault(); swallowClick=false; } },true);
+})();
+
+/* ===== ref board: freeform drag + resize of cards (Milanote-style, ported) ===== */
+(function(){
+  let mbDrag=null, mbRz=null;
+  document.addEventListener("pointerdown",e=>{
+    if(RO)return;
+    const rzh=e.target.closest("[data-mbrz]");
+    if(rzh){ const card=rzh.closest(".mb-card"); if(!card)return; mbRz={id:rzh.getAttribute("data-mbrz"),card,sx:e.clientX,sy:e.clientY,w:card.offsetWidth,h:card.offsetHeight}; try{rzh.setPointerCapture(e.pointerId);}catch(_){}; e.preventDefault(); e.stopPropagation(); return; }
+    if(e.target.closest("textarea,button,.mb-hex"))return;
+    const card=e.target.closest(".mb-card"); if(!card)return;
+    const board=document.getElementById("ocBoard"); if(!board)return; const br=board.getBoundingClientRect(), cr=card.getBoundingClientRect();
+    mbDrag={id:card.getAttribute("data-mb"),card,br,ox:e.clientX-cr.left,oy:e.clientY-cr.top};
+    card.style.zIndex=60; try{card.setPointerCapture(e.pointerId);}catch(_){}; e.preventDefault();
+  },true);
+  document.addEventListener("pointermove",e=>{
+    if(mbRz){ const w=Math.max(56,mbRz.w+(e.clientX-mbRz.sx)), h=Math.max(44,mbRz.h+(e.clientY-mbRz.sy)); mbRz.card.style.width=w+"px"; mbRz.card.style.height=h+"px"; return; }
+    if(!mbDrag)return; let x=e.clientX-mbDrag.br.left-mbDrag.ox, y=e.clientY-mbDrag.br.top-mbDrag.oy; x=Math.max(0,Math.min(x,mbDrag.br.width-28)); y=Math.max(0,Math.min(y,mbDrag.br.height-18)); mbDrag.card.style.left=x+"px"; mbDrag.card.style.top=y+"px";
+  },true);
+  document.addEventListener("pointerup",async()=>{
+    if(mbRz){ const id=mbRz.id,w=parseInt(mbRz.card.style.width)||mbRz.card.offsetWidth,h=parseInt(mbRz.card.style.height)||mbRz.card.offsetHeight; mbRz=null; try{await mbUpdate(id,{w,h});}catch(_){}; render(); return; }
+    if(!mbDrag)return; const id=mbDrag.id,x=parseInt(mbDrag.card.style.left)||0,y=parseInt(mbDrag.card.style.top)||0; mbDrag=null; try{await mbUpdate(id,{x,y});}catch(_){}; render(); return;
+  },true);
+  document.addEventListener("pointercancel",()=>{ if(!mbDrag&&!mbRz)return; mbDrag=null; mbRz=null; try{render();}catch(_){} },true);
+})();
+
+/* ===== sticky notes: drag + resize ===== */
+let dragSticky=null,dragOff={x:0,y:0};
+document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"]'); if(!h)return; const el=h.closest(".sticky"); if(!el||RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
+document.addEventListener("pointermove",e=>{ if(!dragSticky)return; let x=Math.max(0,Math.min(window.innerWidth-60,e.clientX-dragOff.x)), y=Math.max(54,Math.min(window.innerHeight-30,e.clientY-dragOff.y)); dragSticky.style.left=x+"px"; dragSticky.style.top=y+"px"; });
+document.addEventListener("pointerup",()=>{ if(!dragSticky)return; const id=dragSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.x=parseInt(dragSticky.style.left)||n.x; n.y=parseInt(dragSticky.style.top)||n.y; saveStickies();} dragSticky=null; });
+document.addEventListener("pointercancel",()=>{ dragSticky=null; });
+let resizeSticky=null,resizeStart=null;
+document.addEventListener("pointerdown",e=>{ const h=e.target.closest('[data-act="stickyResize"]'); if(!h||RO)return; const el=h.closest(".sticky"); if(!el)return; resizeSticky=el; const r=el.getBoundingClientRect(); resizeStart={w:r.width,h:r.height,x:e.clientX,y:e.clientY}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); e.stopPropagation(); });
+document.addEventListener("pointermove",e=>{ if(!resizeSticky)return; const w=Math.max(140,resizeStart.w+(e.clientX-resizeStart.x)), h=Math.max(108,resizeStart.h+(e.clientY-resizeStart.y)); resizeSticky.style.width=w+"px"; resizeSticky.style.height=h+"px"; });
+document.addEventListener("pointerup",()=>{ if(!resizeSticky)return; const id=resizeSticky.getAttribute("data-sid"), n=STICKIES.find(s=>s.id===id); if(n){n.w=parseInt(resizeSticky.style.width)||n.w; n.h=parseInt(resizeSticky.style.height)||n.h; saveStickies();} resizeSticky=null; });
+document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
+
+/* ===== modular drag-reorder + resize: iOS-style lift, follow, slide, settle (ported verbatim) ===== */
+(function(){
+  let d=null, sc=false, rafL=0;
+  const gridEl=()=>document.querySelector(".grid-modular");
+  function maxCols(){ const g=gridEl(); return g?Math.max(3,Math.min(16,Math.floor(g.clientWidth/88))):3; }
+  function relayoutSoon(){ if(rafL)return; rafL=requestAnimationFrame(()=>{ rafL=0; try{layoutHome();}catch(_){} }); }
+  function commitTabs(order){ try{ localStorage.setItem("oc-tab-order",JSON.stringify(order)); }catch(e){} }
+  function gtab(el){ const g=el&&el.closest&&el.closest(".grid-modular"); return g?g.dataset.tab:"home"; }
+  function commitWidgetOrder(c,order){ setLayout(c.dataset.tab||"home",L=>{L.order=order;}).catch(()=>{}); }
+  function commitWidgetSize(item,key,val){ setLayout(gtab(item),L=>{L.size=Object.assign({},L.size,{[key]:val});}).catch(()=>{}); }
+  function moveGhost(x,y,scale){ if(d&&d.ghost)d.ghost.style.transform="translate("+(x-d.gx)+"px,"+(y-d.gy)+"px) scale("+(scale||1.04)+")"; }
+  function flipReorder(c, mutate){
+    const kids=[...c.children], firsts=kids.map(k=>k.getBoundingClientRect());
+    mutate(); try{layoutHome();}catch(_){}
+    kids.forEach((k,i)=>{ if(k===(d&&d.item))return; const a=firsts[i], b=k.getBoundingClientRect(), dx=a.left-b.left, dy=a.top-b.top; if(!dx&&!dy)return; k.style.transition="none"; k.style.transform="translate("+dx+"px,"+dy+"px)"; requestAnimationFrame(()=>{ k.style.transition=""; k.style.transform=""; }); });
+  }
+  document.addEventListener("pointerdown",e=>{
+    if(RO||document.body.classList.contains("locked"))return;
+    const rez=e.target.closest(".home-resize");
+    if(rez){ const item=rez.closest(".home-widget"); if(item){ const r=item.getBoundingClientRect(), cur=parseInt(((item.style.gridColumn||"").match(/span (\d+)/)||[])[1]||"1"), panel=item.querySelector(".panel,section"), startH=panel?panel.getBoundingClientRect().height:160; d={mode:"resize",item,panel,key:item.getAttribute("data-w"),startW:r.width,startCols:cur,cols:cur,startH,h:startH,sx:e.clientX,sy:e.clientY,moved:false,cap:rez,pid:e.pointerId}; try{rez.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
+    const grip=e.target.closest(".home-grip");
+    if(grip){ const item=grip.closest(".home-widget"), c=item&&item.parentElement; if(item&&c){ d={mode:"order",item,c,itemSel:".home-widget",key:"data-w",horiz:false,sx:e.clientX,sy:e.clientY,moved:false,cap:grip,pid:e.pointerId}; try{grip.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); } return; }
+    const tab=e.target.closest("#nav .tab");
+    if(tab){ const c=tab.parentElement; d={mode:"order",item:tab,c,itemSel:".tab",key:"data-tab",commit:commitTabs,horiz:true,sx:e.clientX,sy:e.clientY,moved:false,cap:tab,pid:e.pointerId}; try{tab.setPointerCapture(e.pointerId);}catch(_){} }
+  },true);
+  document.addEventListener("pointermove",e=>{
+    if(!d)return;
+    if(!d.moved){ if(Math.abs(e.clientX-d.sx)+Math.abs(e.clientY-d.sy)<6)return; d.moved=true;
+      if(d.mode==="resize"){ d.item.classList.add("resizing"); }
+      else { const r=d.item.getBoundingClientRect(); d.gx=d.sx-r.left; d.gy=d.sy-r.top; const g=d.item.cloneNode(true); g.classList.add("drag-clone"); g.classList.remove("reordering","dragsrc"); g.style.width=r.width+"px"; g.style.height=r.height+"px"; g.querySelectorAll(".home-tools,.home-resize").forEach(x=>x.remove()); document.body.appendChild(g); d.ghost=g; d.item.classList.add("dragsrc"); moveGhost(d.sx,d.sy); }
+    }
+    e.preventDefault();
+    if(d.mode==="resize"){ const unit=d.startW/d.startCols||d.startW; let nc=Math.round((d.startW+(e.clientX-d.sx))/unit); nc=Math.max(3,Math.min(maxCols(),nc)); if(nc!==d.cols){ d.cols=nc; d.item.style.gridColumn="span "+nc; d.item.dataset.c=nc; } const nh=Math.max(120,Math.round(d.startH+(e.clientY-d.sy))); d.h=nh; if(d.panel)d.panel.style.minHeight=nh+"px"; d.item.dataset.h=nh; relayoutSoon(); return; }   /* dataset.c sync = the resize-persistence fix */
+    moveGhost(e.clientX,e.clientY);
+    const el=document.elementFromPoint(e.clientX,e.clientY), over=el&&el.closest(d.itemSel);
+    if(over&&over!==d.item&&over.parentElement===d.c){ const r=over.getBoundingClientRect(), before=d.horiz?(e.clientX<r.left+r.width/2):(e.clientY<r.top+r.height/2); const ref=before?over:over.nextSibling; if(ref!==d.item){ flipReorder(d.c, ()=>d.c.insertBefore(d.item, ref)); } }
+  },true);
+  document.addEventListener("pointerup",()=>{
+    if(!d)return; const x=d; d=null;
+    try{x.cap.releasePointerCapture(x.pid);}catch(_){}
+    if(x.mode==="resize"){ x.item.classList.remove("resizing"); if(x.moved){ sc=true; setTimeout(()=>sc=false,350); commitWidgetSize(x.item,x.key,{c:x.cols,h:Math.round(x.h)}); try{layoutHome();}catch(_){} } return; }
+    if(!x.moved){ return; }
+    sc=true; setTimeout(()=>sc=false,350);
+    const fr=x.item.getBoundingClientRect();
+    if(x.ghost){ x.ghost.style.transition="transform .2s cubic-bezier(.2,.8,.25,1),opacity .2s"; x.ghost.style.transform="translate("+fr.left+"px,"+fr.top+"px) scale(1)"; x.ghost.style.opacity="0"; const gh=x.ghost; setTimeout(()=>{ gh&&gh.remove(); },220); }
+    x.item.classList.remove("dragsrc");
+    const ord=[...x.c.querySelectorAll(x.itemSel)].map(it=>it.getAttribute(x.key));
+    if(x.itemSel===".tab"){ commitTabs(ord); } else { commitWidgetOrder(x.c,ord); try{layoutHome();}catch(_){} }
+  },true);
+  document.addEventListener("pointercancel",()=>{ if(!d)return; if(d.ghost)d.ghost.remove(); if(d.item){d.item.classList.remove("dragsrc","resizing","reordering");} d=null; },true);
+  document.addEventListener("click",e=>{ if(sc){ e.stopPropagation(); e.preventDefault(); sc=false; } },true);
+})();
+
+/* ===== glitter & sparkle cursor trail — twinkling stars + glitter dust ✨ ===== */
+(function(){
+  const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
+  let last=0, count=0; const MAX=110;                  // aggressive mode ✨
+  /* princess sparkles ✨ — mostly white with the faintest champagne/pearl tints, like old-Disney pixie dust */
+  const STAR_COLS=["#ffffff","#ffffff","#ffffff","#fffdf4","#fff8e1","#fdf6ff"];
+  const DUST_COLS=["#ffffff","#ffffff","#fffdf4","#fdf9ff"];
+  function spawn(x,y){
+    if(reduce()||count>=MAX)return;
+    const star=Math.random()<0.5;                      // stars twinkle, dust drifts
+    const p=document.createElement("div"); p.className="sparkle "+(star?"star":"dot");
+    const size=star?(11+Math.random()*15):(3+Math.random()*5);
+    const col=star?STAR_COLS[Math.floor(Math.random()*STAR_COLS.length)]:DUST_COLS[Math.floor(Math.random()*DUST_COLS.length)];
+    p.style.width=p.style.height=size.toFixed(1)+"px";
+    p.style.left=(x-size/2+(Math.random()*30-15))+"px"; p.style.top=(y-size/2+(Math.random()*30-15))+"px";
+    if(star){ p.style.background=`radial-gradient(circle at 50% 50%, #ffffff 0%, ${col} 55%, ${col} 100%)`; p.style.filter=`drop-shadow(0 0 ${(5+Math.random()*7).toFixed(0)}px ${col})`; }
+    else { p.style.background=col; p.style.boxShadow=`0 0 ${(7+Math.random()*10).toFixed(0)}px ${(2+Math.random()*2.4).toFixed(1)}px ${col}`; }
+    p.style.setProperty("--dx",(Math.random()*70-35).toFixed(0)+"px");
+    p.style.setProperty("--dy",(22+Math.random()*70).toFixed(0)+"px");
+    p.style.setProperty("--dr",star?(Math.random()*300-90).toFixed(0)+"deg":"0deg");
+    p.style.setProperty("--s",(0.7+Math.random()*1.0).toFixed(2));
+    p.style.setProperty("--o",(0.8+Math.random()*0.2).toFixed(2));
+    p.style.animation=`sparkleTwinkle ${(1.0+Math.random()*1.2).toFixed(2)}s ease-out forwards`;
+    document.body.appendChild(p); count++;
+    p.addEventListener("animationend",()=>{ p.remove(); count--; });
+  }
+  window.addEventListener("pointermove",e=>{ if(e.pointerType!=="mouse")return; const now=performance.now(); if(now-last<16)return; last=now; spawn(e.clientX,e.clientY); spawn(e.clientX,e.clientY); if(Math.random()<0.6)spawn(e.clientX,e.clientY); },{passive:true});
+  /* a little burst on every click 🎉 */
+  window.addEventListener("pointerdown",e=>{ if(e.pointerType!=="mouse"||reduce())return; for(let i=0;i<8;i++)spawn(e.clientX,e.clientY); },{passive:true});
+})();
+/* ===== ambient falling-sprinkles field — canvas behind everything 🍬 ===== */
+(function(){
+  const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
+  const cv=document.createElement("canvas"); cv.id="sprinkleCanvas";
+  cv.style.cssText="position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;";
+  document.body.appendChild(cv);
+  const ctx=cv.getContext("2d");
+  let DPR=Math.min(2,window.devicePixelRatio||1), W=0, H=0;
+  function resize(){ DPR=Math.min(2,window.devicePixelRatio||1); W=cv.width=Math.floor(innerWidth*DPR); H=cv.height=Math.floor(innerHeight*DPR); }
+  resize(); addEventListener("resize",resize);
+  /* pre-rendered sprinkle sprites — one glossy capsule per candy colour */
+  const COLS=["#f8b8d8","#a9c8f5","#c3b2f2","#f5dd9e","#a9e3cf"];
+  const sprites=COLS.map(col=>{ const c=document.createElement("canvas"); c.width=44; c.height=18; const x=c.getContext("2d");
+    x.lineCap="round"; x.lineWidth=12; x.strokeStyle=col; x.beginPath(); x.moveTo(10,9); x.lineTo(34,9); x.stroke();
+    x.lineCap="round"; x.lineWidth=3.5; x.strokeStyle="rgba(255,255,255,.6)"; x.beginPath(); x.moveTo(13,5.5); x.lineTo(29,5.5); x.stroke(); return c; });
+  let mx=-9999,my=-9999;
+  addEventListener("pointermove",e=>{ mx=e.clientX*DPR; my=e.clientY*DPR; });
+  addEventListener("pointerleave",()=>{ mx=my=-9999; });
+  const COUNT=(innerWidth<640?18:55), sp=[];   /* fewer sprinkles on phones = happier battery */
+  function mk(seed){ return { x:Math.random()*W, y: seed? Math.random()*H : -30*DPR-Math.random()*80*DPR,
+    v:(0.3+Math.random()*0.8)*DPR, rot:Math.random()*6.28, vr:(Math.random()-0.5)*0.02,
+    wob:Math.random()*6.28, wobsp:0.006+Math.random()*0.016, amp:(0.25+Math.random()*0.6)*DPR,
+    sc:(0.45+Math.random()*0.7)*DPR, o:0.22+Math.random()*0.4, i:Math.floor(Math.random()*sprites.length) }; }
+  for(let k=0;k<COUNT;k++)sp.push(mk(true));
+  const R=120;
+  function loop(){
+    ctx.clearRect(0,0,W,H);
+    if(reduce()){ requestAnimationFrame(loop); return; }
+    const Rd=R*DPR;
+    for(let k=0;k<COUNT;k++){ const b=sp[k];
+      b.wob+=b.wobsp; b.y+=b.v; b.x+=Math.sin(b.wob)*b.amp; b.rot+=b.vr;
+      const dx=b.x-mx, dy=b.y-my, d2=dx*dx+dy*dy;
+      if(d2<Rd*Rd){ const dd=Math.sqrt(d2)||1, f=(Rd-dd)/Rd*3.2*DPR; b.x+=dx/dd*f; b.y+=dy/dd*f; }
+      if(b.y>H+30*DPR || b.x< -60*DPR || b.x>W+60*DPR){ const n=mk(false); Object.assign(b,n); }
+      const im=sprites[b.i], w=im.width*b.sc*0.55, h=im.height*b.sc*0.55;
+      ctx.save(); ctx.globalAlpha=b.o; ctx.translate(b.x,b.y); ctx.rotate(b.rot); ctx.drawImage(im,-w/2,-h/2,w,h); ctx.restore();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+/* ===== drag files straight in from your computer ✨ =====
+   gallery (on an open character) · ref board (lands where you drop it) ·
+   a design card or the design editor · the sheet's portrait/banner boxes */
+(function(){
+  const hasFiles=e=>{ try{ return [...((e.dataTransfer&&e.dataTransfer.types)||[])].includes("Files"); }catch(_){ return false; } };
+  function dropZone(t){
+    if(!t||!t.closest)return null;
+    let el;
+    if(el=t.closest("#sheetPort"))return {kind:"pfp",el};
+    if(el=t.closest("#sheetBan"))return {kind:"banner",el};
+    if(el=t.closest("#dgImgBox"))return {kind:"dgCover",el};
+    if(document.getElementById("dgImgsRow")&&t.closest(".modal-bg"))return {kind:"dgFiles",el:document.getElementById("dgImgsRow").closest(".sheet-box")};
+    if(el=t.closest("#ocBoard"))return {kind:"board",el};
+    if(el=t.closest("[data-dgid]"))return {kind:"design",el,id:el.getAttribute("data-dgid")};
+    if(state.tab==="chars"&&state.selOC&&!state.editOC){ const p=document.getElementById("galPanel"); if(p)return {kind:"gallery",el:p}; }
+    return null;
+  }
+  document.addEventListener("dragover",e=>{
+    if(!hasFiles(e))return; e.preventDefault(); try{e.dataTransfer.dropEffect="copy";}catch(_){}
+    document.querySelectorAll(".file-hot").forEach(x=>x.classList.remove("file-hot"));
+    const z=dropZone(e.target); if(z&&z.el)z.el.classList.add("file-hot");
+  });
+  document.addEventListener("dragleave",e=>{ if(!e.relatedTarget)document.querySelectorAll(".file-hot").forEach(x=>x.classList.remove("file-hot")); });
+  document.addEventListener("drop",async e=>{
+    if(!hasFiles(e))return; e.preventDefault();
+    document.querySelectorAll(".file-hot").forEach(x=>x.classList.remove("file-hot"));
+    const files=[...e.dataTransfer.files].filter(f=>/^image\//.test(f.type));
+    if(!files.length){ toast("Only images can be dropped in 🌸"); return; }
+    const z=dropZone(e.target);
+    if(!z){ toast("Drop onto a character's gallery or board, a design, or the sheet 🌸"); return; }
+    if(RO && (z.kind==="board"||z.kind==="gallery"||z.kind==="design")){ toast("Demo mode — connect Supabase to save 🌸"); return; }
+    try{
+      if(z.kind==="pfp"){ const {url}=await mbFileToDataURL(files[0]); _pend.pfp=url; const b=document.getElementById("sheetPort"); if(b){b.style.backgroundImage=`url('${url}')`;b.style.borderStyle="solid";b.style.color="transparent";} toast("Portrait ready — hit 💾 save"); return; }
+      if(z.kind==="banner"){ const {url}=await mbFileToDataURL(files[0]); _pend.banner=url; const b=document.getElementById("sheetBan"); if(b){b.style.backgroundImage=`url('${url}')`;b.style.borderStyle="solid";b.style.color="transparent";} toast("Banner ready — hit 💾 save"); return; }
+      if(z.kind==="dgCover"){ const {url}=await mbFileToDataURL(files[0]); _dgImg=url; const b=document.getElementById("dgImgBox"); if(b){b.style.backgroundImage=`url('${url}')`;b.style.borderStyle="solid";b.style.color="transparent";} toast("Cover ready — hit 💾 save"); return; }
+      if(z.kind==="dgFiles"){ for(const f of files){ const {url}=await mbFileToDataURL(f); _dgImgs.push(url); } dgStrip(); toast("Added "+files.length+" file"+(files.length>1?"s":"")+" — hit 💾 save 🗂️"); return; }
+      if(z.kind==="design"){ for(const f of files){ const {url}=await mbFileToDataURL(f); await ocMut("ocDesigns",a=>a.map(x=>x.id!==z.id?x:(x.img?{...x,imgs:[...(x.imgs||[]),url]}:{...x,img:url}))); } toast("Filed with the design 🗂️"); return render(); }
+      if(z.kind==="board"){ const r=z.el.getBoundingClientRect(); let i=0;
+        for(const f of files){ const {url,ar}=await mbFileToDataURL(f); const w=180,h=Math.max(100,Math.min(260,Math.round(180/ar)));
+          const x=Math.max(0,Math.min(e.clientX-r.left-w/2+i*16,r.width-w)), y=Math.max(0,Math.min(e.clientY-r.top-h/2+i*16,r.height-h));
+          await refMut(rr=>[...rr,{id:uid(),type:"img",url,x:Math.round(x),y:Math.round(y),w,h}]); i++; }
+        toast("Pinned right where you dropped it 📌"); return render(); }
+      if(z.kind==="gallery"){ const artist=((document.getElementById("galArtist")||{}).value||"").trim();
+        for(const f of files){ const {url}=await mbFileToDataURL(f); await ocPatch(state.selOC,o=>({...o,gallery:[...(o.gallery||[]),{id:uid(),url,artist,date:TODAY}]})); }
+        toast("Shelved "+files.length+" piece"+(files.length>1?"s":"")+" 🖼️"); return render(); }
+    }catch(err){ console.error(err); toast("Couldn't read that image 🌸"); }
+  });
+})();
+
+/* ===================== BOOT ===================== */
+/* one-time migration: pull any surviving OC data off the old shared row into our own */
+async function migrateFromShared(){
+  if(DEMO||!SB)return;
+  try{
+    const cur=await DB.daily(SENTINEL);
+    if(OC_KEYS.some(k=>cur[k]!=null&&(!Array.isArray(cur[k])||cur[k].length)))return;   // our row already has data
+    const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",SHARED_SENTINEL).maybeSingle();
+    let old={}; try{ old=data&&data.notes?JSON.parse(data.notes):{}; }catch(e){}
+    const found=OC_KEYS.filter(k=>old[k]!=null);
+    if(!found.length)return;
+    await DB.saveDaily(SENTINEL,n=>{ const out={...n}; found.forEach(k=>{ if(out[k]==null)out[k]=old[k]; }); return out; });
+    toast("Moved your hub data to its own safe shelf 📦✨");
+  }catch(e){ console.error("migrate",e); }
+}
+applySettings();
+migrateFromShared().finally(render);
+if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js").catch(function(){}); }catch(e){} }
+</script>
+<!-- ===================== PET WIDGET (Eugene visits the OC hub too) ===================== -->
+<script src="pet-widget.js"></script>
+<script>
+(function(){
+  if(!window.PetWidget) return;
+  var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
+  /* local librarian brain: searches her own OC data — no backend needed */
+  async function ocAsk(q){
+    var sent=await DB.daily(SENTINEL); var ql=q.toLowerCase();
+    var hits=[];
+    (sent.ocs||[]).forEach(function(o){ if((o.name+" "+(o.species||"")+" "+(o.summary||"")+" "+(o.tags||[]).join(" ")).toLowerCase().indexOf(ql)>=0) hits.push("🎭 "+o.name+" — "+(o.summary||o.species||"")); });
+    (sent.ocLore||[]).forEach(function(l){ if((l.title+" "+(l.body||"")).toLowerCase().indexOf(ql)>=0) hits.push("📖 "+l.title); });
+    (sent.ocArcs||[]).forEach(function(a){ if((a.title||"").toLowerCase().indexOf(ql)>=0) hits.push("📚 "+a.title+" ("+a.stage+")"); });
+    (sent.ocIdeas||[]).forEach(function(i){ if((i.text||"").toLowerCase().indexOf(ql)>=0) hits.push("💡 "+i.text); });
+    if(hits.length) return "found these in your world:\n\n"+hits.slice(0,6).join("\n");
+    var n=(sent.ocs||[]).length, ar=(sent.ocArcs||[]).filter(function(a){return a.stage!=="done";}).length, idn=(sent.ocIdeas||[]).length;
+    return "nothing matched that exactly 🌸 right now you have "+n+" character"+(n===1?"":"s")+", "+ar+" arc"+(ar===1?"":"s")+" in flight and "+idn+" parked idea"+(idn===1?"":"s")+". try a name, a tag, or a lore word!";
+  }
+  window.PET = PetWidget.init({
+    sheet:"pet-widget/Sprite Sheet.png", sheetW:672, sheetH:480,
+    walk: row(1),
+    sit:  {x:0,y:0,w:W,h:H},
+    scale:1.1, faces:"right", speed:42, frameMs:130,
+    leftClear:86, rightClear:30,
+    avatar:"pet-widget/Screenshot 2026-06-02 202234.png",
+    title:"Eugene", subtitle:"visiting from the main OS 🐙",
+    accentFrom:"#f49fc6", accentTo:"#a795e6",
+    font:"inherit",
+    greetings:["who are we drawing today? 🎨","plot bunnies multiply if you feed them 🐰","ask me to find a character or lore 🔍","your little worlds are safe here 🦄","rest is worldbuilding too 🌙"],
+    suggestions:["Find everything about my main character","Which arcs are still in flight?","Show me lore about magic","What ideas have I parked?"],
+    reduceMotion:function(){ try{ return document.body.classList.contains("calm") || matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } },
+    ask: ocAsk
+  });
+})();
+</script>
+</body>
+</html>

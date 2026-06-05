@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pick your gear 🐙</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{ --pink:#ec7faf; --purple:#a98fe0; --ink:#3a3550; --line:#e4d4ef; }
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;font:15px/1.6 system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(160deg,#fdf3f8,#f3effd);display:flex;flex-direction:column;align-items:center;padding:34px 18px 60px;}
+  h1{font-size:24px;margin:0 0 4px;color:var(--pink);}
+  h2{font-size:17px;margin:26px 0 12px;color:var(--purple);}
+  .sub{color:#9b8fb6;margin:0 0 26px;text-align:center;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 32px rgba(120,110,160,.18);}
+
+  #auth{display:flex;align-items:center;gap:12px;padding:14px 20px;margin-bottom:6px;max-width:560px;flex-wrap:wrap;}
+  #auth img{width:42px;height:42px;border-radius:999px;border:1px solid var(--line);}
+  #auth .who{font-weight:700;}
+  #auth .hint{font-size:12.5px;color:#9b8fb6;}
+  button{border:none;border-radius:12px;padding:10px 18px;font:inherit;font-weight:700;color:#fff;cursor:pointer;
+    background:linear-gradient(135deg,var(--pink),var(--purple));}
+  button:disabled{opacity:.5;cursor:default;}
+  button.twitch{background:#9146FF;}
+
+  .gearRow{display:flex;flex-wrap:wrap;gap:10px;max-width:760px;justify-content:center;}
+  .gearBtn{min-width:64px;height:72px;display:grid;place-items:center;cursor:pointer;padding:4px 8px;
+    border:2px solid transparent;border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(120,110,160,.14);transition:transform .12s;}
+  .gearBtn:hover{transform:translateY(-3px);}
+  .gearBtn.sel{border-color:var(--pink);box-shadow:0 8px 24px rgba(236,127,175,.3);}
+  .gearBtn img{max-height:40px;max-width:64px;image-rendering:pixelated;}
+  .gearBtn small{font-size:10px;color:#9b8fb6;display:block;text-align:center;}
+
+  #savebar{margin-top:26px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;}
+  #status{font-size:13.5px;color:#9b8fb6;min-height:20px;}
+  .ok{color:#5dbb8a !important;font-weight:700;}
+  .err{color:#e06a8a !important;font-weight:700;}
+  .foot{margin-top:30px;font-size:12.5px;color:#b3a6c0;text-align:center;max-width:540px;}
+  code{background:#f6f0fb;border-radius:6px;padding:1px 6px;color:#a96fd0;}
+</style>
+</head>
+<body>
+<h1>🐙 pick your gear</h1>
+<p class="sub">Choose your avatar's gear for <b id="chanName">this stream</b> — saved to your Twitch account.<br>
+(No page needed in chat: <code>!items axe</code> does the same thing!)</p>
+
+<div id="auth" class="card">
+  <button class="twitch" id="loginBtn">Sign in with Twitch</button>
+  <div class="hint">One click — we only learn your username so your pick saves to <i>you</i>. No posting, no email.</div>
+</div>
+
+<div id="gearArea"></div>
+
+<div id="savebar">
+  <button id="saveBtn" disabled>Save my gear 💾</button>
+  <div id="status"></div>
+</div>
+
+<p class="foot">Your gear applies the next time your avatar appears (or within ~3 minutes if you're already on screen).
+It follows you on every device.</p>
+
+<script>
+"use strict";
+/* ====== CONFIG — one-time (see README "viewer page setup") ====== */
+var CLIENT_ID = "PASTE_YOUR_TWITCH_CLIENT_ID_HERE";
+
+var SB_URL = "https://clpfyxlenotepuceczbh.supabase.co";
+var SB_KEY = "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2";
+var SB_HEADERS = { apikey: SB_KEY, Authorization: "Bearer "+SB_KEY, "Content-Type": "application/json" };
+
+/* default gear (ships with the site — Eggie's commissioned pack);
+   channel uploads merge on top — keep in sync with index.html */
+var DEFAULT_GEAR_SETS = {
+  items: { behind:false, noFlip:false, pieces:{
+    crown: {url:"gear/crown.png", anim:true, cols:7, rows:5, ox:0, oy:0, scale:1},
+    axe:   {url:"gear/axe.png",   anim:true, cols:7, rows:5, ox:0, oy:0, scale:1},
+    guts:  {url:"gear/guts.png",  anim:true, cols:7, rows:5, ox:0, oy:0, scale:1}
+  }}
+};
+function mergeGear(remoteSets){
+  var out = JSON.parse(JSON.stringify(DEFAULT_GEAR_SETS));
+  Object.keys(remoteSets || {}).forEach(function(s){
+    var r = remoteSets[s];
+    if (!out[s]){ out[s] = r; return; }
+    out[s].behind = !!r.behind; out[s].noFlip = !!r.noFlip;
+    Object.keys(r.pieces || {}).forEach(function(p){ out[s].pieces[p] = r.pieces[p]; });
+  });
+  return out;
+}
+var GEAR = { sets: mergeGear(null) };
+
+var Q = new URLSearchParams(location.search);
+var CHANNEL = (Q.get("channel")||"").trim().toLowerCase();
+if (CHANNEL) document.getElementById("chanName").textContent = CHANNEL + "'s stream";
+
+var selGear = {};
+
+function buildGear(){
+  var area = document.getElementById("gearArea");
+  area.innerHTML = "";
+  Object.keys(GEAR.sets).forEach(function(setName){
+    var gs = GEAR.sets[setName];
+    if (!gs.pieces || !Object.keys(gs.pieces).length) return;
+    var h = document.createElement("h2"); h.textContent = "🎒 " + setName;
+    var row = document.createElement("div"); row.className = "gearRow"; row.id = "gearrow-"+setName;
+    var names = ["none"].concat(Object.keys(gs.pieces));
+    names.forEach(function(p){
+      var b = document.createElement("div"); b.className = "gearBtn"; b.id = "gear-"+setName+"-"+p;
+      if (p === "none"){
+        var s = document.createElement("small"); s.textContent = "none"; b.appendChild(s);
+      } else {
+        var piece = gs.pieces[p], im;
+        if (piece.anim){     // frame-anim sheet: show just the first cell
+          im = document.createElement("span");
+          im.style.cssText = "display:block;width:40px;height:40px;margin:0 auto;image-rendering:pixelated;"+
+            "background-image:url('"+piece.url+"');background-size:"+((piece.cols||7)*100)+"% "+((piece.rows||5)*100)+"%;background-position:0 0;";
+        } else {
+          im = document.createElement("img"); im.src = piece.url; im.alt = "";
+        }
+        var s2 = document.createElement("small"); s2.textContent = p;
+        b.appendChild(im); b.appendChild(s2);
+      }
+      b.onclick = function(){ selectGear(setName, p); };
+      row.appendChild(b);
+    });
+    area.appendChild(h); area.appendChild(row);
+  });
+}
+function selectGear(setName, p){
+  if (p === "none") delete selGear[setName]; else selGear[setName] = p;
+  var row = document.getElementById("gearrow-"+setName);
+  Array.prototype.slice.call(row.children).forEach(function(b){
+    b.classList.toggle("sel", b.id === "gear-"+setName+"-"+(selGear[setName]||"none"));
+  });
+  updateSave();
+}
+function updateSave(){
+  document.getElementById("saveBtn").disabled = !me;
+  if (!me && Object.keys(selGear).length) setStatus("sign in with Twitch above to save your pick");
+}
+function setStatus(t, cls){
+  var s = document.getElementById("status");
+  s.textContent = t; s.className = cls || "";
+}
+
+/* the channel's uploaded gear merges over the defaults */
+function loadChannelGear(){
+  if (!CHANNEL){ buildGear(); return; }
+  fetch(SB_URL+"/rest/v1/avatar_config?channel=eq."+encodeURIComponent(CHANNEL+":gear")+"&select=frames", {headers: SB_HEADERS})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      if (rows && rows[0]) GEAR.sets = mergeGear(rows[0].frames && rows[0].frames.sets);
+      buildGear();
+    })
+    .catch(function(){ buildGear(); });
+}
+
+/* ====== Sign in with Twitch (implicit flow — fully client-side) ====== */
+var me = null, token = null;
+var REDIRECT = location.origin + location.pathname;
+
+document.getElementById("loginBtn").onclick = function(){
+  if (CLIENT_ID.indexOf("PASTE_") === 0){
+    setStatus("setup needed: the streamer adds a Twitch Client ID at the top of picker.html (see README) — meanwhile, gear commands in chat work with no setup!", "err");
+    return;
+  }
+  location.href = "https://id.twitch.tv/oauth2/authorize"
+    + "?client_id=" + encodeURIComponent(CLIENT_ID)
+    + "&redirect_uri=" + encodeURIComponent(REDIRECT)
+    + "&response_type=token&scope=";
+};
+
+(function pickUpToken(){
+  var m = location.hash.match(/access_token=([^&]+)/);
+  if (m){
+    token = m[1];
+    try { sessionStorage.setItem("sa-token", token); } catch(e){}
+    history.replaceState(null, "", location.pathname + location.search);
+  } else {
+    try { token = sessionStorage.getItem("sa-token"); } catch(e){}
+  }
+  if (token && CLIENT_ID.indexOf("PASTE_") !== 0) whoami();
+})();
+
+function whoami(){
+  fetch("https://api.twitch.tv/helix/users", {
+    headers: { Authorization: "Bearer " + token, "Client-Id": CLIENT_ID }
+  })
+  .then(function(r){ if (!r.ok) throw new Error("token expired"); return r.json(); })
+  .then(function(j){
+    me = j.data && j.data[0];
+    if (!me) throw new Error("no user");
+    var auth = document.getElementById("auth");
+    auth.innerHTML = "";
+    var img = document.createElement("img"); img.src = me.profile_image_url; img.alt = "";
+    var div = document.createElement("div");
+    var who = document.createElement("div"); who.className = "who"; who.textContent = "Hi, " + me.display_name + "! 💜";
+    var hint = document.createElement("div"); hint.className = "hint"; hint.textContent = "pick your gear below, then save";
+    div.appendChild(who); div.appendChild(hint);
+    auth.appendChild(img); auth.appendChild(div);
+    updateSave();
+    // preselect their current saved gear
+    fetch(SB_URL+"/rest/v1/avatar_skins?twitch_user_id=eq."+encodeURIComponent(me.id)+"&select=gear", {headers: SB_HEADERS})
+      .then(function(r){ return r.json(); })
+      .then(function(rows){
+        var g = rows && rows[0] && rows[0].gear;
+        if (g && typeof g === "object"){
+          Object.keys(g).forEach(function(s){
+            if (GEAR.sets[s] && GEAR.sets[s].pieces && GEAR.sets[s].pieces[g[s]]) selectGear(s, g[s]);
+          });
+        }
+      }).catch(function(){});
+  })
+  .catch(function(){
+    token = null; me = null;
+    try { sessionStorage.removeItem("sa-token"); } catch(e){}
+  });
+}
+
+/* ====== save: verified edge function, direct-write fallback ====== */
+document.getElementById("saveBtn").onclick = function(){
+  if (!me) return;
+  var btn = this; btn.disabled = true;
+  setStatus("saving…");
+  fetch(SB_URL + "/functions/v1/avatar-skin", {
+    method: "POST",
+    headers: SB_HEADERS,
+    body: JSON.stringify({ token: token, gear: selGear })
+  })
+  .then(function(r){ if (!r.ok) throw new Error("fn " + r.status); return r.json(); })
+  .then(function(){ done(); })
+  .catch(function(){
+    // edge function not deployed yet → plain table write (same as chat commands)
+    fetch(SB_URL + "/rest/v1/avatar_skins", {
+      method: "POST",
+      headers: Object.assign({Prefer: "resolution=merge-duplicates"}, SB_HEADERS),
+      body: JSON.stringify({ twitch_user_id: me.id, gear: selGear, updated_at: new Date().toISOString() })
+    })
+    .then(function(r){ if (!r.ok) throw new Error("db " + r.status); done(); })
+    .catch(function(e){ setStatus("couldn't save — " + e.message + " (is the database set up?)", "err"); btn.disabled = false; });
+  });
+  function done(){
+    setStatus("saved! see you on stream, " + me.display_name + " 🐙", "ok");
+    btn.disabled = false;
+  }
+};
+
+loadChannelGear();
+</script>
+</body>
+</html>

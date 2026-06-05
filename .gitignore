@@ -5,3 +5,9 @@ Thumbs.db
 .env
 .env*.local
 node_modules/
+
+# privately commissioned stream avatar art — never publish
+stream-avatars/eggie/
+stream-avatars/eggie.zip
+desktop-pet/
+*.zip
