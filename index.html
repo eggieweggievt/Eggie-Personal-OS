@@ -714,7 +714,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.1";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.2";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -3535,6 +3535,22 @@ render();
       case "recoveryDay":
         await DB.saveDaily(TODAY,function(n){ return Object.assign({},n,{energy:"low",streamDay:false}); });
         return "🌙 set today as a recovery day — rest is productive too 💜";
+      case "refreshGameUpdates": {
+        try{
+          var r3=await aiCall("gameUpdates",{games:GAME_RELEASES.map(function(g){return (g.title||"").split("—")[0].trim();})});
+          if(r3&&r3._needsBackend) return "game lookups need the backend deployed 🌸";
+          var evs=((r3&&r3.events)||[]).filter(function(e){return e&&e.date&&e.title&&e.date>=TODAY;}).slice(0,15);
+          if(!evs.length) return "🎮 looked around — nothing new officially announced for your games right now 🌸";
+          await DB.saveDaily(SENTINEL,function(n){
+            var titles=evs.map(function(e){return (e.title||"").toLowerCase();});
+            var cur=(n.gameEvents||[]).filter(function(x){return x.date>=TODAY&&titles.indexOf((x.title||"").toLowerCase())<0;});
+            var baked=GAME_RELEASES.map(function(g){return (g.title||"").toLowerCase()+g.date;});
+            var add=evs.filter(function(e){return baked.indexOf((e.title||"").toLowerCase()+e.date)<0;});
+            return Object.assign({},n,{gameEvents:cur.concat(add)});
+          });
+          return "🎮 refreshed the games layer — "+evs.length+" upcoming: "+evs.slice(0,4).map(function(e){return e.title+" ("+e.date+")";}).join(" · ")+(evs.length>4?" + more":"")+" — peek at the 📅 calendar";
+        }catch(e){ return "game lookup hiccuped: "+(e.message||e); }
+      }
       case "logArt":
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artLog:(n.artLog||[]).concat([{date:TODAY,min:Number(a.minutes)||0,note:a.note||undefined}])}); });
         return "🎨 logged "+(Number(a.minutes)||0)+" min of art — proud of you for making time 💗";

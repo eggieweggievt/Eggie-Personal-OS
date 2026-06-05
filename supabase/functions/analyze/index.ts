@@ -310,6 +310,21 @@ Deno.serve(async (req) => {
     const history = await historyFor(userId);
     const vidiq = body.vidiq ? `\n\nLive VidIQ data the user attached:\n${JSON.stringify(body.vidiq).slice(0, 3500)}` : "";
 
+    // --- gameUpdates: web-search upcoming releases/leagues/patches for her games (Eugene-triggered) ---
+    if (mode === "gameUpdates") {
+      const games = (Array.isArray(body.input?.games) && body.input.games.length ? body.input.games : ["Path of Exile", "Path of Exile 2", "Warhammer 40K: Space Marine 2", "Monster Hunter Wilds", "Resident Evil (series)", "Silent Hill (series)", "Final Fantasy XIV"]).slice(0, 12);
+      const td = new Date().toLocaleDateString("en-CA");
+      const raw = await claudeWeb(
+        "You are a precise gaming-release researcher. Use web search to verify. Return ONLY JSON, no prose around it.",
+        `Today is ${td}. For these games/franchises: ${games.join("; ")} — find OFFICIALLY ANNOUNCED upcoming events in the next ~8 months: full releases, expansions, new leagues/seasons, dated major patches, open betas. Month-level dates are fine. No rumors or speculation.
+Return ONLY: {"events":[{"date":"YYYY-MM-DD (use the 15th if only a month is known)","title":"Game — what it is","approx":true,"url":"official source"}]}
+Max 12 events, future dates only.`,
+        1600, 6,
+      );
+      const parsed = parseJSON(raw);
+      return json(parsed && Array.isArray(parsed.events) ? { events: parsed.events } : { events: [] });
+    }
+
     if (mode === "ask") {
       const q = (body.input?.question || "").toString().slice(0, 1000);
       if (!q) return json({ error: "missing question" }, 400);
@@ -408,6 +423,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - moveContent: { name (fuzzy-matched to existing content), stage: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published" }   // move a piece of content along its pipeline
 - setReview: { field: "wins"|"slipped"|"loops"|"followups"|"notes"|"spoons"|"top3", text }   // jot into this week's review
 - recoveryDay: { }                  // set today as a gentle recovery day (low energy, not a stream day)
+- refreshGameUpdates: { }           // "check for game updates", "refresh the games calendar" — web-searches official upcoming releases/leagues/patches for her games and updates the calendar's 🎮 layer (slow-ish: ~20s; tell her you're on it)
 - logArt: { minutes: number, note? }   // "I drew for 30 minutes", "log 20 min of art" — celebrate it, art is just-for-her and counts
 - artChallengeDone: { scope: "day"|"week", done?: boolean }   // tick her daily or weekly art challenge
 - addBoardNote: { text }              // pin a note card to her art mood board

@@ -80,6 +80,22 @@ async function execAction(userId: string, a: any): Promise<string> {
     case "addCapture":
       await sb().from("raw_captures").insert({ user_id: userId, raw_text: a.text || "" });
       return "🐙 captured it";
+    case "refreshGameUpdates": {
+      const res = await fetch(Deno.env.get("SUPABASE_URL")! + "/functions/v1/analyze", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "gameUpdates", userId }),
+      });
+      const r = await res.json();
+      const td = todayStr();
+      const evs = ((r.events || []) as any[]).filter((e) => e && e.date && e.title && e.date >= td).slice(0, 15);
+      if (!evs.length) return "🎮 looked around — nothing new officially announced right now 🌸";
+      await saveSent(userId, (n) => {
+        const titles = evs.map((e) => (e.title || "").toLowerCase());
+        const cur = (n.gameEvents || []).filter((x: any) => x.date >= td && titles.indexOf((x.title || "").toLowerCase()) < 0);
+        return { ...n, gameEvents: cur.concat(evs) };
+      });
+      return `🎮 refreshed — ${evs.length} upcoming: ${evs.slice(0, 4).map((e) => `${e.title} (${e.date})`).join(" · ")}${evs.length > 4 ? " + more" : ""}`;
+    }
     case "setDiscordDelivery": {
       const md = a.mode === "channel" ? "channel" : "dm"; const cid = String(a.channelId || "").replace(/[^0-9]/g, "");
       if (md === "channel" && !cid) return "I need the channel ID — right-click the channel → Copy Channel ID 🌸";
