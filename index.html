@@ -425,6 +425,15 @@ const CONFIG = {
 };
 /* ===================== SUPABASE / DEMO ===================== */
 let DEMO = !CONFIG.url || !CONFIG.anonKey;
+/* loud demo banner — silent demo mode once cost a day of data; never again */
+function demoBanner(){
+  let b=document.getElementById("demoBanner");
+  if(DEMO){
+    if(!b){ b=document.createElement("div"); b.id="demoBanner"; b.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99999;background:#c0566a;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:7px 12px;box-shadow:0 2px 8px rgba(0,0,0,.2);cursor:pointer"; b.onclick=function(){ try{ document.querySelector('[data-act="toggleDemo"]').click(); }catch(e){} };
+      document.body.appendChild(b); document.body.style.paddingTop="34px"; }
+    b.textContent="⚠️ DEMO MODE — nothing you type is being saved. Tap here to go live.";
+  } else if(b){ b.remove(); document.body.style.paddingTop=""; }
+}
 let RO = CONFIG.readOnly;
 const SB = (!DEMO && window.supabase) ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
 const UID = CONFIG.userId;
@@ -2820,7 +2829,7 @@ document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
   if(act==="tab")return setTab(el.dataset.tab);
-  if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} DB.bust(); return render(); }
+  if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} DB.bust(); demoBanner(); return render(); }
   if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
   if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
   if(act==="contentView"){ state.contentView=el.dataset.v; return render(); }

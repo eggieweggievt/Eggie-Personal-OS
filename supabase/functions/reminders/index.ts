@@ -46,6 +46,24 @@ function discordIdFor(user: string): string | null {
 async function processUser(sb: any, user: string, today: string, hm: string) {
   const { data: sent } = await sb.from("daily_logs").select("notes").eq("user_id", user).eq("log_date", "2000-01-01").maybeSingle();
   let notes: any = {}; try { notes = sent?.notes ? JSON.parse(sent.notes) : {}; } catch { notes = {}; }
+
+  // ---- rolling 7-day sentinel snapshot: copy today's sentinel to a per-weekday backup row
+  //      (log_date 1999-01-01 … 1999-01-07) once per day. Restoring = copy a backup row's
+  //      notes back onto 2000-01-01. Cheap insurance against overwrites. ----
+  try {
+    if (sent?.notes) {
+      const wd = new Date(today + "T00:00").getDay();                 // 0–6
+      const snapDate = "1999-01-0" + (wd + 1);
+      const { data: snap } = await sb.from("daily_logs").select("updated_at").eq("user_id", user).eq("log_date", snapDate).maybeSingle();
+      const snapDay = snap?.updated_at ? String(snap.updated_at).slice(0, 10) : "";
+      if (snapDay !== new Date().toISOString().slice(0, 10)) {
+        await sb.from("daily_logs").upsert(
+          { user_id: user, log_date: snapDate, notes: sent.notes, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,log_date" },
+        );
+      }
+    }
+  } catch { /* snapshots must never break reminders */ }
   const rems: any[] = notes.reminders || [];
   const petName = notes.appConfig?.assistantName || (user === "eggie" ? "Eugene" : "your assistant");
   const userEmail = notes.appConfig?.email || (user === "eggie" ? TO : null);
