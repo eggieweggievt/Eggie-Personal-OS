@@ -418,8 +418,10 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - setFlare: { on?: boolean }        // "I'm in a flare today"
 - addSavingsGoal: { name, target?: number, emoji? }
 - allotSavings: { name (fuzzy-matched to a savings goal), amount: number }   // "put $20 toward <goal>"
-- addSponsor: { brand, stage?: "draft"|"sent"|"responded"|"signed"|"passed", deal_type?, value?: number, note? }
-- moveSponsor: { brand, stage: "draft"|"sent"|"responded"|"signed"|"passed" }
+- addSponsor: { brand, stage?: "dream"|"draft"|"sent"|"responded"|"signed"|"passed", deal_type?, value?: number, note? }   // "dream" = wishlist brands she hopes to work with someday
+- moveSponsor: { brand, stage: "dream"|"draft"|"sent"|"responded"|"signed"|"passed" }
+- setSponsor: { brand (fuzzy), stage?, deal_type?, value?: number, contact?, links?, follow_up?: "YYYY-MM-DD", note? }   // edit sponsor details; follow_up shows nudge pills on the pipeline
+- delSponsor: { brand (fuzzy) }
 - moveContent: { name (fuzzy-matched to existing content), stage: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published" }   // move a piece of content along its pipeline
 - setReview: { field: "wins"|"slipped"|"loops"|"followups"|"notes"|"spoons"|"top3", text }   // jot into this week's review
 - recoveryDay: { }                  // set today as a gentle recovery day (low energy, not a stream day)
