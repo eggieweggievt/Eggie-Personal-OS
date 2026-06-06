@@ -569,7 +569,7 @@ ${common}`;
 - titles: 4 YOUTUBE stream titles in her format → [aesthetic emoji] + [hook/meme] + [GAME] + cue. Curiosity/challenge framing ("If I die I restart", "first playthrough", "24h grind"). Always name the game.
 - description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her schedule (4 days/wk, 4–6pm EDT), then paste the FOOTER block verbatim near the end.
 - hashtags: 2-3 YouTube hashtags (the game + #vtuber).
-- tags: 12-15 YouTube tags — the game, "vtuber", "vtuber live", "livestream", her niches (ARPG/MMO/Soulslike).
+- tags: as MANY relevant YouTube tags as fit within YouTube's 500-character TOTAL limit (all tags joined by ", " must be ≤ 500 chars — usually ~30-45 tags). Include the game + its variants, "vtuber", "vtuber live", "vtuber livestream", "livestream", "live", her niches (ARPG/MMO/Soulslike), plus long-tail combos. Most important first, no duplicates. Maximize without exceeding 500 chars.
 - twitchTitle: ONE Twitch title → [emoji] [hook/meme] [GAME] [optional !command]; punchy, curiosity/challenge.
 - twitterTitle: ONE short X/Twitter broadcast title for the multistream — keyword-rich + a hook, NO hashtags, NO link.
 - tips: 2 short reminders, e.g. "start the YouTube stream only once gameplay begins — YT hates mid-stream category switches" and "put a hot-take or question in the title to prime chat before they click".
@@ -582,7 +582,7 @@ ${history}`
 { "titleScore": number, "titleWhy": string, "titles": string[], "tags": string[], "hashtags": string[], "description": string }
 - titleScore 0-100; titleWhy 1-2 sentences (use the TITLE ENGINE rubric).
 - titles: 4 stronger options using her proven templates.
-- tags: 12-15 YouTube SEO tags / keywords, most important first.
+- tags: as MANY relevant YouTube SEO tags/keywords as fit within YouTube's hard limit of 500 characters TOTAL (the combined length of all tags joined by ", " must be ≤ 500 chars — that's usually ~30-45 tags). Most important first; mix exact-match, broad, long-tail, the game/show name, "vtuber" variants, and synonyms. No "#", no duplicates. Maximize coverage without exceeding 500 chars.
 - hashtags: 5 following 1 small / 2 medium / 2 large, right for the platform.
 - description: a YouTube description — a 1-2 line hook, a short summary, a "⏱ Timestamps:" placeholder line, then paste the FOOTER block verbatim near the end.
 Title: ${i.title || "(none)"}

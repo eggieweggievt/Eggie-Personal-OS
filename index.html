@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.6";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.7";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2734,7 +2734,7 @@ async function runOptimize(){
       ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
       ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${state.optMode==="livestream"?"YouTube stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
       ${r.description?block(state.optMode==="livestream"?"YouTube description":"Description",r.description):""}
-      ${(r.tags&&r.tags.length)?`<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube tags":"tags"} <button class="btn" data-act="copyText" data-t="${esc(r.tags.join(", "))}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${r.tags.map(esc).join(", ")}</div>`:""}
+      ${(r.tags&&r.tags.length)?(()=>{ let acc=[],len=0; r.tags.forEach(t=>{ t=String(t).replace(/^#/,"").trim(); if(!t||acc.indexOf(t)>=0)return; const add=(acc.length?2:0)+t.length; if(len+add<=500){acc.push(t);len+=add;} }); const joined=acc.join(", "); return `<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube tags":"tags"} · ${acc.length} tags · ${len}/500 chars <button class="btn" data-act="copyText" data-t="${esc(joined)}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${esc(joined)}</div>`; })():""}
       ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube hashtags":"hashtags · 1S/2M/2L"} <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
       ${r.twitchTitle?block("Twitch title",r.twitchTitle):""}
       ${r.twitterTitle?block("Twitter / X title",r.twitterTitle):""}
