@@ -42,7 +42,8 @@
     #pet:active{cursor:grabbing;}
     #pet .pet-sprite{pointer-events:none;${c.smooth ? "" : "image-rendering:pixelated;"}}
     #petBubble{position:fixed;left:90px;bottom:92px;z-index:9991;max-width:200px;background:#fff;border:1px solid #e4e6f5;border-radius:14px;border-bottom-left-radius:4px;padding:8px 12px;font-size:12.5px;color:#3a3550;box-shadow:0 6px 22px rgba(120,130,200,.18);cursor:pointer;font-family:${c.font};}
-    #petChat{position:fixed;left:90px;bottom:120px;z-index:9994;width:310px;max-width:calc(100vw - 36px);height:440px;max-height:74vh;background:#fff;border:1px solid #e4e6f5;border-radius:18px;box-shadow:0 16px 42px rgba(120,110,160,.32);display:flex;flex-direction:column;overflow:hidden;font-family:${c.font};}
+    #petChat{position:fixed;left:90px;bottom:120px;z-index:9994;width:310px;max-width:calc(100vw - 36px);height:440px;max-height:74vh;background:#fff;border:1px solid #e4e6f5;border-radius:18px;box-shadow:0 16px 42px rgba(120,110,160,.32);display:flex;flex-direction:column;overflow:hidden;font-family:${c.font};transition:width .18s ease,height .18s ease;}
+    #petChat.pet-big{left:50% !important;top:50% !important;bottom:auto !important;right:auto !important;transform:translate(-50%,-50%);width:min(640px,94vw);height:min(80vh,760px);max-height:90vh;}
     #petChat.pet-hidden,#petBubble.pet-hidden{display:none!important;}
     .pet-head{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #e4e6f5;background:linear-gradient(120deg,${c.accentFrom}22,${c.accentTo}22);}
     .pet-av{width:36px;height:36px;border-radius:999px;border:1px solid #e4e6f5;flex:0 0 auto;background:${c.avatar ? '#eef2fb center/cover no-repeat url("' + encodeURI(c.avatar) + '")' : 'linear-gradient(135deg,' + c.accentFrom + ',' + c.accentTo + ')'};display:grid;place-items:center;font-size:18px;color:#fff;}
@@ -140,7 +141,7 @@
     function positionUI() {
       pet.style.left = Math.round(S.x) + "px"; pet.style.bottom = Math.round(14 + S.y) + "px";
       var topY = Math.round(14 + S.y + SPRH + 8);
-      if (!chat.classList.contains("pet-hidden")) {
+      if (!chat.classList.contains("pet-hidden") && !S.big) {   // maximized chat is centered by CSS — don't follow the pet
         var cw = Math.min(310, innerWidth - 16);
         var cl = Math.max(8, Math.min(Math.round(S.x - cw / 2 + SPRW / 2), innerWidth - cw - 8));
         chat.style.left = cl + "px"; chat.style.right = "auto"; chat.style.bottom = topY + "px";
@@ -195,10 +196,13 @@
       var hasSugg = c.suggestions && c.suggestions.length;
       chat.innerHTML =
         '<div class="pet-head"><div class="pet-av"></div><div style="flex:1"><div class="pet-title">' + esc(c.title) + '</div><div class="pet-sub">' + esc(c.subtitle) + '</div></div>' +
+        '<button class="pet-x" data-big title="' + (S.big ? "shrink" : "make bigger") + '">' + (S.big ? "⤵" : "⤴") + '</button>' +
         (hasSugg ? '<button class="pet-sbtn" data-sugg title="example questions">💡</button>' : "") +
         '<button class="pet-x" data-close>✕</button></div>' +
         '<div class="pet-log" id="petLog">' + logHtml + (S.busy ? '<div class="pet-msg pet">…thinking</div>' : "") + suggHtml() + "</div>" +
         '<div class="pet-input"><input id="petInput" placeholder="ask…" ' + (S.busy ? "disabled" : "") + '><button data-send ' + (S.busy ? "disabled" : "") + ">send</button></div>";
+      chat.classList.toggle("pet-big", !!S.big);
+      var bigBtn = chat.querySelector("[data-big]"); if (bigBtn) bigBtn.onclick = function () { S.big = !S.big; chat.classList.toggle("pet-big", S.big); paintChat(); positionUI(); };
       chat.querySelector("[data-close]").onclick = toggle;
       chat.querySelector("[data-send]").onclick = send;
       var sb = chat.querySelector("[data-sugg]"); if (sb) sb.onclick = function () { S.showSugg = !S.showSugg; paintChat(); };
