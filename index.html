@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.5";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.6";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -3341,7 +3341,7 @@ async function keywordAsk(raw,box){
 }
 
 /* boot */
-function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
+function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
  const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } if(state.tab==="art"&&state.art&&state.art.timer&&state.art.timer.on){ if(!_artInt)_artInt=setInterval(artTick,1000); artPaint(); } }
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
