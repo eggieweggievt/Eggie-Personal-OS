@@ -36,8 +36,8 @@
   }
   *{box-sizing:border-box;} html,body{margin:0;padding:0;}
   /* never let a stray wide element widen the page — keeps `main` truly centered (iPad portrait fix) */
-  html,body{width:100%;max-width:100%;overflow-x:hidden;}
-  main{overflow-x:clip;}
+  html,body{width:100%;max-width:100%;}      /* NO overflow-x here — it silently locks vertical scroll in standalone/PWA */
+  main{overflow-x:clip;}                        /* clip horizontal overflow on the content wrapper only; page scrolls normally */
   body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url("eggiebackground.png") center top/cover no-repeat fixed;opacity:.22;}
   body{background:var(--bg);background-image:radial-gradient(80% 50% at 100% 0%,#f7e0f0 0%,transparent 60%),radial-gradient(70% 50% at 0% 0%,#e9e0fb 0%,transparent 55%);background-attachment:fixed;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased;min-height:100vh;}
   h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;}
@@ -724,7 +724,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.3";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.4";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Pitch"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
