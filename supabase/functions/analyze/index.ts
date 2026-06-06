@@ -511,6 +511,34 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
       return json({ reply: stripCites(parsed.reply || "okay!"), actions: parsed.actions, sources });
     }
 
+    // --- email: draft a sponsor/business email in her voice (outreach, follow-up, negotiate, accept, decline…) ---
+    if (mode === "email") {
+      const i = body.input || {};
+      const kind = (i.kind || "outreach").toString();
+      const KINDS: Record<string, string> = {
+        outreach: "a warm COLD-OUTREACH email introducing herself and proposing a collaboration",
+        followup: "a gentle FOLLOW-UP on a previous email that hasn't been answered (kind, no guilt, easy out)",
+        negotiate: "a RATE-NEGOTIATION reply — confidently propose/counter a rate, justify with her value, stay warm and collaborative",
+        accept: "an email ACCEPTING an offer and confirming next steps / deliverables clearly",
+        decline: "a gracious DECLINE that keeps the door open for the future",
+        details: "an email REQUESTING more details / a media kit exchange / clarifying deliverables and timeline",
+        thanks: "a THANK-YOU / wrap-up email after a finished campaign, inviting future work",
+        custom: "an email doing exactly what her notes describe",
+      };
+      const stats = (i.stats || "").toString().slice(0, 400);
+      const rate = (i.rateCard || "").toString().slice(0, 600);
+      const their = (i.theirEmail || "").toString().slice(0, 4000);
+      const prompt = `Write ${KINDS[kind] || KINDS.outreach} for the creator described in your system prompt. Return ONLY JSON: { "subject": string, "body": string }.
+- Warm, professional, concise, in HER voice (lightly playful, never stiff or corporate, no overclaiming). Plain text body with real line breaks; sign off as her.
+- Ground it in her real numbers when relevant: ${stats || "(no live stats given — keep audience claims modest/qualitative)"}.
+- Her rate card (use only if the email is about money): ${rate || "(none provided)"}.
+Brand / company: ${i.brand || "(unspecified)"}${i.contact ? ` · contact: ${i.contact}` : ""}${i.dealType ? ` · deal: ${i.dealType}` : ""}${i.value ? ` · value: $${i.value}` : ""}
+${their ? `The email she's replying to (respond to its actual content):\n"""${their}"""` : ""}
+What she wants to say / notes: ${(i.notes || "(use your best judgment for this email type)").toString().slice(0, 1500)}`;
+      const out = await claude(BRAND, prompt, 1400);
+      return json(parseJSON(out) || { subject: "", body: out });
+    }
+
     // --- script: turn raw spoken notes + research into a formatted short/long-form script ---
     if (mode === "script") {
       const i = body.input || {};

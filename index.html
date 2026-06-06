@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.7";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.8";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -1842,11 +1842,33 @@ async function renderPitch(){
     </div>
     <div id="pitchOut"></div>`;
   PP.ratecard=`<div class="panel"><div class="card-head"><span class="label">Your rate card</span><span class="label">edit in ⚙️ Settings</span></div>${rate}</div>`;
+  const em=state.email||(state.email={kind:"followup",brand:"",notes:"",their:"",out:null});
+  const EMAIL_KINDS=[["outreach","🤝 Cold outreach"],["followup","🔔 Follow-up"],["negotiate","💰 Negotiate rate"],["accept","✅ Accept offer"],["decline","🙏 Politely decline"],["details","📋 Request details"],["thanks","💗 Thank you / wrap-up"],["custom","✍️ Custom"]];
+  const emOut=em.out?`<div class="soft-card" style="margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="label">subject</span><button class="btn" data-act="copyText" data-t="${esc(em.out.subject||"")}" style="padding:2px 8px">copy</button></div>
+      <input class="inp" value="${esc(em.out.subject||"")}" readonly style="margin-top:3px"/>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><span class="label">email</span><button class="btn" data-act="copyText" data-t="${esc(em.out.body||"")}" style="padding:2px 8px">copy</button></div>
+      <textarea class="inp" rows="12" style="margin-top:3px">${esc(em.out.body||"")}</textarea>
+    </div>`:"";
+  PP.email=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">✉️ Email writer</h2><span class="label">drafts in your voice</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 10px">Pick the kind of email, drop in a couple of notes (and their message if you're replying), and I'll draft it grounded in your real numbers + rate card. 💌</p>
+    <div class="label" style="margin-bottom:4px">What kind of email?</div>
+    <div class="seg" style="flex-wrap:wrap">${EMAIL_KINDS.map(([k,l])=>`<button data-act="emailKind" data-v="${k}" class="${em.kind===k?'on':''}">${l}</button>`).join("")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <div class="grow" style="min-width:140px"><div class="label" style="margin-bottom:4px">Brand <span class="muted">· optional</span></div><input class="inp" id="em_brand" list="em_brandlist" value="${esc(em.brand||"")}" placeholder="e.g. GamerSupps"/><datalist id="em_brandlist">${sponsors.map(s=>`<option value="${esc(s.brand)}">`).join("")}</datalist></div>
+    </div>
+    <div class="label" style="margin:10px 0 4px">Notes — what to say <span class="muted">· bullet points are fine</span></div>
+    <textarea class="inp" id="em_notes" rows="3" placeholder="e.g. propose a sponsored stream, my rate is \$X, can do the week of the 15th">${esc(em.notes||"")}</textarea>
+    <div class="label" style="margin:10px 0 4px">Their email <span class="muted">· paste it if you're replying</span></div>
+    <textarea class="inp" id="em_their" rows="3" placeholder="paste their message here (optional)">${esc(em.their||"")}</textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="genEmail">✨ ${em.out?"rewrite":"write it"}</button>${em.out?`<button class="btn" data-act="genEmail" data-v="again">🎲 another version</button>`:""}</div>
+    <div id="emailOut">${emOut}</div></div>`;
   PP.pipeline=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Sponsors</h2><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${sponsorViewSeg()}<button class="chip ${localStorage.getItem("eggie-show-passed")!=="0"?"":"on"}" data-act="togglePassed">${localStorage.getItem("eggie-show-passed")!=="0"?"hide passed":"show passed"}</button><input class="inp" id="sponsorBrand" placeholder="Brand name…" style="width:140px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addSponsor" ${RO?"disabled":""}>+ pitch</button></div></div>
     ${sponsorPanelBody(sponsors)}
     <div class="label" style="margin-top:8px">Tap a card/row to edit · drag across stages · 💬 = follow-up due.</div></div>`;
-  return modularPage("pitch",{builder:"Pitch builder",ratecard:"Rate card",pipeline:"Sponsor pipeline"},[["pipeline",PP.pipeline],["builder",PP.builder],["ratecard",PP.ratecard]],12);
+  return modularPage("pitch",{pipeline:"Sponsor pipeline",email:"Email writer",builder:"Pitch builder",ratecard:"Rate card"},[["pipeline",PP.pipeline],["email",PP.email],["builder",PP.builder],["ratecard",PP.ratecard]],12);
 }
+function emailGrab(){ state.email=state.email||{}; const g=id=>{const e=document.getElementById(id);return e?e.value:undefined;}; const b=g("em_brand"),n=g("em_notes"),t=g("em_their"); if(b!=null)state.email.brand=b; if(n!=null)state.email.notes=n; if(t!=null)state.email.their=t; }
 function pitchVal(id){const e=document.getElementById(id);return e?e.value.trim():"";}
 function genPitch(){
   const c=CONFIG.creator, ch=state._ch||{};
@@ -2986,6 +3008,19 @@ document.addEventListener("click",async(e)=>{
   if(act==="boardSort"){ state.boardSort=el.dataset.v; try{localStorage.setItem("eggie-board-sort",el.dataset.v);}catch(e){} render(); return; }
   if(act==="editSponsor"){ sponsorModal(id); return; }
   if(act==="sponsorView"){ try{localStorage.setItem("eggie-sponsor-view",el.dataset.v);}catch(e){} render(); return; }
+  if(act==="emailKind"){ state.email=state.email||{}; emailGrab(); state.email.kind=el.dataset.v; render(); return; }
+  if(act==="genEmail"){
+    emailGrab(); const em=state.email; const out=document.getElementById("emailOut");
+    if(DEMO||!SB){ if(out)out.innerHTML=`<div class="soft-card" style="font-size:12.5px;margin-top:10px">✨ Runs once the analyze function is deployed + demo is off 🐙</div>`; return; }
+    if(out)out.innerHTML=`<div class="label" style="margin-top:10px">drafting your email… 💌</div>`;
+    const ch=state._ch||{}; const stats=[["Twitch",ch.twitch],["YouTube",ch.youtube],["TikTok",ch.tiktok],["X",ch.twitter],["Discord",ch.discord]].filter(x=>x[1]).map(x=>Number(x[1]).toLocaleString()+" on "+x[0]).join(" · ");
+    const rate=Object.entries(CONFIG.rateCard||{}).map(([k,v])=>k+" = "+(v?("$"+v):"let's talk")).join("; ");
+    try{ const r=await aiCall("email",{kind:em.kind,brand:em.brand,notes:em.notes,theirEmail:em.their,stats,rateCard:rate,footer:CONFIG.descFooter||""});
+      if(r&&r.error){ if(out)out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px;margin-top:10px">${esc(r.error)}</div>`; return; }
+      state.email.out=r; render();
+    }catch(e){ if(out)out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px;margin-top:10px">${esc(e.message||e)}</div>`; }
+    return;
+  }
   if(act==="togglePassed"){ try{localStorage.setItem("eggie-show-passed",localStorage.getItem("eggie-show-passed")!=="0"?"0":"1");}catch(e){} render(); return; }
   if(act==="saveSponsor"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const brand=gv2("sp_brand"); if(!brand){toast("Brand needs a name 🌸");return;}
     await DB.updateSponsor(id,{brand,stage:gv2("sp_stage")||"draft",deal_type:gv2("sp_type")||null,value:parseFloat(gv2("sp_value"))||null,contact:gv2("sp_contact")||null,links:gv2("sp_links")||null,follow_up:gv2("sp_follow")||null,note:gv2("sp_note")||null});
