@@ -194,6 +194,20 @@ function parseJSON(raw: string): any {
   return null;
 }
 
+// Her saved voice examples / corrections for a given output kind — injected so the model
+// matches her REAL formatting, phrasing, kaomoji and energy instead of generic instincts.
+async function voiceFor(userId: string, kind: string): Promise<string> {
+  try {
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+    let v: any[] = []; try { v = JSON.parse(data?.notes || "{}").eqVoice || []; } catch { v = []; }
+    const rel = v.filter((x) => !x.kind || x.kind === "any" || x.kind === kind).slice(-6);
+    if (!rel.length) return "";
+    return `\n\n=== HER REAL VOICE — examples/corrections SHE gave you. Match this formatting, phrasing, line breaks, kaomoji/emoji, capitalisation and energy EXACTLY. These OVERRIDE any generic style instinct. ===\n` +
+      rel.map((x, i) => `Example ${i + 1}${x.note ? ` — she noted: "${x.note}"` : ""}:\n${String(x.example).slice(0, 1200)}`).join("\n— — —\n");
+  } catch { return ""; }
+}
+
 async function historyFor(userId: string): Promise<string> {
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -535,7 +549,7 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
 Brand / company: ${i.brand || "(unspecified)"}${i.contact ? ` · contact: ${i.contact}` : ""}${i.dealType ? ` · deal: ${i.dealType}` : ""}${i.value ? ` · value: $${i.value}` : ""}
 ${their ? `The email she's replying to (respond to its actual content):\n"""${their}"""` : ""}
 What she wants to say / notes: ${(i.notes || "(use your best judgment for this email type)").toString().slice(0, 1500)}`;
-      const out = await claude(BRAND, prompt, 1400);
+      const out = await claude(BRAND, prompt + (await voiceFor(userId, "email")), 1400);
       return json(parseJSON(out) || { subject: "", body: out });
     }
 
@@ -553,7 +567,7 @@ What she wants to say / notes: ${(i.notes || "(use your best judgment for this e
 - script: the single best ready-to-post tweet — plain text, ≤270 chars, NO hashtags (her X rule), no "1/" numbering, no stage directions or labels, no quotation marks around it. Hook-first, warm/playful, sounds like a real person posting, the occasional 🐙/🌸 is fine. This is the one she'll copy-paste straight to X.
 - hooks: 3 alternative full ready-to-post versions of the SAME tweet (different angles/wordings, each ≤270 chars, same rules) so she can pick her favourite.
 - cta: leave as an empty string "".
-${common}`, 1400);
+${common}${await voiceFor(userId, "twitter")}`, 1400);
         return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
       }
       const prompt = kind === "short"
@@ -568,7 +582,7 @@ ${common}`
 - script: a full script in her voice — a strong cold-open hook, then clear sections using short "## Section name" headers, natural spoken paragraphs grounded in the research, building logically, with a warm outro. Tighten the rambling but preserve her points, phrasing, and personality.
 - hooks: 3 cold-open options. cta: a warm subscribe / community CTA.
 ${common}`;
-      const out = await claude(BRAND, prompt, 2400);
+      const out = await claude(BRAND, prompt + (await voiceFor(userId, "script")), 2400);
       return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
     }
 
@@ -627,7 +641,7 @@ FOOTER (paste verbatim near the end of the description):
 ${footer}
 Her recent content:
 ${history}${vidiq}`;
-      const raw = await claude(BRAND, prompt, 2000);
+      const raw = await claude(BRAND, prompt + (await voiceFor(userId, i.format === "twitter" ? "twitter" : "title")), 2000);
       return json(parseJSON(raw) || { titleWhy: raw, titles: [], tags: [], hashtags: [] });
     }
 
