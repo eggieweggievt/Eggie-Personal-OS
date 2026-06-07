@@ -474,6 +474,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - loadScript: { title (fuzzy) }       // open a saved script draft in the Script Writer
 - addClient: { name, status?: "prospect"|"onboarding"|"active"|"paused"|"offboarded", handle?, contact? }   // Sakura Lightworks = her management team. Add a content-creator/VTuber client she manages.
 - setClientStatus: { name (fuzzy), status: "prospect"|"onboarding"|"active"|"paused"|"offboarded" }
+- setClient: { name (fuzzy), handle?, contact?, discord?, discordChannel?, tier?, rate?, start?, billing?, deliverables?, goals?, prefs?, pronouns?, tz?, priority?: "high"|"normal"|"low", status? }   // fill in / edit any client profile field
 - addClientNeed: { client (fuzzy), text, due?: "YYYY-MM-DD" }   // "ClientX needs their thumbnail by Friday" — a to-do for that client
 - doneClientNeed: { client (fuzzy), text (fuzzy) }   // mark one of a client's needs handled
 - addClientNote: { client (fuzzy), text }            // log a note / meeting summary on a client
