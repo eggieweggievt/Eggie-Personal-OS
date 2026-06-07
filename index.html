@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.9";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -1732,10 +1732,36 @@ async function renderIncome(){
       <p class="soft" style="font-size:12px;margin:0 0 10px">Give every saved dollar a job — a sinking fund for the mic, the trip, the tax pot. Allot money toward each as good months come in. 🌸</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${goalCards||`<div class="soft" style="font-size:12.5px">No goals yet — add one to start saving toward it.</div>`}</div>
     </div>`;
+  const invoices=settings.invoices||[];
+  const invStatus=iv=>{ if(iv.status==="paid")return "paid"; if(iv.due&&iv.due<TODAY)return "overdue"; return iv.status||"sent"; };
+  const invSt={sent:["pill-peach","🕓 awaiting"],overdue:["","⚠️ overdue"],paid:["pill-mint","✅ paid"],draft:["pill-gray","📝 draft"]};
+  const outstanding=invoices.filter(iv=>invStatus(iv)!=="paid").reduce((a,iv)=>a+(Number(iv.amount)||0),0);
+  const paidThis=invoices.filter(iv=>iv.status==="paid"&&(iv.paid_on||"").startsWith(monthKey().slice(0,7))).reduce((a,iv)=>a+(Number(iv.amount)||0),0);
+  const invRows=invoices.slice().sort((a,b)=>{ const o={overdue:0,sent:1,draft:2,paid:3}; return (o[invStatus(a)]-o[invStatus(b)])||String(a.due||"9999").localeCompare(String(b.due||"9999")); }).map(iv=>{
+    const st=invStatus(iv), sp=invSt[st]||invSt.sent; const overdue=st==="overdue";
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
+      <span class="pill ${sp[0]}" ${overdue?'style="background:#fde4e4;color:#c0566a"':""}>${sp[1]}</span>
+      <span class="grow" style="font-size:12.5px;min-width:110px;${iv.status==="paid"?'opacity:.6':''}">${esc(iv.client||"invoice")}${iv.due?` <span class="label">due ${esc(iv.due.slice(5))}</span>`:""}</span>
+      <span class="num" style="font-weight:700;color:${iv.status==="paid"?'var(--mint)':'var(--ink)'}">$${(Number(iv.amount)||0).toLocaleString()}</span>
+      ${iv.link?`<a href="${esc(iv.link)}" target="_blank" rel="noopener" class="ft-ic" title="open invoice">🔗</a>`:""}
+      ${iv.status!=="paid"?`<button class="ft-ic" data-act="invPaid" data-id="${iv.id}" title="mark paid (+log income)" ${RO?"disabled":""} style="color:var(--mint)">✓</button>`:`<button class="ft-ic" data-act="invUnpaid" data-id="${iv.id}" title="mark unpaid" ${RO?"disabled":""}>↩</button>`}
+      <button class="ft-ic" data-act="invEdit" data-id="${iv.id}" title="edit">✎</button>
+      <button class="ft-ic" data-act="invDel" data-id="${iv.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button>
+    </div>`;}).join("");
+  MP.invoices=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🧾 Invoices</h2><span class="label">outstanding $${outstanding.toLocaleString()} · paid this month $${paidThis.toLocaleString()}</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+        <input class="inp" id="inv_client" placeholder="who / what for" style="flex:1;min-width:130px" ${RO?"disabled":""}/>
+        <input class="inp num" id="inv_amount" type="number" placeholder="$" style="width:90px" ${RO?"disabled":""}/>
+        <input class="inp" id="inv_due" type="date" title="due date" style="width:auto" ${RO?"disabled":""}/>
+        <input class="inp" id="inv_link" placeholder="invoice link (optional)" style="flex:1;min-width:140px" ${RO?"disabled":""}/>
+        <button class="btn btn-pink" data-act="invAdd" ${RO?"disabled":""}>+ add</button>
+      </div>
+      ${invoices.length?`<div>${invRows}</div>`:`<p class="soft" style="font-size:12.5px;margin:6px 0 0">Track who owes you. Add an invoice, drop the link, and ✓ it when it's paid (which logs the income for you). 🌸</p>`}
+    </div>`;
   MP.sponsor=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💌 Sponsor pipeline</h2><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${sponsorViewSeg()}<button class="chip ${localStorage.getItem("eggie-show-passed")!=="0"?"":"on"}" data-act="togglePassed">${localStorage.getItem("eggie-show-passed")!=="0"?"hide passed":"show passed"}</button><input class="inp" id="sponsorBrand" placeholder="Brand name…" style="width:140px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addSponsor" ${RO?"disabled":""}>+ pitch</button></div></div>
       ${pipeline}
       <div class="label" style="margin-top:8px">Tap a card/row to edit · drag across stages · 💬 pills = follow-up nudges.</div></div>`;
-  return modularPage("money",{overview:"Overview",log:"Log in / out",setaside:"Set aside",savings:"Savings goals",sponsor:"Sponsor pipeline"},[["overview",MP.overview],["log",MP.log],["setaside",MP.setaside],["savings",MP.savings],["sponsor",MP.sponsor]],12);
+  return modularPage("money",{overview:"Overview",log:"Log in / out",invoices:"Invoices",setaside:"Set aside",savings:"Savings goals",sponsor:"Sponsor pipeline"},[["overview",MP.overview],["log",MP.log],["invoices",MP.invoices],["setaside",MP.setaside],["savings",MP.savings],["sponsor",MP.sponsor]],12);
 }
 /* ---- robust sponsor pipeline: rich cards, follow-up pills, per-column totals — shared by Money + Pitch ---- */
 function followPill(s){
@@ -1806,6 +1832,16 @@ async function sponsorModal(id){
       <div style="display:flex;gap:8px"><button class="btn" data-act="delSponsorModal" data-id="${s.id}" style="color:var(--rose)">🗑 remove</button><button class="btn" data-act="sponsorRemind" data-id="${s.id}">⏰ remind me</button></div>
       <button class="btn btn-pink" data-act="saveSponsor" data-id="${s.id}">💾 save</button>
     </div>
+  </div></div>`;
+}
+async function invoiceModal(id){
+  const sent=await DB.daily(SENTINEL); const iv=(sent.invoices||[]).find(x=>x.id===id); if(!iv)return;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%"><div class="card-head"><h3 style="font-size:16px">🧾 Edit invoice</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div class="label">Who / what for</div><input class="inp" id="iv_client" value="${esc(iv.client||"")}"/>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div style="width:120px"><div class="label">Amount $</div><input class="inp num" id="iv_amount" type="number" value="${iv.amount||""}"/></div><div style="width:150px"><div class="label">Due date</div><input class="inp" id="iv_due" type="date" value="${esc(iv.due||"")}"/></div><div class="grow" style="min-width:120px"><div class="label">Status</div><select class="inp" id="iv_status">${[["draft","📝 Draft"],["sent","🕓 Sent / awaiting"],["paid","✅ Paid"]].map(([k,l])=>`<option value="${k}" ${iv.status===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <div class="label" style="margin-top:8px">Invoice link</div><input class="inp" id="iv_link" value="${esc(iv.link||"")}" placeholder="https://…"/>
+    <div class="label" style="margin-top:8px">Note</div><textarea class="inp" id="iv_note" rows="2">${esc(iv.note||"")}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-pink" data-act="invSave" data-id="${iv.id}">💾 save</button></div>
   </div></div>`;
 }
 function goalModal(g){
@@ -2620,7 +2656,7 @@ async function renderScript(){
   const sent=await DB.daily(SENTINEL); const saved=sent.scripts||[];
   if(!state.script)state.script={kind:"short",title:"",references:"",raw:"",out:null};
   const s=state.script, kind=s.kind||"short";
-  const seg=`<div class="seg">${[["short","📲 Short"],["long","🎬 Long-form"]].map(([k,l])=>`<button data-act="scriptKind" data-v="${k}" class="${kind===k?'on':''}">${l}</button>`).join("")}</div>`;
+  const seg=`<div class="seg">${[["short","📲 Short"],["long","🎬 Long-form"],["twitter","🐦 Twitter"]].map(([k,l])=>`<button data-act="scriptKind" data-v="${k}" class="${kind===k?'on':''}">${l}</button>`).join("")}</div>`;
   const out=s.out;
   const outHtml = out ? `<div class="soft-card" style="margin-top:10px">
       ${(out.hooks&&out.hooks.length)?`<div class="label">hook options</div>${out.hooks.map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span class="grow" style="font-size:12.5px">${esc(h)}</span><button class="btn" data-act="copyText" data-t="${esc(h)}" style="padding:2px 8px">copy</button></div>`).join("")}`:""}
@@ -2633,7 +2669,7 @@ async function renderScript(){
   return `<div style="max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
     <div class="panel">
       <div class="card-head"><h2 style="font-size:18px">✍️ Script writer</h2>${seg}</div>
-      <p class="soft" style="font-size:12.5px;margin:0 0 12px">Drop in your research, then just talk it out — I'll shape your own words into your ${kind==='long'?'long-form':'short'} format, in your voice.${DEMO?` <b>(Deploy the analyze function + demo off to format.)</b>`:""}</p>
+      <p class="soft" style="font-size:12.5px;margin:0 0 12px">Drop in your research, then just talk it out — I'll shape your own words into your ${kind==='twitter'?'X / Twitter posts':(kind==='long'?'long-form':'short')+' format'}, in your voice.${DEMO?` <b>(Deploy the analyze function + demo off to format.)</b>`:""}</p>
       <div class="label">Working title <span class="muted">· optional</span></div>
       <input class="inp" id="scrTitle" value="${esc(s.title||"")}" placeholder="e.g. I tried VTubing on a $0 budget" />
       <div class="label" style="margin-top:10px">Research / references <span class="muted">· paste facts, links, notes</span></div>
@@ -2642,7 +2678,7 @@ async function renderScript(){
         <div style="display:flex;gap:6px"><button class="btn" id="recBtn" data-act="recToggle">🎙️ Record</button><button class="btn" data-act="scrClearRaw">clear</button></div></div>
       <textarea class="inp" id="scrRaw" rows="7" placeholder="hit Record and just talk — or type. Don't worry about being tidy, I'll clean it up.">${esc(s.raw||"")}</textarea>
       <div id="recHint" class="soft" style="font-size:11.5px;margin-top:4px"></div>
-      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="formatScript">✨ format into a ${kind==='long'?'long-form':'short'} script</button><button class="btn" data-act="saveScript">💾 save draft</button></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="formatScript">✨ ${kind==='twitter'?'write the tweets':'format into a '+(kind==='long'?'long-form':'short')+' script'}</button><button class="btn" data-act="saveScript">💾 save draft</button></div>
       <div id="scrOut">${outHtml}</div>
     </div>
     ${savedHtml}
@@ -2678,7 +2714,7 @@ async function saveScriptDraft(){
 }
 async function loadScriptDraft(id){ const sent=await DB.daily(SENTINEL); const d=(sent.scripts||[]).find(x=>x.id===id); if(d){ state.script={id:d.id,kind:d.kind||"short",title:d.title||"",references:d.references||"",raw:d.raw||"",out:d.out||null}; render(); } }
 async function delScriptDraft(id){ await DB.saveDaily(SENTINEL,n=>({...n,scripts:(n.scripts||[]).filter(x=>x.id!==id)})); toast("Removed"); render(); }
-async function scrToContent(){ scrCapture(); const s=state.script, o=s.out||{}; const title=(o.title||s.title||"Untitled script").slice(0,160); const hook=(o.hooks&&o.hooks[0])||""; await DB.addContent({title,format:s.kind==="long"?"long":"short",stage:"scripting",hook,priority:60}); toast("Added to content 🎬"); }
+async function scrToContent(){ scrCapture(); const s=state.script, o=s.out||{}; const title=(o.title||s.title||"Untitled script").slice(0,160); const hook=(o.hooks&&o.hooks[0])||""; await DB.addContent({title,format:s.kind==="long"?"long":s.kind==="twitter"?"twitter":"short",stage:"scripting",hook,priority:60}); toast("Added to content 🎬"); }
 function renderOptimize(){
   const live=state.optMode==="livestream";
   const pf=state.optPrefill||{};
@@ -3008,6 +3044,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="boardSort"){ state.boardSort=el.dataset.v; try{localStorage.setItem("eggie-board-sort",el.dataset.v);}catch(e){} render(); return; }
   if(act==="editSponsor"){ sponsorModal(id); return; }
   if(act==="sponsorView"){ try{localStorage.setItem("eggie-sponsor-view",el.dataset.v);}catch(e){} render(); return; }
+  if(act==="invAdd"){ const cl=((document.getElementById("inv_client")||{}).value||"").trim(); const am=parseFloat((document.getElementById("inv_amount")||{}).value)||0; const due=((document.getElementById("inv_due")||{}).value)||""; const link=((document.getElementById("inv_link")||{}).value||"").trim(); if(!cl&&!am){toast("Add who it's for + an amount 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,invoices:[...(n.invoices||[]),{id:uid(),client:cl||"invoice",amount:am,due:due||"",link:link||"",status:"sent",created:TODAY}]})); toast("🧾 invoice added"); render(); return; }
+  if(act==="invPaid"){ await DB.saveDaily(SENTINEL,n=>{ const invs=(n.invoices||[]).map(iv=>iv.id===id?{...iv,status:"paid",paid_on:TODAY}:iv); return {...n,invoices:invs}; }); const sent2=await DB.daily(SENTINEL); const iv=(sent2.invoices||[]).find(x=>x.id===id); if(iv&&Number(iv.amount)){ await DB.addIncome({kind:"in",source:"sponsor",amount:Number(iv.amount),note:"invoice · "+(iv.client||"")}); } toast("✅ paid — logged to income 💗"); render(); return; }
+  if(act==="invUnpaid"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).map(iv=>iv.id===id?{...iv,status:"sent",paid_on:undefined}:iv)})); render(); return; }
+  if(act==="invDel"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).filter(iv=>iv.id!==id)})); render(); return; }
+  if(act==="invEdit"){ invoiceModal(id); return; }
+  if(act==="invSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).map(iv=>iv.id===id?{...iv,client:gv2("iv_client")||iv.client,amount:parseFloat(gv2("iv_amount"))||0,due:gv2("iv_due"),link:gv2("iv_link"),status:gv2("iv_status")||"sent",note:gv2("iv_note")}:iv)})); document.getElementById("modal").innerHTML=""; toast("Saved 🧾"); render(); return; }
   if(act==="emailKind"){ state.email=state.email||{}; emailGrab(); state.email.kind=el.dataset.v; render(); return; }
   if(act==="genEmail"){
     emailGrab(); const em=state.email; const out=document.getElementById("emailOut");

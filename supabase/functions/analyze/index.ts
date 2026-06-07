@@ -400,7 +400,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - markHabit: { name }     // check off a habit by name (fuzzy-matched to her habit list)
 - addHabit: { label, emoji?, cat?: "Pre-stream"|"On-air"|"Post-stream"|"Content"|"Community"|"Health"|"Business"|"Batch days", energy?: "essential"|"normal"|"intensive", total?: number }
 - scheduleContent: { name (fuzzy-matched to an EXISTING content title in her list above), date: "YYYY-MM-DD" }   // sets that content's scheduled date. Use ONLY for content she already has; if it's a new idea, use addContent instead.
-- startScript: { kind: "short"|"long", title?, raw? (any idea/notes/spoken words she gave you to start from), references?, format?: boolean }   // opens the Script Writer seeded with this; set format:true ONLY if she gave enough raw/references to shape it now (otherwise leave false so she can dictate more first).
+- startScript: { kind: "short"|"long"|"twitter", title?, raw? (any idea/notes/spoken words she gave you to start from), references?, format?: boolean }   // "twitter" = X posts / a thread   // opens the Script Writer seeded with this; set format:true ONLY if she gave enough raw/references to shape it now (otherwise leave false so she can dictate more first).
 - markMed: { name (fuzzy-matched to a med on her list), on?: boolean (default true) }   // "I took my <med>", "mark off my meds", "check off my morning pill"
 - markAllMeds: { on?: boolean }     // "I took all my meds today"
 - addMed: { name, dose?, time? }    // add a new medication to her list
@@ -542,12 +542,20 @@ What she wants to say / notes: ${(i.notes || "(use your best judgment for this e
     // --- script: turn raw spoken notes + research into a formatted short/long-form script ---
     if (mode === "script") {
       const i = body.input || {};
-      const kind = i.kind === "long" ? "long" : "short";
+      const kind = i.kind === "long" ? "long" : i.kind === "twitter" ? "twitter" : "short";
       const title = (i.title || "").toString().slice(0, 200);
       const refs = (i.references || "").toString().slice(0, 4000);
       const raw = (i.raw || "").toString().slice(0, 7000);
       if (!raw && !refs) return json({ error: "Add some spoken words or references first." }, 400);
       const common = `Her working title: ${title || "(none)"}\n\nResearch / references she pasted (facts, links, source notes — ground the script in these, don't invent facts):\n${refs || "(none)"}\n\nHer own spoken words (raw voice-to-text — may ramble, mis-punctuate, or repeat; clean it up but KEEP her phrasing, jokes, and voice — do not blandify her):\n${raw || "(none)"}`;
+      if (kind === "twitter") {
+        const out = await claude(BRAND, `Turn this into X/Twitter posts in her voice. Return ONLY JSON: { "title": string, "hooks": string[], "script": string, "cta": string }.
+- hooks: 3 standalone single-tweet options (each ≤270 chars, no hashtags per her X rules, hook-first, her warm/playful voice). These are 3 different angles she can pick from.
+- script: ONE ready-to-post thread — number each tweet "1/ …", "2/ …" etc (3-6 tweets, each ≤270 chars, the first tweet must hook hard and stand alone). Plain text, blank line between tweets.
+- cta: one last-tweet call to action (reply-bait or a soft ask — replies matter more than hashtags on X).
+${common}`, 1400);
+        return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
+      }
       const prompt = kind === "short"
         ? `Shape this into a tight SHORT-form video script (YouTube Shorts / TikTok, ~45–55 seconds, roughly 110–150 spoken words). Return ONLY JSON:
 { "title": string, "hooks": string[3], "script": string, "cta": string }
