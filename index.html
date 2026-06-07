@@ -462,7 +462,7 @@ const CRITERIA = [["relevant","Relevant"],["nonobvious","Non-obvious"],["absorba
 const CHANNEL_STATS = [["twitch","Twitch followers"],["twitch_subs","Twitch subs"],["youtube","YouTube subs"],["tiktok","TikTok"],["twitter","X"],["discord","Discord"]];
 
 /* ---- planner: buckets + spoon levels (Content = the job; no separate Work bucket) ---- */
-const TASK_BUCKETS = [["personal","💜","Personal"],["content","🎬","Content"],["hobbies","🎨","Hobbies"],["health","💊","Health & appts"],["someday","🌙","Someday / maybe"]];
+const TASK_BUCKETS = [["personal","💜","Personal"],["content","🎬","Content"],["hobbies","🎨","Hobbies"],["health","💊","Health & appts"],["others","🤝","For Others"],["someday","🌙","Someday / maybe"]];
 const TASK_SPOONS = [["low","🌙","Low spoons"],["some","🌤","Some spoons"],["full","🌞","Full spoons"]];
 /* ---- care: DBT skills (summarized from public DBT skill lists — not clinical advice) ---- */
 const DBT_SKILLS = [
@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.8";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.9";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};

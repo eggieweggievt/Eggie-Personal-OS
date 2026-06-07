@@ -385,7 +385,7 @@ Return ONLY JSON, no prose around it:
 
 Allowed action types and their args (use ONLY these; pick valid enum values):
 - addCalendarEvent: { title, date:"YYYY-MM-DD", endDate?:"YYYY-MM-DD" (multi-day), time?:"HH:MM" 24h, tz?:IANA zone (default ${tz}), note?, color?:"#hex" }   // a ONE-OFF thing on a specific date (incl. a one-time stream, collab, appointment, deadline). Resolve relative dates to an absolute date.
-- addTask: { text, bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" }   // due = soft deadline shown on the task ("by Friday" → resolve it); for an actual PING use setReminder (or both)
+- addTask: { text, bucket?: "personal"|"content"|"hobbies"|"health"|"others"|"someday" ("others" = things she's doing for other people), spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" }   // due = soft deadline shown on the task ("by Friday" → resolve it); for an actual PING use setReminder (or both)
 - addContent: { title, format?: "short"|"long"|"twitter", stage?: "idea"|"scripting"|"recording"|"editing"|"thumbnail"|"scheduled"|"published", pillar?: "growth"|"retention"|"experimental" }
 - addIncome: { kind: "in"|"out", source, amount:number, category?, note? }
 - addScheduleSlot: { day: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun", time?, title? }   // a RECURRING weekly stream day that repeats every week — use the weekday name, NEVER a single date
@@ -443,7 +443,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delContent: { name (fuzzy) }       // delete a piece of content from the pipeline — confirm in reply if her phrasing was vague
 - setContentDeadline: { name (fuzzy), date: "YYYY-MM-DD" }   // set/change a content brief's deadline
 - addSubtask: { task (fuzzy), text }  // break a planner task into a small step
-- setTask: { name (fuzzy — matches the CURRENT wording), text? (the new wording — rename), bucket?: "personal"|"content"|"hobbies"|"health"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" or "" to clear }   // edit a task: rename, re-bucket, change spoons, set/clear due. Renaming also renames its linked reminder.
+- setTask: { name (fuzzy — matches the CURRENT wording), text? (the new wording — rename), bucket?: "personal"|"content"|"hobbies"|"health"|"others"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" or "" to clear }   // edit a task: rename, re-bucket, change spoons, set/clear due. Renaming also renames its linked reminder.
 - delHabit: { name (fuzzy) }          // remove a habit from her library
 - delMed: { name (fuzzy) }            // remove a medication from her list
 - delLastIncome: { }                  // "undo that last money entry" — removes the most recent ledger entry only (safest)
