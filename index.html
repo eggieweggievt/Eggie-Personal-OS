@@ -64,6 +64,8 @@
   nav{display:flex;gap:4px;flex-wrap:wrap;}
   .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
   .tab.active{background:linear-gradient(135deg,#fde4ef,#ece2fb);color:var(--pink-deep);} .tab:hover{color:var(--pink-deep);}
+  .more-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:30;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 38px rgba(120,90,140,.24);padding:6px;min-width:170px;display:flex;flex-direction:column;}
+  .more-menu .tab{text-align:left;border-radius:10px;}
   #rail .right{display:flex;align-items:center;gap:10px;}
   .chip{font-size:11px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--line-2);color:var(--muted);background:#fff;}
   .chip.on{color:var(--mint);border-color:#bfe9d8;background:#f0fbf6;} .chip.demo{color:var(--lav-deep);border-color:#ddcdf6;background:#f6f0ff;}
@@ -459,6 +461,9 @@ const EXPENSE_CATS = ["gear","software","art / models","subscriptions","fees / c
 const DEAL_TYPES = ["seeding","paid integration","ambassador","stream sponsor","affiliate / code","gifted","other"];
 const SPONSOR_STAGES = [["dream","💭 Dream"],["draft","Draft"],["sent","Sent"],["responded","Responded"],["signed","Signed ✨"],["passed","Passed"]];
 const CRITERIA = [["relevant","Relevant"],["nonobvious","Non-obvious"],["absorbable","Absorbable"],["actionable","Actionable"]];
+/* ---- Sakura Lightworks: client roster pipeline + need-board ---- */
+const CLIENT_STAGES = [["prospect","🌱 Prospect"],["onboarding","🤝 Onboarding"],["active","✅ Active"],["paused","⏸ Paused"],["offboarded","👋 Offboarded"]];
+const CLIENT_NEED = [["needs","🔴 Needs attention"],["doing","🔆 In progress"],["done","✅ Done"]];
 const CHANNEL_STATS = [["twitch","Twitch followers"],["twitch_subs","Twitch subs"],["youtube","YouTube subs"],["tiktok","TikTok"],["twitter","X"],["discord","Discord"]];
 
 /* ---- planner: buckets + spoon levels (Content = the job; no separate Work bucket) ---- */
@@ -727,11 +732,12 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.12";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
+const APP_BUILD="2026-06-06.1";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
-function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; render(); }
+function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
+document.addEventListener("pointerdown",e=>{ if(state.moreOpen && !e.target.closest("#nav")){ state.moreOpen=false; render(); } },true);
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
 function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
 
@@ -889,7 +895,12 @@ function wireCalDnD(){
 async function render(){
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
   const _tabs=_tabOrder.length?[...TABS].sort((a,b)=>{let ia=_tabOrder.indexOf(a[0]),ib=_tabOrder.indexOf(b[0]);return (ia<0?999:ia)-(ib<0?999:ib);}):TABS;
-  document.getElementById("nav").innerHTML = _tabs.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("");
+  const MORE_TABS=["optimize","script","habits","health","care","review","settings"];
+  const primary=_tabs.filter(([t])=>!MORE_TABS.includes(t));
+  const more=_tabs.filter(([t])=>MORE_TABS.includes(t));
+  const moreActive=more.some(([t])=>t===state.tab);
+  document.getElementById("nav").innerHTML = primary.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")
+    + `<div style="position:relative"><button class="tab ${moreActive?'active':''}" data-act="moreMenu">⋯ More ▾</button>${state.moreOpen?`<div class="more-menu" id="moreMenu">${more.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")}</div>`:""}</div>`;
   const st=document.getElementById("status"); st.textContent=DEMO?"◇ demo data":"● live"; st.className="chip"+(DEMO?" demo":" on");
   const dc=document.getElementById("demoChip"); dc.textContent=DEMO?"● demo":"demo"; dc.className="chip"+(DEMO?" demo":"");
   if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
@@ -919,6 +930,7 @@ async function render(){
     else if(state.tab==="pitch") html=await renderPitch();
     else if(state.tab==="review") html=await renderReview();
     else if(state.tab==="eugene") html=renderEugene();
+    else if(state.tab==="clients") html=await renderClients();
     else if(state.tab==="settings") html=await renderSettings();
     view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
     postRender(); renderStickies();
@@ -2200,6 +2212,79 @@ async function renderReview(){
   return modularPage("review",{summary:"Shipped + seal week",reflect:"Reflection"},[["summary",RP.summary],["reflect",RP.reflect]],12);
 }
 
+/* ===================== SAKURA LIGHTWORKS · CLIENTS ===================== */
+function clientNeeds(c){ return (c.tasks||[]).filter(t=>!t.done&&(t.status||"needs")!=="done"); }
+function clientOverdue(c){ return (c.tasks||[]).filter(t=>!t.done&&t.due&&t.due<TODAY).length; }
+function clientStageLbl(s){ const x=CLIENT_STAGES.find(y=>y[0]===s); return x?x[1]:"🌱 Prospect"; }
+async function renderClients(){
+  const sent=await DB.daily(SENTINEL);
+  const clients=sent.clients||[];
+  const view=state.clientView||"roster";
+  const active=clients.filter(c=>c.status==="active"||c.status==="onboarding");
+  const totalNeeds=clients.reduce((a,c)=>a+clientNeeds(c).length,0);
+  const totalOverdue=clients.reduce((a,c)=>a+clientOverdue(c),0);
+  const attention=clients.filter(c=>c.status!=="offboarded"&&c.status!=="paused"&&(clientNeeds(c).length>0)).sort((a,b)=>clientOverdue(b)-clientOverdue(a)||clientNeeds(b).length-clientNeeds(a).length);
+  // glance
+  const glance=`<div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);margin-bottom:14px">
+    <div class="card-head"><h2 style="font-size:19px">🌸 Sakura Lightworks at a glance</h2><span class="label">${active.length} active · ${clients.length} total</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:10px">
+      <div class="soft-card"><div class="label">open needs</div><div class="num" style="font-size:22px;font-family:var(--display);color:var(--pink-deep)">${totalNeeds}</div></div>
+      <div class="soft-card"><div class="label">overdue</div><div class="num" style="font-size:22px;font-family:var(--display);color:${totalOverdue?'var(--rose)':'var(--mint)'}">${totalOverdue}</div></div>
+      <div class="soft-card"><div class="label">need attention</div><div class="num" style="font-size:22px;font-family:var(--display)">${attention.length}</div></div>
+    </div>
+    ${attention.length?`<div style="display:flex;flex-direction:column;gap:5px">${attention.slice(0,6).map(c=>{const od=clientOverdue(c); const top=clientNeeds(c)[0]; return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:13px;font-weight:700">${esc(c.name)}</span>${od?`<span class="pill" style="background:#fde4e4;color:#c0566a">${od} overdue</span>`:""}<span class="pill pill-peach">${clientNeeds(c).length} need${clientNeeds(c).length===1?"":"s"}</span>${top?`<span class="soft" style="font-size:11.5px;max-width:40%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(top.text)}</span>`:""}<button class="btn" data-act="clientOpen" data-id="${c.id}" style="padding:2px 9px">open</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">Everyone's taken care of right now — nothing needs you. 🌸</p>`}
+  </div>`;
+  // toolbar
+  const bar=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👥 Roster</h2><div class="seg"><button data-act="clientView" data-v="roster" class="${view==="roster"?'on':''}">🗂 roster</button><button data-act="clientView" data-v="board" class="${view==="board"?'on':''}">📋 needs board</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="cl_name" placeholder="new client name…" style="flex:1;min-width:160px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientAdd" ${RO?"disabled":""}>+ add client</button></div></div>`;
+  let body;
+  if(view==="board"){
+    // combined needs board across all non-offboarded clients
+    const allTasks=[]; clients.forEach(c=>{ if(c.status==="offboarded")return; (c.tasks||[]).forEach(t=>allTasks.push({...t,_cid:c.id,_cname:c.name})); });
+    body=`<div class="kanban" style="grid-template-columns:repeat(3,minmax(170px,1fr))">${CLIENT_NEED.map(([k,l])=>{
+      const col=allTasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999")));
+      return `<div class="kcol"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${l}</span><span>${col.length}</span></div>${col.map(t=>{const od=t.due&&t.due<TODAY&&k!=="done"; return `<div class="citem" data-act="clientOpen" data-id="${t._cid}" style="cursor:pointer"><div style="font-size:11px;font-weight:700;color:var(--lav-deep)">${esc(t._cname)}</div><div style="font-size:12.5px;margin-top:2px">${esc(t.text)}</div>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}</div>`;}).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
+    }).join("")}</div>`;
+  } else {
+    const filt=state.clientFilter||"all";
+    const stages=CLIENT_STAGES.filter(([k])=>filt==="all"||filt==="active"&&(k==="active"||k==="onboarding")||filt===k);
+    const fbtn=(v,l)=>`<button data-act="clientFilter" data-v="${v}" class="${filt===v?'on':''}">${l}</button>`;
+    body=`<div style="margin:-4px 0 10px"><div class="seg" style="flex-wrap:wrap">${fbtn("all","All")}${fbtn("active","Active")}${fbtn("prospect","🌱 Prospects")}${fbtn("paused","⏸ Paused")}${fbtn("offboarded","👋 Past")}</div></div>`+
+      stages.map(([k,l])=>{ const cs=clients.filter(c=>(c.status||"prospect")===k); if(!cs.length&&filt==="all")return ""; if(!cs.length)return "";
+        return `<div style="margin-bottom:14px"><div class="label" style="margin-bottom:6px">${l} · ${cs.length}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${cs.map(c=>{const nd=clientNeeds(c).length,od=clientOverdue(c);
+          return `<div class="soft-card" data-act="clientOpen" data-id="${c.id}" style="cursor:pointer">
+            <div style="display:flex;align-items:center;gap:8px"><span class="grow" style="font-size:14px;font-weight:700">${esc(c.name)}</span>${od?`<span class="pill" style="background:#fde4e4;color:#c0566a">${od}!</span>`:nd?`<span class="pill pill-peach">${nd}</span>`:`<span class="pill pill-mint">✓</span>`}</div>
+            ${c.handle?`<div class="soft" style="font-size:11.5px;margin-top:2px">${esc(c.handle)}</div>`:""}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${(c.platforms||[]).slice(0,4).map(p=>`<span class="pill pill-lav">${esc(p.label||p.url||"")}</span>`).join("")}</div>
+          </div>`;}).join("")}</div></div>`;
+      }).join("")||`<p class="soft" style="font-size:12.5px">No clients here yet — add one above. 🌸</p>`;
+  }
+  return `<div style="max-width:960px;margin:0 auto">${glance}${bar}${body}</div>`;
+}
+async function clientModal(id){
+  const sent=await DB.daily(SENTINEL); const c=(sent.clients||[]).find(x=>x.id===id); if(!c)return;
+  const needs=(c.tasks||[]);
+  const notes=(c.notes||[]).slice().reverse();
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:17px">🌸 ${esc(c.name)}</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:150px"><div class="label">Name</div><input class="inp" id="cm_name" value="${esc(c.name)}"/></div><div style="width:160px"><div class="label">Status</div><select class="inp" id="cm_status">${CLIENT_STAGES.map(([k,l])=>`<option value="${k}" ${c.status===k?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:150px"><div class="label">Handle / where they create</div><input class="inp" id="cm_handle" value="${esc(c.handle||"")}" placeholder="@name · Twitch/YT…"/></div><div class="grow" style="min-width:150px"><div class="label">Discord / contact</div><input class="inp" id="cm_contact" value="${esc(c.contact||"")}" placeholder="discord user · email"/></div></div>
+    <div class="label" style="margin-top:8px">Platforms / links <span class="muted">· one per line: Label | https://…</span></div>
+    <textarea class="inp" id="cm_platforms" rows="3" placeholder="Twitch | https://twitch.tv/…\nYouTube | https://youtube.com/…">${esc((c.platforms||[]).map(p=>`${p.label||""}${p.url?" | "+p.url:""}`).join("\n"))}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn btn-pink" data-act="clientSave" data-id="${c.id}">💾 save details</button></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0"/>
+    <div class="card-head"><span class="label">🔴 What they need</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="cm_tasktext" placeholder="they need…" style="flex:1;min-width:140px"/><input class="inp" id="cm_taskdue" type="date" style="width:auto"/><button class="btn btn-pink" data-act="clientTaskAdd" data-id="${c.id}">+ need</button></div>
+    ${needs.length?`<div style="display:flex;flex-direction:column;gap:4px">${needs.map(t=>{const st=t.status||(t.done?"done":"needs"); const od=t.due&&t.due<TODAY&&st!=="done"; return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><button class="check ${st==='done'?'on':''}" data-act="clientTaskDone" data-id="${c.id}" data-tid="${t.id}" style="padding:0"></button><span class="grow" style="font-size:12.5px;${st==='done'?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>${esc(t.due.slice(5))}</span>`:""}${st!=='done'?`<button class="ft-ic" data-act="clientTaskMove" data-id="${c.id}" data-tid="${t.id}" title="needs → in progress">${st==='doing'?'🔆':'▶'}</button>`:""}<button class="ft-ic" data-act="clientTaskDel" data-id="${c.id}" data-tid="${t.id}" style="color:var(--rose)">🗑</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Nothing pending for them right now. 🌸</p>`}
+    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0"/>
+    <div class="card-head"><span class="label">📝 Notes & meeting log</span></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1"/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}">+ note</button></div>
+    ${notes.length?`<div style="display:flex;flex-direction:column;gap:6px">${notes.map(nt=>`<div class="soft-card" style="padding:8px 10px"><div class="label">${esc(nt.date||"")}</div><div style="font-size:12.5px;white-space:pre-wrap;margin-top:2px">${esc(nt.text)}</div><button class="ft-ic" data-act="clientNoteDel" data-id="${c.id}" data-nid="${nt.id}" style="color:var(--rose);float:right;margin-top:-18px">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No notes yet.</p>`}
+    <div style="margin-top:16px"><button class="btn" data-act="clientDel" data-id="${c.id}" style="color:var(--rose)">🗑 remove client</button></div>
+  </div></div>`;
+}
+function parsePlatforms(text){ return String(text||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf("|"); return i>=0?{label:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:{label:l,url:""}; }); }
+
 /* ===================== ASK ===================== */
 function renderAsk(){
   return `<div class="panel" style="max-width:720px;margin:0 auto"><h2 style="font-size:18px">🔮 Ask your OS</h2>
@@ -2984,6 +3069,7 @@ document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
   if(act==="tab")return setTab(el.dataset.tab);
+  if(act==="moreMenu"){ state.moreOpen=!state.moreOpen; render(); return; }
   if(act==="toggleDemo"){ DEMO=!DEMO; if(!DEMO&&!SB){DEMO=true;toast("Add Supabase config to go live.");} DB.bust(); demoBanner(); return render(); }
   if(act==="closeModal"){ if(e.target===el){document.getElementById("modal").innerHTML="";render();} return; }
   if(act==="fmt"){ state.fmt=el.dataset.f; return render(); }
@@ -3068,6 +3154,18 @@ document.addEventListener("click",async(e)=>{
   if(act==="invUnpaid"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).map(iv=>iv.id===id?{...iv,status:"sent",paid_on:undefined}:iv)})); render(); return; }
   if(act==="invDel"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).filter(iv=>iv.id!==id)})); render(); return; }
   if(act==="invEdit"){ invoiceModal(id); return; }
+  if(act==="clientView"){ state.clientView=el.dataset.v; render(); return; }
+  if(act==="clientFilter"){ state.clientFilter=el.dataset.v; render(); return; }
+  if(act==="clientAdd"){ const nm=((document.getElementById("cl_name")||{}).value||"").trim(); if(!nm){toast("Name the client 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:[...(n.clients||[]),{id:uid(),name:nm,status:"prospect",handle:"",contact:"",platforms:[],tasks:[],notes:[],created:TODAY}]})); toast("🌸 client added"); render(); return; }
+  if(act==="clientOpen"){ clientModal(id); return; }
+  if(act==="clientSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const nm=gv2("cm_name"); if(!nm){toast("Name needed 🌸");return;} const plat=parsePlatforms((document.getElementById("cm_platforms")||{}).value); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,name:nm,status:gv2("cm_status")||c.status,handle:gv2("cm_handle"),contact:gv2("cm_contact"),platforms:plat}:c)})); toast("Saved 🌸"); clientModal(id); render(); return; }
+  if(act==="clientDel"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).filter(c=>c.id!==id)})); document.getElementById("modal").innerHTML=""; toast("Client removed 🌸"); render(); return; }
+  if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",due:due||"",done:false}]}:c)})); clientModal(id); render(); return; }
+  if(act==="clientTaskDone"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>{ if(t.id!==tid)return t; const nd=!(t.status==="done"); return {...t,status:nd?"done":"needs",done:nd}; })}:c)})); clientModal(id); render(); return; }
+  if(act==="clientTaskMove"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,status:(t.status==="doing"?"needs":"doing")}:t)}:c)})); clientModal(id); render(); return; }
+  if(act==="clientTaskDel"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).filter(t=>t.id!==tid)}:c)})); clientModal(id); render(); return; }
+  if(act==="clientNoteAdd"){ const tx=((document.getElementById("cm_notetext")||{}).value||"").trim(); if(!tx){return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:[...(c.notes||[]),{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:tx}]}:c)})); clientModal(id); render(); return; }
+  if(act==="clientNoteDel"){ const nid=el.dataset.nid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:(c.notes||[]).filter(x=>x.id!==nid)}:c)})); clientModal(id); render(); return; }
   if(act==="teach"){ const k=el.dataset.kind||"any"; let orig=""; if(k==="email")orig=(state.email&&state.email.out&&((state.email.out.subject?state.email.out.subject+"\n\n":"")+(state.email.out.body||"")))||""; else orig=(state.script&&state.script.out&&state.script.out.script)||""; teachModal(k,orig); return; }
   if(act==="teachSave"){ const text=((document.getElementById("tch_text")||{}).value||"").trim(); if(!text){toast("Add an example 🌸");return;} const k=((document.getElementById("tch_kind")||{}).value)||"any"; const note=((document.getElementById("tch_note")||{}).value||"").trim(); await DB.saveDaily(SENTINEL,n=>({...n,eqVoice:[...(n.eqVoice||[]),{id:uid(),kind:k,example:text.slice(0,1500),note:note.slice(0,300),date:TODAY}].slice(-40)})); document.getElementById("modal").innerHTML=""; toast("🎓 Eugene learned your voice 💗"); render(); return; }
   if(act==="teachAdd"){ teachModal(el.dataset.kind||"any",""); return; }
@@ -3384,6 +3482,9 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
   if(t.id==="euInput"){ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
   if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
+  if(t.id==="cl_name"){ const b=document.querySelector('[data-act="clientAdd"]'); if(b)b.click(); }
+  if(t.id==="cm_tasktext"){ const b=document.querySelector('[data-act="clientTaskAdd"]'); if(b)b.click(); }
+  if(t.id==="cm_notetext"){ const b=document.querySelector('[data-act="clientNoteAdd"]'); if(b)b.click(); }
   if(t.id==="ideaText"){ const b=document.querySelector('[data-act="artIdeaAdd"]'); if(b)b.click(); }
   if(t.id==="inspoUrl"||t.id==="inspoNote"){ const b=document.querySelector('[data-act="artInspoAdd"]'); if(b)b.click(); }
   if(t.id==="smartQ")smart();
@@ -3917,6 +4018,29 @@ render();
         var nm=(a.text||"").toLowerCase(); var hit=null;
         await DB.saveDaily(SENTINEL,function(n){ var b=(n.artBoard||[]).filter(function(c){ var m=(c.type==="note"&&(c.text||"").toLowerCase().indexOf(nm)>=0)||(c.type==="swatch"&&(c.color||"").toLowerCase()===nm); if(m&&!hit){hit=c;return false;} return true; }); return Object.assign({},n,{artBoard:b}); });
         return hit? "🗑 removed that card from the mood board" : "couldn't find a matching note or colour on the board 🌸";
+      }
+      case "addClient":
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).concat([{id:uid(),name:a.name||"client",status:a.status||"prospect",handle:a.handle||"",contact:a.contact||"",platforms:[],tasks:[],notes:[],created:TODAY}])}); });
+        return "🌸 added "+(a.name||"client")+" to Sakura Lightworks";
+      case "setClientStatus": {
+        var cnm=(a.name||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{status:a.status||c.status});} return c; })}); });
+        return hit? "🌸 "+hit.name+" → "+(a.status||"") : "couldn't find a client like “"+(a.name||"")+"” 🌸";
+      }
+      case "addClientNeed": {
+        var cnm=(a.client||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{tasks:(c.tasks||[]).concat([{id:uid(),text:a.text||"need",status:"needs",due:a.due||"",done:false}])});} return c; })}); });
+        return hit? "🔴 noted: "+hit.name+" needs “"+(a.text||"")+"”"+(a.due?" by "+a.due:"") : "couldn't find a client like “"+(a.client||"")+"” 🌸";
+      }
+      case "doneClientNeed": {
+        var cnm=(a.client||"").toLowerCase(), tnm=(a.text||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if((c.name||"").toLowerCase().indexOf(cnm)>=0){ return Object.assign({},c,{tasks:(c.tasks||[]).map(function(t){ if(!hit&&!t.done&&(t.text||"").toLowerCase().indexOf(tnm)>=0){hit=t;return Object.assign({},t,{status:"done",done:true});} return t; })}); } return c; })}); });
+        return hit? "✅ marked “"+hit.text+"” done" : "couldn't find that need 🌸";
+      }
+      case "addClientNote": {
+        var cnm=(a.client||"").toLowerCase(); var hit=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{notes:(c.notes||[]).concat([{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:a.text||""}])});} return c; })}); });
+        return hit? "📝 noted that for "+hit.name : "couldn't find a client like “"+(a.client||"")+"” 🌸";
       }
       case "delSticky": {
         var nm=(a.text||"").toLowerCase();

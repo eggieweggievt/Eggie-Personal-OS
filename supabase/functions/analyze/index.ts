@@ -175,6 +175,10 @@ async function fullContext(userId: string, today: string): Promise<string> {
     }
     lines.push(`PUSH DEVICES: ${(s.pushSubs || []).length} subscribed for web-push reminders.`);
     lines.push(`DISCORD DELIVERY: reminder pings go to ${s.discordNotify?.mode === "channel" ? `server channel ${s.discordNotify.channelId}` : "private DMs"}.`);
+    if (s.clients?.length) {
+      const att = s.clients.filter((c: any) => c.status !== "offboarded" && (c.tasks || []).some((t: any) => !t.done && t.status !== "done"));
+      lines.push(`SAKURA LIGHTWORKS (her mgmt clients): ${s.clients.length} total. Needing attention: ${att.length ? att.map((c: any) => { const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done"); const od = open.filter((t: any) => t.due && t.due < today).length; return `${c.name} (${open.length} open${od ? ", " + od + " OVERDUE" : ""}: ${open.slice(0, 2).map((t: any) => t.text).join("; ")})`; }).join(" | ") : "none — all caught up"}.`);
+    }
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -468,6 +472,11 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - setTaxRate: { percent: 0-90 }       // her money set-aside rate
 - setSetAside: { amount: number }     // how much she's set aside this month
 - loadScript: { title (fuzzy) }       // open a saved script draft in the Script Writer
+- addClient: { name, status?: "prospect"|"onboarding"|"active"|"paused"|"offboarded", handle?, contact? }   // Sakura Lightworks = her management team. Add a content-creator/VTuber client she manages.
+- setClientStatus: { name (fuzzy), status: "prospect"|"onboarding"|"active"|"paused"|"offboarded" }
+- addClientNeed: { client (fuzzy), text, due?: "YYYY-MM-DD" }   // "ClientX needs their thumbnail by Friday" — a to-do for that client
+- doneClientNeed: { client (fuzzy), text (fuzzy) }   // mark one of a client's needs handled
+- addClientNote: { client (fuzzy), text }            // log a note / meeting summary on a client
 - delBoardCard: { text }              // remove a mood-board NOTE matching the text, or a SWATCH by exact "#hex"
 - delSticky: { text (fuzzy) }         // peel a sticky note off the screen
 
