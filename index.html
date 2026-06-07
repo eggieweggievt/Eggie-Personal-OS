@@ -732,7 +732,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.2";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.3";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2233,10 +2233,12 @@ async function renderClients(){
       <div class="soft-card"><div class="label">need attention</div><div class="num" style="font-size:22px;font-family:var(--display)">${attention.length}</div></div>
     </div>
     ${attention.length?`<div style="display:flex;flex-direction:column;gap:5px">${attention.slice(0,6).map(c=>{const od=clientOverdue(c); const top=clientNeeds(c)[0]; return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:13px;font-weight:700">${esc(c.name)}</span>${od?`<span class="pill" style="background:#fde4e4;color:#c0566a">${od} overdue</span>`:""}<span class="pill pill-peach">${clientNeeds(c).length} need${clientNeeds(c).length===1?"":"s"}</span>${top?`<span class="soft" style="font-size:11.5px;max-width:40%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(top.text)}</span>`:""}<button class="btn" data-act="clientOpen" data-id="${c.id}" style="padding:2px 9px">open</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">Everyone's taken care of right now — nothing needs you. 🌸</p>`}
+    ${(()=>{ const soon=[]; clients.forEach(c=>{ if(c.status==="offboarded")return; (c.tasks||[]).forEach(t=>{ if(!t.done&&(t.status||"needs")!=="done"&&t.due){ const d=Math.ceil((new Date(t.due+"T00:00")-new Date(TODAY+"T00:00"))/86400000); if(d<=14)soon.push({c:c.name,t:t.text,due:t.due,d}); } }); }); soon.sort((a,b)=>a.due.localeCompare(b.due)); if(!soon.length)return ""; return `<div class="label" style="margin:12px 0 5px">⏳ deadlines · next 14 days</div>${soon.slice(0,6).map(x=>`<div style="display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0"><span class="pill ${x.d<0?'':'pill-gray'}" ${x.d<0?'style="background:#fde4e4;color:#c0566a"':''}>${x.d<0?(-x.d)+"d late":x.d===0?"today":"in "+x.d+"d"}</span><span class="soft" style="font-weight:700">${esc(x.c)}</span><span class="grow" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(x.t)}</span></div>`).join("")}`; })()}
   </div>`;
   // toolbar
   const bar=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👥 Roster</h2><div class="seg"><button data-act="clientView" data-v="roster" class="${view==="roster"?'on':''}">🗂 roster</button><button data-act="clientView" data-v="board" class="${view==="board"?'on':''}">📋 needs board</button></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="cl_name" placeholder="new client name…" style="flex:1;min-width:160px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientAdd" ${RO?"disabled":""}>+ add client</button></div></div>`;
+    <div class="label" style="margin-bottom:5px">📡 Talent radar — add a client, or spot a prospect before the thought evaporates</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="cl_name" placeholder="name / @handle…" style="min-width:150px" ${RO?"disabled":""}/><input class="inp" id="cl_why" placeholder="why they'd fit (optional)" style="flex:1;min-width:150px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientAdd" ${RO?"disabled":""}>+ spot</button></div></div>`;
   let body;
   if(view==="board"){
     // combined needs board across all non-offboarded clients
@@ -2279,10 +2281,14 @@ async function clientModal(id){
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:150px"><div class="label">Their channel ID <span class="muted">· right-click channel → Copy ID</span></div><input class="inp num" id="cm_dchannel" value="${esc(c.discordChannel||"")}" placeholder="123456789…"/></div><div style="width:150px"><div class="label">Server ID <span class="muted">· optional</span></div><input class="inp num" id="cm_dguild" value="${esc(c.discordGuild||"")}" placeholder="server ID"/></div></div>
       <p class="soft" style="font-size:11px;margin:6px 0 0">Paste their channel ID (Discord Developer Mode → right-click → Copy Channel ID) and it becomes an "open Discord ↗" jump link up top. You can also just paste a channel link into the channel ID box.</p>
     </div></details>
-    <details class="acc"><summary>💼 Package & business</summary><div class="acc-body">
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:150px"><div class="label">Tier / package</div><input class="inp" id="cm_tier" value="${esc(c.tier||"")}" placeholder="Full management · Thumbnails…"/></div><div style="width:120px"><div class="label">Rate</div><input class="inp" id="cm_rate" value="${esc(c.rate||"")}" placeholder="$/mo"/></div></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:130px"><div class="label">Start date</div><input class="inp" id="cm_start" type="date" value="${esc(c.start||"")}"/></div><div class="grow" style="min-width:130px"><div class="label">Billing / renews</div><input class="inp" id="cm_billing" value="${esc(c.billing||"")}" placeholder="1st of month…"/></div></div>
+    <details class="acc"><summary>💼 Role & deliverables</summary><div class="acc-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:150px"><div class="label">Role / arrangement</div><input class="inp" id="cm_tier" value="${esc(c.tier||"")}" placeholder="Full management · Thumbnails · Strategy…"/></div><div style="width:140px"><div class="label">With you since</div><input class="inp" id="cm_start" type="date" value="${esc(c.start||"")}"/></div></div>
       <div class="label" style="margin-top:8px">Recurring deliverables <span class="muted">· what you do for them</span></div><textarea class="inp" id="cm_deliverables" rows="2" placeholder="2 thumbnails/wk · weekly schedule graphic · monthly analytics">${esc(c.deliverables||"")}</textarea>
+    </div></details>
+    <details class="acc"><summary>🧠 Brand brain <span class="muted">· so Eugene can help AS them</span></summary><div class="acc-body">
+      <div class="label">Their niche / what they make</div><input class="inp" id="cm_niche" value="${esc(c.niche||"")}" placeholder="cozy horror VTuber · variety streamer"/>
+      <div class="label" style="margin-top:8px">Voice & vibe</div><textarea class="inp" id="cm_brain" rows="2" placeholder="chaotic-sweet, lots of caps + kaomoji, never corporate">${esc(c.brain||"")}</textarea>
+      <div class="label" style="margin-top:8px">Title / content style they win with</div><textarea class="inp" id="cm_style" rows="2" placeholder="reaction titles w/ a CAPS word + game name · short hooks">${esc(c.style||"")}</textarea>
     </div></details>
     <details class="acc"><summary>🔗 Platforms & socials</summary><div class="acc-body">
       <div class="label">One per line: Label | https://…</div>
@@ -2290,7 +2296,7 @@ async function clientModal(id){
     </div></details>
     <details class="acc"><summary>💗 Preferences & goals</summary><div class="acc-body">
       <div class="label">Their goals / what they want</div><textarea class="inp" id="cm_goals" rows="2" placeholder="grow to affiliate · land a sponsor · be more consistent">${esc(c.goals||"")}</textarea>
-      <div class="label" style="margin-top:8px">Preferences / brand notes</div><textarea class="inp" id="cm_prefs" rows="2" placeholder="pastel palette · no horror games · prefers async">${esc(c.prefs||"")}</textarea>
+      <div class="label" style="margin-top:8px">Preferences / boundaries</div><textarea class="inp" id="cm_prefs" rows="2" placeholder="pastel palette · no horror games · prefers async">${esc(c.prefs||"")}</textarea>
     </div></details>
     <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-pink" data-act="clientSave" data-id="${c.id}">💾 save profile</button></div>
     <hr style="border:none;border-top:1px solid var(--line);margin:14px 0"/>
@@ -3177,9 +3183,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="invEdit"){ invoiceModal(id); return; }
   if(act==="clientView"){ state.clientView=el.dataset.v; render(); return; }
   if(act==="clientFilter"){ state.clientFilter=el.dataset.v; render(); return; }
-  if(act==="clientAdd"){ const nm=((document.getElementById("cl_name")||{}).value||"").trim(); if(!nm){toast("Name the client 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:[...(n.clients||[]),{id:uid(),name:nm,status:"prospect",handle:"",contact:"",platforms:[],tasks:[],notes:[],created:TODAY}]})); toast("🌸 client added"); render(); return; }
+  if(act==="clientAdd"){ const nm=((document.getElementById("cl_name")||{}).value||"").trim(); const why=((document.getElementById("cl_why")||{}).value||"").trim(); if(!nm){toast("Name the client 🌸");return;} const notes0=why?[{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:"📡 spotted: "+why}]:[]; await DB.saveDaily(SENTINEL,n=>({...n,clients:[...(n.clients||[]),{id:uid(),name:nm,status:"prospect",handle:"",contact:"",platforms:[],tasks:[],notes:notes0,created:TODAY}]})); toast("📡 added to the radar 🌸"); render(); return; }
   if(act==="clientOpen"){ clientModal(id); return; }
-  if(act==="clientSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const nm=gv2("cm_name"); if(!nm){toast("Name needed 🌸");return;} const plat=parsePlatforms((document.getElementById("cm_platforms")||{}).value); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,name:nm,status:gv2("cm_status")||c.status,pronouns:gv2("cm_pronouns"),tz:gv2("cm_tz"),priority:gv2("cm_priority"),handle:gv2("cm_handle"),contact:gv2("cm_contact"),discord:gv2("cm_discord"),discordChannel:gv2("cm_dchannel"),discordGuild:gv2("cm_dguild"),tier:gv2("cm_tier"),rate:gv2("cm_rate"),start:gv2("cm_start"),billing:gv2("cm_billing"),deliverables:gv2("cm_deliverables"),platforms:plat,goals:gv2("cm_goals"),prefs:gv2("cm_prefs")}:c)})); toast("Saved 🌸"); clientModal(id); render(); return; }
+  if(act==="clientSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const nm=gv2("cm_name"); if(!nm){toast("Name needed 🌸");return;} const plat=parsePlatforms((document.getElementById("cm_platforms")||{}).value); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,name:nm,status:gv2("cm_status")||c.status,pronouns:gv2("cm_pronouns"),tz:gv2("cm_tz"),priority:gv2("cm_priority"),handle:gv2("cm_handle"),contact:gv2("cm_contact"),discord:gv2("cm_discord"),discordChannel:gv2("cm_dchannel"),discordGuild:gv2("cm_dguild"),tier:gv2("cm_tier"),start:gv2("cm_start"),deliverables:gv2("cm_deliverables"),niche:gv2("cm_niche"),brain:gv2("cm_brain"),style:gv2("cm_style"),platforms:plat,goals:gv2("cm_goals"),prefs:gv2("cm_prefs")}:c)})); toast("Saved 🌸"); clientModal(id); render(); return; }
   if(act==="clientDel"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).filter(c=>c.id!==id)})); document.getElementById("modal").innerHTML=""; toast("Client removed 🌸"); render(); return; }
   if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",due:due||"",done:false}]}:c)})); clientModal(id); render(); return; }
   if(act==="clientTaskDone"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>{ if(t.id!==tid)return t; const nd=!(t.status==="done"); return {...t,status:nd?"done":"needs",done:nd}; })}:c)})); clientModal(id); render(); return; }
@@ -4049,7 +4055,7 @@ render();
         return hit? "🌸 "+hit.name+" → "+(a.status||"") : "couldn't find a client like “"+(a.name||"")+"” 🌸";
       }
       case "setClient": {
-        var cnm=(a.name||"").toLowerCase(); var hit=null; var fields=["handle","contact","discord","discordChannel","tier","rate","start","billing","deliverables","goals","prefs","pronouns","tz","priority","status"];
+        var cnm=(a.name||"").toLowerCase(); var hit=null; var fields=["handle","contact","discord","discordChannel","tier","start","deliverables","niche","brain","style","goals","prefs","pronouns","tz","priority","status"];
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){ hit=c; var o=Object.assign({},c); fields.forEach(function(f){ if(a[f]!==undefined)o[f]=a[f]; }); return o; } return c; })}); });
         return hit? "🌸 updated "+hit.name+"'s profile" : "couldn't find a client like “"+(a.name||"")+"” 🌸";
       }
