@@ -549,10 +549,10 @@ What she wants to say / notes: ${(i.notes || "(use your best judgment for this e
       if (!raw && !refs) return json({ error: "Add some spoken words or references first." }, 400);
       const common = `Her working title: ${title || "(none)"}\n\nResearch / references she pasted (facts, links, source notes — ground the script in these, don't invent facts):\n${refs || "(none)"}\n\nHer own spoken words (raw voice-to-text — may ramble, mis-punctuate, or repeat; clean it up but KEEP her phrasing, jokes, and voice — do not blandify her):\n${raw || "(none)"}`;
       if (kind === "twitter") {
-        const out = await claude(BRAND, `Turn this into X/Twitter posts in her voice. Return ONLY JSON: { "title": string, "hooks": string[], "script": string, "cta": string }.
-- hooks: 3 standalone single-tweet options (each ≤270 chars, no hashtags per her X rules, hook-first, her warm/playful voice). These are 3 different angles she can pick from.
-- script: ONE ready-to-post thread — number each tweet "1/ …", "2/ …" etc (3-6 tweets, each ≤270 chars, the first tweet must hook hard and stand alone). Plain text, blank line between tweets.
-- cta: one last-tweet call to action (reply-bait or a soft ask — replies matter more than hashtags on X).
+        const out = await claude(BRAND, `Turn this into ONE single X/Twitter post in her voice — NOT a thread, NOT a script, NOT a list of beats. Just the finished tweet, exactly as she'd post it. Return ONLY JSON: { "title": string, "hooks": string[3], "script": string, "cta": "" }.
+- script: the single best ready-to-post tweet — plain text, ≤270 chars, NO hashtags (her X rule), no "1/" numbering, no stage directions or labels, no quotation marks around it. Hook-first, warm/playful, sounds like a real person posting, the occasional 🐙/🌸 is fine. This is the one she'll copy-paste straight to X.
+- hooks: 3 alternative full ready-to-post versions of the SAME tweet (different angles/wordings, each ≤270 chars, same rules) so she can pick her favourite.
+- cta: leave as an empty string "".
 ${common}`, 1400);
         return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
       }

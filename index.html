@@ -727,7 +727,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-05.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-05.11";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2658,10 +2658,11 @@ async function renderScript(){
   const s=state.script, kind=s.kind||"short";
   const seg=`<div class="seg">${[["short","📲 Short"],["long","🎬 Long-form"],["twitter","🐦 Twitter"]].map(([k,l])=>`<button data-act="scriptKind" data-v="${k}" class="${kind===k?'on':''}">${l}</button>`).join("")}</div>`;
   const out=s.out;
+  const isTw=kind==="twitter";
   const outHtml = out ? `<div class="soft-card" style="margin-top:10px">
-      ${(out.hooks&&out.hooks.length)?`<div class="label">hook options</div>${out.hooks.map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span class="grow" style="font-size:12.5px">${esc(h)}</span><button class="btn" data-act="copyText" data-t="${esc(h)}" style="padding:2px 8px">copy</button></div>`).join("")}`:""}
-      <div class="label" style="margin-top:10px">script${out.title?` · <span class="soft">${esc(out.title)}</span>`:""} <button class="btn" data-act="copyScript" style="padding:2px 8px;margin-left:6px">copy script</button><button class="btn btn-pink" data-act="teleprompter" data-src="scrScript" style="padding:2px 8px;margin-left:6px">🎬 Teleprompter</button></div>
-      <div id="scrScript" style="white-space:pre-wrap;font-size:13px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:4px;background:#fff">${esc(out.script||"")}</div>
+      <div class="label" style="margin-top:2px">${isTw?"your post":"script"}${out.title?` · <span class="soft">${esc(out.title)}</span>`:""} <button class="btn" data-act="copyScript" style="padding:2px 8px;margin-left:6px">copy</button>${isTw?`<span class="label num" style="margin-left:8px">${(out.script||"").length}/280</span>`:`<button class="btn btn-pink" data-act="teleprompter" data-src="scrScript" style="padding:2px 8px;margin-left:6px">🎬 Teleprompter</button>`}</div>
+      <div id="scrScript" style="white-space:pre-wrap;font-size:${isTw?"14px":"13px"};line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:4px;background:#fff">${esc(out.script||"")}</div>
+      ${(out.hooks&&out.hooks.length)?`<div class="label" style="margin-top:12px">${isTw?"other versions":"hook options"}</div>${out.hooks.map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;margin:5px 0"><span class="grow" style="font-size:12.5px">${esc(h)}</span><button class="btn" data-act="copyText" data-t="${esc(h)}" style="padding:2px 8px">copy</button></div>`).join("")}`:""}
       ${out.cta?`<div class="label" style="margin-top:8px">CTA</div><div class="soft" style="font-size:12.5px">${esc(out.cta)}</div>`:""}
       <div style="margin-top:12px"><button class="btn btn-pink" data-act="scrToContent">＋ add to content pipeline</button></div>
     </div>` : "";
