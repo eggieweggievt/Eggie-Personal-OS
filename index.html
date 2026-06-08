@@ -745,7 +745,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.9";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -1069,12 +1069,25 @@ function cardContentMission(content){
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" data-act="goTab" data-tab="content">open pipeline</button><button class="btn" data-act="goTab" data-tab="optimize">🎯 optimizer</button><button class="btn" data-act="goTab" data-tab="script">✍️ script</button></div>
   </section>`;
 }
+/* Derive the daily/weekly art challenge purely from the date — NO db write needed, so opening
+   the art tab on a new day can never clobber the persistent row. "done" is stored as the date it
+   was checked; a manual reroll stores an override tagged with its day/week. */
+function artChallengeState(sent){
+  const ch=sent.artChallenge||{}; const wk=mondayOf(TODAY);
+  return {
+    wk,
+    dayText:(ch.dayRollDate===TODAY&&ch.dayRollText)?ch.dayRollText:seedPick(ART_DAILY,TODAY),
+    weekText:(ch.weekRollWk===wk&&ch.weekRollText)?ch.weekRollText:seedPick(ART_WEEKLY,wk),
+    dayDone:ch.dayDoneDate===TODAY,
+    weekDone:ch.weekDoneWk===wk
+  };
+}
 function cardArtCorner(sent){
-  const ch=sent.artChallenge||{};
-  const wk=mondayOf(TODAY);
+  const cs=artChallengeState(sent);
+  const wk=cs.wk;
   const min=(sent.artLog||[]).filter(e=>e.date>=wk).reduce((a,e)=>a+Number(e.min||0),0);
   return `<section class="panel"><div class="card-head"><span class="label">🎨 Art corner</span><span class="pill pill-mint">${min} min this week</span></div>
-    ${ch.dayText?`<button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:12.5px">${esc(ch.dayText)}</span></button>`:""}
+    ${cs.dayText?`<button class="hbtn ${cs.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center;width:100%;text-align:left"><span class="check ${cs.dayDone?'on':''}"></span><span style="font-size:12.5px">${esc(cs.dayText)}</span></button>`:""}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-pink" data-act="artStartNow">🎨 make art now</button><button class="btn" data-act="goTab" data-tab="art">open studio</button></div>
     <p class="soft" style="font-size:11px;margin:8px 0 0">play feeds the well your content draws from 🌊</p>
   </section>`;
@@ -2503,11 +2516,9 @@ async function renderArt(){
   const A=state.art;
   const log=sent.artLog||[];
   const wk=mondayOf(TODAY);
-  // challenges (reset daily / weekly)
-  let ch=Object.assign({},sent.artChallenge||{}); let chChanged=false;
-  if(ch.day!==TODAY){ ch.day=TODAY; ch.dayText=seedPick(ART_DAILY,TODAY); ch.dayDone=false; chChanged=true; }
-  if(ch.week!==wk){ ch.week=wk; ch.weekText=seedPick(ART_WEEKLY,wk); ch.weekDone=false; chChanged=true; }
-  if(chChanged){ DB.saveDaily(SENTINEL,n=>({...n,artChallenge:ch})).catch(()=>{}); }
+  // challenges refresh daily/weekly by DERIVING from the date — no render-time write (that write
+  // used to clobber the persistent row on a stale cache, wiping mood board / ideas / vault).
+  const ch=artChallengeState(sent);
   // minutes this week + sparkline
   const weekMin=log.filter(e=>e.date>=wk).reduce((a,e)=>a+Number(e.min||0),0);
   const weekDays=new Set(log.filter(e=>e.date>=wk&&Number(e.min)>0).map(e=>e.date)).size;
@@ -3297,8 +3308,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
   if(act==="goTab"){ if(el.dataset.tab&&TABS.some(t=>t[0]===el.dataset.tab)) setTab(el.dataset.tab); return; }
   if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; if(state.tab!=="art")state.tab="art"; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
-  if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekText=txt;c.weekDone=false;c.week=mondayOf(TODAY);}else{c.dayText=txt;c.dayDone=false;c.day=TODAY;} return {...n,artChallenge:c};}); render(); return; }
-  if(act==="artChallengeDone"){ const sc=el.dataset.scope; await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week")c.weekDone=!c.weekDone; else c.dayDone=!c.dayDone; return {...n,artChallenge:c};}); render(); return; }
+  if(act==="artRoll"){ const sc=el.dataset.scope; const txt = sc==="week"?artRand(ART_WEEKLY):artRand(ART_DAILY); const wk=mondayOf(TODAY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week"){c.weekRollText=txt;c.weekRollWk=wk;c.weekDoneWk=null;}else{c.dayRollText=txt;c.dayRollDate=TODAY;c.dayDoneDate=null;} return {...n,artChallenge:c};}); render(); return; }
+  if(act==="artChallengeDone"){ const sc=el.dataset.scope; const wk=mondayOf(TODAY); await DB.saveDaily(SENTINEL,n=>{const c=Object.assign({},n.artChallenge||{}); if(sc==="week")c.weekDoneWk=(c.weekDoneWk===wk)?null:wk; else c.dayDoneDate=(c.dayDoneDate===TODAY)?null:TODAY; return {...n,artChallenge:c};}); render(); return; }
   if(act==="artLogQuick"){ const m=parseInt(el.dataset.m)||0; if(m)await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m}]})); toast("Logged "+m+" min of play 🎨 proud of you"); render(); return; }
   if(act==="artLog"){ const mi=document.getElementById("artMin"), ni=document.getElementById("artNote"); const m=parseInt(mi&&mi.value)||0; const note=(ni&&ni.value||"").trim(); if(!m){toast("How many minutes? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,artLog:[...(n.artLog||[]),{date:TODAY,min:m,note:note||undefined}]})); toast("Logged "+m+" min 🎨"); render(); return; }
   if(act==="artPromptRoll"){ state.art=state.art||{}; state.art.prompt={subject:artRand(ART_SUBJECTS),mood:artRand(ART_MOODS),constraint:artRand(ART_CONSTRAINTS)}; render(); return; }
@@ -3967,7 +3978,7 @@ render();
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{artLog:(n.artLog||[]).concat([{date:TODAY,min:Number(a.minutes)||0,note:a.note||undefined}])}); });
         return "🎨 logged "+(Number(a.minutes)||0)+" min of art — proud of you for making time 💗";
       case "artChallengeDone":
-        await DB.saveDaily(SENTINEL,function(n){ var c=Object.assign({},n.artChallenge||{}); if(a.scope==="week")c.weekDone=(a.done!==false); else c.dayDone=(a.done!==false); return Object.assign({},n,{artChallenge:c}); });
+        await DB.saveDaily(SENTINEL,function(n){ var c=Object.assign({},n.artChallenge||{}); var wk=mondayOf(TODAY); if(a.scope==="week")c.weekDoneWk=(a.done!==false)?wk:null; else c.dayDoneDate=(a.done!==false)?TODAY:null; return Object.assign({},n,{artChallenge:c}); });
         return "🌷 marked your "+(a.scope==="week"?"weekly":"daily")+" art challenge done — yay you! ✨";
       case "addBoardNote": {
         var ox=30+Math.floor(Math.random()*60), oy=30+Math.floor(Math.random()*50);
@@ -4322,7 +4333,7 @@ render();
       var evs=(sent.calendarEvents||[]).filter(function(e){ return e.date===TODAY||(e.endDate&&e.date<=TODAY&&e.endDate>=TODAY); });
       var slot=(sent.schedule||[]).find(function(s){ return (s.day||"").slice(0,3)===wd; });
       var openT=(sent.tasks||[]).filter(function(t){ return !t.done; }).length;
-      var ch=sent.artChallenge||{};
+      var ch=artChallengeState(sent);
       var bits=[];
       if(slot) bits.push("stream day 🔴 "+(slot.time||""));
       if(evs.length) bits.push(evs.map(function(e){return e.title;}).slice(0,2).join(" + ")+(evs.length>2?" +"+(evs.length-2):""));
