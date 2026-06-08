@@ -692,7 +692,20 @@ const DB = {
   async updateSponsor(id,patch){ this._c.sponsors=null; patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.sponsors.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("sponsors").update(patch).eq("id",id).eq("user_id",UID); },
   async delSponsor(id){ this._c.sponsors=null; if(DEMO){demo.sponsors=demo.sponsors.filter(x=>x.id!==id);return;} await SB.from("sponsors").delete().eq("id",id).eq("user_id",UID); },
   async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.daily[date]=n; },
-  async saveDaily(date,merge){ const cur=await DB.daily(date); const next=merge({...cur}); if(DEMO){demo.daily[date]=next;return next;} await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); this._c.daily[date]=next; if(date!==SENTINEL){ Object.keys(this._c.range).forEach(k=>{ const arr=this._c.range[k]; if(!arr)return; const i=arr.findIndex(r=>r.date===date); if(i>=0)arr[i]={date,notes:next}; else arr.push({date,notes:next}); }); } return next; },
+  async saveDaily(date,merge){
+    if(DEMO){ const cur=await DB.daily(date); const next=merge({...cur}); demo.daily[date]=next; return next; }
+    // The SENTINEL row is also written by the server (the /sakura inbox, client-channel reminders,
+    // daily snapshots). Merging onto a stale CACHE would clobber those — so re-read the LIVE row
+    // right before writing. Belt + suspenders against the data-loss class we hit before. 🛟
+    let base;
+    if(date===SENTINEL){ const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); base={}; if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} }
+    else base=await DB.daily(date);
+    const next=merge({...base});
+    await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
+    this._c.daily[date]=next;
+    if(date!==SENTINEL){ Object.keys(this._c.range).forEach(k=>{ const arr=this._c.range[k]; if(!arr)return; const i=arr.findIndex(r=>r.date===date); if(i>=0)arr[i]={date,notes:next}; else arr.push({date,notes:next}); }); }
+    return next;
+  },
   async dailyRange(days){ if(DEMO){ return Object.entries(demo.daily).filter(([d])=>d!==SENTINEL).map(([date,notes])=>({date,notes})); } if(this._c.range[days])return this._c.range[days]; const since=dayAgo(-days); const {data}=await SB.from("daily_logs").select("log_date,notes").eq("user_id",UID).gte("log_date",since).order("log_date",{ascending:false}).limit(100000); return this._c.range[days]=(data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {date:r.log_date,notes:n};}); },
   async captures(){ if(DEMO)return demo.captures; if(this._c.captures)return this._c.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return this._c.captures=(data||[]); },
   async addCapture(text){ this._c.captures=null; if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
@@ -732,12 +745,14 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.6";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.7";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
 document.addEventListener("pointerdown",e=>{ if(state.moreOpen && !e.target.closest("#nav")){ state.moreOpen=false; render(); } },true);
+/* pull fresh server-side changes (inbox, client reminders) when you come back to the tab */
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && !DEMO && SB){ try{ delete DB._c.daily[SENTINEL]; }catch(e){} try{render();}catch(e){} } });
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
 function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
 
