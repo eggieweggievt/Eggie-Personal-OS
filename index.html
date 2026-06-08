@@ -732,7 +732,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.4";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.5";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2219,6 +2219,7 @@ function clientStageLbl(s){ const x=CLIENT_STAGES.find(y=>y[0]===s); return x?x[
 async function renderClients(){
   const sent=await DB.daily(SENTINEL);
   const clients=sent.clients||[];
+  if(state.clientPage){ const c=clients.find(x=>x.id===state.clientPage); if(c)return renderClientPage(c); state.clientPage=null; }
   const view=state.clientView||"roster";
   const active=clients.filter(c=>c.status==="active"||c.status==="onboarding");
   const totalNeeds=clients.reduce((a,c)=>a+clientNeeds(c).length,0);
@@ -2245,7 +2246,7 @@ async function renderClients(){
     const allTasks=[]; clients.forEach(c=>{ if(c.status==="offboarded")return; (c.tasks||[]).forEach(t=>allTasks.push({...t,_cid:c.id,_cname:c.name})); });
     body=`<div class="kanban" style="grid-template-columns:repeat(3,minmax(170px,1fr))">${CLIENT_NEED.map(([k,l])=>{
       const col=allTasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999")));
-      return `<div class="kcol"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${l}</span><span>${col.length}</span></div>${col.map(t=>{const od=t.due&&t.due<TODAY&&k!=="done"; return `<div class="citem" data-act="clientOpen" data-id="${t._cid}" style="cursor:pointer"><div style="font-size:11px;font-weight:700;color:var(--lav-deep)">${esc(t._cname)}</div><div style="font-size:12.5px;margin-top:2px">${esc(t.text)}</div>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}</div>`;}).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
+      return `<div class="kcol" data-act="dropClientNeed" data-status="${k}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${l}</span><span>${col.length}</span></div>${col.map(t=>{const od=t.due&&t.due<TODAY&&k!=="done"; return `<div class="citem" draggable="true" data-act="dragClientTask" data-id="${t.id}" data-cid="${t._cid}"><div data-act="clientOpen" data-id="${t._cid}" style="cursor:pointer"><div style="font-size:11px;font-weight:700;color:var(--lav-deep)">${esc(t._cname)}</div><div style="font-size:12.5px;margin-top:2px">${esc(t.text)}</div>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}</div></div>`;}).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
     }).join("")}</div>`;
   } else {
     const filt=state.clientFilter||"all";
@@ -2303,18 +2304,48 @@ async function clientModal(id){
       <div class="label">Their goals / what they want</div><textarea class="inp" id="cm_goals" rows="2" placeholder="grow to affiliate · land a sponsor · be more consistent">${esc(c.goals||"")}</textarea>
       <div class="label" style="margin-top:8px">Preferences / boundaries</div><textarea class="inp" id="cm_prefs" rows="2" placeholder="pastel palette · no horror games · prefers async">${esc(c.prefs||"")}</textarea>
     </div></details>
-    <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-pink" data-act="clientSave" data-id="${c.id}">💾 save profile</button></div>
-    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0"/>
-    <div class="card-head"><span class="label">🔴 What they need</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="cm_tasktext" placeholder="they need…" style="flex:1;min-width:140px"/><input class="inp" id="cm_taskdue" type="date" style="width:auto"/><button class="btn btn-pink" data-act="clientTaskAdd" data-id="${c.id}">+ need</button></div>
-    ${needs.length?`<div style="display:flex;flex-direction:column;gap:4px">${needs.map(t=>{const st=t.status||(t.done?"done":"needs"); const od=t.due&&t.due<TODAY&&st!=="done"; return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><button class="check ${st==='done'?'on':''}" data-act="clientTaskDone" data-id="${c.id}" data-tid="${t.id}" style="padding:0"></button><span class="grow" style="font-size:12.5px;${st==='done'?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>${esc(t.due.slice(5))}</span>`:""}${st!=='done'?`<button class="ft-ic" data-act="clientTaskMove" data-id="${c.id}" data-tid="${t.id}" title="needs → in progress">${st==='doing'?'🔆':'▶'}</button>`:""}<button class="ft-ic" data-act="clientTaskDel" data-id="${c.id}" data-tid="${t.id}" style="color:var(--rose)">🗑</button></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Nothing pending for them right now. 🌸</p>`}
-    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0"/>
-    <div class="card-head"><span class="label">📝 Notes & meeting log</span></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1"/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}">+ note</button></div>
-    ${notes.length?`<div style="display:flex;flex-direction:column;gap:6px">${notes.map(nt=>`<div class="soft-card" style="padding:8px 10px"><div class="label">${esc(nt.date||"")}</div><div style="font-size:12.5px;white-space:pre-wrap;margin-top:2px">${esc(nt.text)}</div><button class="ft-ic" data-act="clientNoteDel" data-id="${c.id}" data-nid="${nt.id}" style="color:var(--rose);float:right;margin-top:-18px">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No notes yet.</p>`}
-    <div style="margin-top:16px"><button class="btn" data-act="clientDel" data-id="${c.id}" style="color:var(--rose)">🗑 remove client</button></div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;gap:8px"><button class="btn" data-act="clientDel" data-id="${c.id}" style="color:var(--rose)">🗑 remove client</button><button class="btn btn-pink" data-act="clientSave" data-id="${c.id}">💾 save profile</button></div>
   </div></div>`;
 }
+/* full client "character sheet" page — at-a-glance view + interactive needs + notes */
+function renderClientPage(c){
+  const needs=(c.tasks||[]); const notes=(c.notes||[]).slice().reverse();
+  const dch=(/^\d+$/.test((c.discordGuild||""))&&/^\d+$/.test((c.discordChannel||"")))?`https://discord.com/channels/${c.discordGuild}/${c.discordChannel}`:((c.discordChannel||"").startsWith("http")?c.discordChannel:"");
+  const info=(label,val)=> val?`<div class="soft-card"><div class="label">${label}</div><div style="font-size:13px;white-space:pre-wrap;margin-top:2px">${esc(val)}</div></div>`:"";
+  const plats=(c.platforms||[]).filter(p=>p.label||p.url);
+  return `<div style="max-width:880px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" data-act="clientBack">← roster</button><div style="flex:1"></div>
+      ${dch?`<a class="btn" href="${esc(dch)}" target="_blank" rel="noopener" style="text-decoration:none">💬 Discord</a>`:""}
+      <button class="btn" data-act="clientMessage" data-id="${c.id}">📨 message them</button>
+      <button class="btn btn-pink" data-act="clientEdit" data-id="${c.id}">✎ edit</button>
+    </div>
+    <div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+        <div class="avatar" style="width:56px;height:56px;font-size:26px;flex:0 0 auto">${(c.name||"?").slice(0,1).toUpperCase()}</div>
+        <div style="flex:1;min-width:160px">
+          <h2 style="font-size:24px;font-family:var(--display)">${esc(c.name)}</h2>
+          <div class="label" style="margin-top:2px">${esc(c.handle||"")}${c.pronouns?` · ${esc(c.pronouns)}`:""}${c.tz?` · ${esc(c.tz)}`:""}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="pill pill-lav">${clientStageLbl(c.status)}</span>${c.priority==="high"?`<span class="pill" style="background:#fde4e4;color:#c0566a">🔴 high priority</span>`:""}${c.tier?`<span class="pill pill-mint">${esc(c.tier)}</span>`:""}${c.start?`<span class="pill pill-gray">since ${esc(c.start.slice(0,7))}</span>`:""}</div>
+        </div>
+      </div>
+      ${plats.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${plats.map(p=>p.url?`<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(p.label||p.url)}</a>`:`<span class="pill pill-lav">${esc(p.label)}</span>`).join("")}</div>`:""}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px">
+      ${info("🧠 Niche",c.niche)}${info("🎙️ Voice & vibe",c.brain)}${info("🏆 Winning style",c.style)}${info("💼 Deliverables",c.deliverables)}${info("🎯 Goals",c.goals)}${info("💗 Preferences",c.prefs)}${info("📇 Contact",c.contact)}${info("💬 Discord",c.discord)}
+    </div>
+    <div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">🔴 What they need</h2></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="cm_tasktext" placeholder="they need…" style="flex:1;min-width:140px" ${RO?"disabled":""}/><input class="inp" id="cm_taskdue" type="date" style="width:auto" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientTaskAdd" data-id="${c.id}" ${RO?"disabled":""}>+ need</button></div>
+      <div class="kanban" style="grid-template-columns:repeat(3,minmax(150px,1fr))">${CLIENT_NEED.map(([k,l])=>{ const col=needs.filter(t=>(t.status||(t.done?"done":"needs"))===k); return `<div class="kcol" data-act="dropClientNeed" data-status="${k}" data-cid="${c.id}" ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;padding:2px 4px"><span>${l}</span><span>${col.length}</span></div>${col.map(t=>{const od=t.due&&t.due<TODAY&&k!=="done"; return `<div class="citem" draggable="true" data-act="dragClientTask" data-id="${t.id}" data-cid="${c.id}"><div style="display:flex;align-items:flex-start;gap:6px"><button class="check ${k==='done'?'on':''}" data-act="clientTaskDone" data-id="${c.id}" data-tid="${t.id}" style="padding:0;flex:0 0 auto;margin-top:1px"></button><span class="grow" style="font-size:12.5px;${k==='done'?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span><button class="ft-ic" data-act="clientTaskDel" data-id="${c.id}" data-tid="${t.id}" style="color:var(--rose)">🗑</button></div>${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}</div>`;}).join("")||`<div class="label" style="padding:6px;opacity:.55">—</div>`}</div>`; }).join("")}</div>
+      <p class="soft" style="font-size:11px;margin:8px 0 0">Drag cards across columns, or tap ✓ to finish. 🌸</p>
+    </div>
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📝 Notes & meeting log</h2></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}" ${RO?"disabled":""}>+ note</button></div>
+      ${notes.length?`<div style="display:flex;flex-direction:column;gap:6px">${notes.map(nt=>`<div class="soft-card" style="padding:9px 11px"><div style="display:flex;justify-content:space-between;align-items:center"><span class="label">${esc(nt.date||"")}</span><button class="ft-ic" data-act="clientNoteDel" data-id="${c.id}" data-nid="${nt.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;white-space:pre-wrap;margin-top:2px">${esc(nt.text)}</div></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No notes yet — log calls, preferences, anything worth remembering.</p>`}
+    </div>
+  </div>`;
+}
+async function setClientTaskStatus(cid,tid,status){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,status,done:status==="done"}:t)}:c)})); }
 function parsePlatforms(text){ return String(text||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf("|"); return i>=0?{label:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:{label:l,url:""}; }); }
 
 /* ===================== ASK ===================== */
@@ -3195,15 +3226,17 @@ document.addEventListener("click",async(e)=>{
   if(act==="inboxReplySend"){ const txt=((document.getElementById("irp_text")||{}).value||"").trim(); if(!txt){toast("Write a reply 🌸");return;} const s2=await DB.daily(SENTINEL); const m=(s2.inbox||[]).find(x=>x.id===id); const cl=m&&(s2.clients||[]).find(c=>c.id===m.clientId); if(!cl){toast("This message isn't linked to a client 🌸");return;} const r=await window.runClientRelay({type:"messageClient",client:cl.name,text:txt}); await DB.saveDaily(SENTINEL,n=>({...n,inbox:(n.inbox||[]).map(x=>x.id===id?{...x,read:true}:x)})); document.getElementById("modal").innerHTML=""; toast(r); render(); return; }
   if(act==="clientFilter"){ state.clientFilter=el.dataset.v; render(); return; }
   if(act==="clientAdd"){ const nm=((document.getElementById("cl_name")||{}).value||"").trim(); const why=((document.getElementById("cl_why")||{}).value||"").trim(); if(!nm){toast("Name the client 🌸");return;} const notes0=why?[{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:"📡 spotted: "+why}]:[]; await DB.saveDaily(SENTINEL,n=>({...n,clients:[...(n.clients||[]),{id:uid(),name:nm,status:"prospect",handle:"",contact:"",platforms:[],tasks:[],notes:notes0,created:TODAY}]})); toast("📡 added to the radar 🌸"); render(); return; }
-  if(act==="clientOpen"){ clientModal(id); return; }
-  if(act==="clientSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const nm=gv2("cm_name"); if(!nm){toast("Name needed 🌸");return;} const plat=parsePlatforms((document.getElementById("cm_platforms")||{}).value); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,name:nm,status:gv2("cm_status")||c.status,pronouns:gv2("cm_pronouns"),tz:gv2("cm_tz"),priority:gv2("cm_priority"),handle:gv2("cm_handle"),contact:gv2("cm_contact"),discord:gv2("cm_discord"),discordChannel:gv2("cm_dchannel"),discordGuild:gv2("cm_dguild"),tier:gv2("cm_tier"),start:gv2("cm_start"),deliverables:gv2("cm_deliverables"),niche:gv2("cm_niche"),brain:gv2("cm_brain"),style:gv2("cm_style"),platforms:plat,goals:gv2("cm_goals"),prefs:gv2("cm_prefs")}:c)})); toast("Saved 🌸"); clientModal(id); render(); return; }
-  if(act==="clientDel"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).filter(c=>c.id!==id)})); document.getElementById("modal").innerHTML=""; toast("Client removed 🌸"); render(); return; }
-  if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",due:due||"",done:false}]}:c)})); clientModal(id); render(); return; }
-  if(act==="clientTaskDone"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>{ if(t.id!==tid)return t; const nd=!(t.status==="done"); return {...t,status:nd?"done":"needs",done:nd}; })}:c)})); clientModal(id); render(); return; }
-  if(act==="clientTaskMove"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,status:(t.status==="doing"?"needs":"doing")}:t)}:c)})); clientModal(id); render(); return; }
-  if(act==="clientTaskDel"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).filter(t=>t.id!==tid)}:c)})); clientModal(id); render(); return; }
-  if(act==="clientNoteAdd"){ const tx=((document.getElementById("cm_notetext")||{}).value||"").trim(); if(!tx){return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:[...(c.notes||[]),{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:tx}]}:c)})); clientModal(id); render(); return; }
-  if(act==="clientNoteDel"){ const nid=el.dataset.nid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:(c.notes||[]).filter(x=>x.id!==nid)}:c)})); clientModal(id); render(); return; }
+  if(act==="clientOpen"){ state.clientPage=id; render(); return; }
+  if(act==="clientBack"){ state.clientPage=null; render(); return; }
+  if(act==="clientEdit"){ clientModal(id); return; }
+  if(act==="clientMessage"){ const txt=prompt("Message to post into their Discord channel:"); if(txt&&txt.trim()){ const r=await window.runClientRelay({type:"messageClient",client:(await DB.daily(SENTINEL)).clients.find(c=>c.id===id).name,text:txt.trim()}); toast(r); } return; }
+  if(act==="clientSave"){ const gv2=i2=>((document.getElementById(i2)||{}).value||"").trim(); const nm=gv2("cm_name"); if(!nm){toast("Name needed 🌸");return;} const plat=parsePlatforms((document.getElementById("cm_platforms")||{}).value); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,name:nm,status:gv2("cm_status")||c.status,pronouns:gv2("cm_pronouns"),tz:gv2("cm_tz"),priority:gv2("cm_priority"),handle:gv2("cm_handle"),contact:gv2("cm_contact"),discord:gv2("cm_discord"),discordChannel:gv2("cm_dchannel"),discordGuild:gv2("cm_dguild"),tier:gv2("cm_tier"),start:gv2("cm_start"),deliverables:gv2("cm_deliverables"),niche:gv2("cm_niche"),brain:gv2("cm_brain"),style:gv2("cm_style"),platforms:plat,goals:gv2("cm_goals"),prefs:gv2("cm_prefs")}:c)})); document.getElementById("modal").innerHTML=""; toast("Saved 🌸"); render(); return; }
+  if(act==="clientDel"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).filter(c=>c.id!==id)})); document.getElementById("modal").innerHTML=""; state.clientPage=null; toast("Client removed 🌸"); render(); return; }
+  if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",due:due||"",done:false}]}:c)})); render(); return; }
+  if(act==="clientTaskDone"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).map(t=>{ if(t.id!==tid)return t; const nd=!(t.status==="done"); return {...t,status:nd?"done":"needs",done:nd}; })}:c)})); render(); return; }
+  if(act==="clientTaskDel"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).filter(t=>t.id!==tid)}:c)})); render(); return; }
+  if(act==="clientNoteAdd"){ const tx=((document.getElementById("cm_notetext")||{}).value||"").trim(); if(!tx){return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:[...(c.notes||[]),{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:tx}]}:c)})); render(); return; }
+  if(act==="clientNoteDel"){ const nid=el.dataset.nid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:(c.notes||[]).filter(x=>x.id!==nid)}:c)})); render(); return; }
   if(act==="teach"){ const k=el.dataset.kind||"any"; let orig=""; if(k==="email")orig=(state.email&&state.email.out&&((state.email.out.subject?state.email.out.subject+"\n\n":"")+(state.email.out.body||"")))||""; else orig=(state.script&&state.script.out&&state.script.out.script)||""; teachModal(k,orig); return; }
   if(act==="teachSave"){ const text=((document.getElementById("tch_text")||{}).value||"").trim(); if(!text){toast("Add an example 🌸");return;} const k=((document.getElementById("tch_kind")||{}).value)||"any"; const note=((document.getElementById("tch_note")||{}).value||"").trim(); await DB.saveDaily(SENTINEL,n=>({...n,eqVoice:[...(n.eqVoice||[]),{id:uid(),kind:k,example:text.slice(0,1500),note:note.slice(0,300),date:TODAY}].slice(-40)})); document.getElementById("modal").innerHTML=""; toast("🎓 Eugene learned your voice 💗"); render(); return; }
   if(act==="teachAdd"){ teachModal(el.dataset.kind||"any",""); return; }
@@ -3489,6 +3522,7 @@ document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
     let c=t.closest&&t.closest('[data-act="dragContent"]'); if(c)return {kind:"content",id:c.dataset.id,el:c};
     let s=t.closest&&t.closest('[data-act="dragSponsor"]'); if(s)return {kind:"sponsor",id:s.dataset.id,el:s};
     let k=t.closest&&t.closest('[data-act="dragTask"]'); if(k)return {kind:"task",id:k.dataset.id,el:k};
+    let cl=t.closest&&t.closest('[data-act="dragClientTask"]'); if(cl)return {kind:"clienttask",id:cl.dataset.id,cid:cl.dataset.cid,el:cl};
     return null;
   }
   function targetAt(x,y,kind){
@@ -3497,6 +3531,7 @@ document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
     if(kind==="content"){ let t=el.closest('[data-act="dropStage"]'); if(t)return{type:"stage",el:t,stage:t.dataset.stage}; t=el.closest('[data-act="ccDrop"]'); if(t)return{type:"ccdate",el:t,date:t.dataset.date}; t=el.closest('[data-act="ccUnschedule"]'); if(t)return{type:"ccun",el:t}; return null; }
     if(kind==="sponsor"){ const t=el.closest('[data-act="dropSponsor"]'); return t?{type:"sponsor",el:t,stage:t.dataset.stage}:null; }
     if(kind==="task"){ const t=el.closest('[data-act="dropTaskStatus"]'); return t?{type:"taskstatus",el:t,status:t.dataset.status}:null; }
+    if(kind==="clienttask"){ const t=el.closest('[data-act="dropClientNeed"]'); return t?{type:"clientneed",el:t,status:t.dataset.status}:null; }
     return null;
   }
   async function applyDrop(d,tg){
@@ -3504,6 +3539,7 @@ document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
     if(d.kind==="content"){ if(tg.type==="stage"){const patch={stage:tg.stage};if(tg.stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(d.id,patch);}else if(tg.type==="ccdate"){await DB.updateContent(d.id,{scheduled_for:tg.date});}else if(tg.type==="ccun"){await DB.updateContent(d.id,{scheduled_for:null});} render(); return; }
     if(d.kind==="sponsor"&&tg.type==="sponsor"){ await DB.updateSponsor(d.id,{stage:tg.stage}); render(); return; }
     if(d.kind==="task"&&tg.type==="taskstatus"){ await setTaskStatus(d.id,tg.status); render(); return; }
+    if(d.kind==="clienttask"&&tg.type==="clientneed"){ await setClientTaskStatus(d.cid,d.id,tg.status); render(); return; }
   }
   document.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse"||RO)return; const d=pick(e.target); if(!d)return; TD={...d,sx:e.clientX,sy:e.clientY,moved:false,ghost:null}; },true);
   document.addEventListener("pointermove",e=>{ if(!TD||e.pointerType==="mouse")return; const dx=e.clientX-TD.sx,dy=e.clientY-TD.sy; if(!TD.moved){ if(Math.abs(dx)+Math.abs(dy)<8)return; TD.moved=true; const r=TD.el.getBoundingClientRect(); const g=TD.el.cloneNode(true); g.classList.add("drag-ghost"); g.style.cssText="position:fixed;left:0;top:0;z-index:9998;pointer-events:none;opacity:.85;box-shadow:0 8px 22px rgba(80,70,110,.35);width:"+r.width+"px;"; TD.ox=e.clientX-r.left; TD.oy=e.clientY-r.top; document.body.appendChild(g); TD.ghost=g; try{TD.el.setPointerCapture(e.pointerId);}catch(er){} } e.preventDefault(); TD.ghost.style.transform="translate("+(e.clientX-TD.ox)+"px,"+(e.clientY-TD.oy)+"px)"; document.querySelectorAll(".drop-hot").forEach(x=>x.classList.remove("drop-hot")); const tg=targetAt(e.clientX,e.clientY,TD.kind); if(tg&&tg.el)tg.el.classList.add("drop-hot"); },true);
@@ -3532,14 +3568,16 @@ document.addEventListener("keydown",async(e)=>{
 let dragId=null,dragType=null,_lastPtr="mouse";
 document.addEventListener("pointerdown",e=>{ _lastPtr=e.pointerType||"mouse"; },true);
 /* Apple Pencil / touch: suppress Safari's NATIVE drag so only the pointer ghost-drag engine runs — otherwise both fire and drops glitch/double */
-document.addEventListener("dragstart",e=>{ if(_lastPtr!=="mouse"){ e.preventDefault(); return; } const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');const tc=e.target.closest('[data-act="dragTask"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}else if(tc){dragId=tc.dataset.id;dragType="task";}});
+let dragCid=null;
+document.addEventListener("dragstart",e=>{ if(_lastPtr!=="mouse"){ e.preventDefault(); return; } const cc=e.target.closest('[data-act="dragContent"]');const sc=e.target.closest('[data-act="dragSponsor"]');const tc=e.target.closest('[data-act="dragTask"]');const clt=e.target.closest('[data-act="dragClientTask"]');if(cc){dragId=cc.dataset.id;dragType="content";}else if(sc){dragId=sc.dataset.id;dragType="sponsor";}else if(tc){dragId=tc.dataset.id;dragType="task";}else if(clt){dragId=clt.dataset.id;dragCid=clt.dataset.cid;dragType="clienttask";}});
 document.addEventListener("drop",async e=>{
-  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');const ts=e.target.closest('[data-act="dropTaskStatus"]');
+  if(RO)return; const cs=e.target.closest('[data-act="dropStage"]');const ss=e.target.closest('[data-act="dropSponsor"]');const cd=e.target.closest('[data-act="ccDrop"]');const cu=e.target.closest('[data-act="ccUnschedule"]');const ts=e.target.closest('[data-act="dropTaskStatus"]');const cn=e.target.closest('[data-act="dropClientNeed"]');
   if(cd&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:cd.dataset.date});dragId=null;render();}
   else if(cu&&dragType==="content"&&dragId){e.preventDefault();await DB.updateContent(dragId,{scheduled_for:null});dragId=null;render();}
   else if(cs&&dragType==="content"&&dragId){e.preventDefault();const stage=cs.dataset.stage;const patch={stage};if(stage==="published")patch.published_at=new Date().toISOString();await DB.updateContent(dragId,patch);dragId=null;render();}
   else if(ss&&dragType==="sponsor"&&dragId){e.preventDefault();await DB.updateSponsor(dragId,{stage:ss.dataset.stage});dragId=null;render();}
   else if(ts&&dragType==="task"&&dragId){e.preventDefault();await setTaskStatus(dragId,ts.dataset.status);dragId=null;render();}
+  else if(cn&&dragType==="clienttask"&&dragId){e.preventDefault();await setClientTaskStatus(dragCid,dragId,cn.dataset.status);dragId=null;dragCid=null;render();}
 });
 
 /* feature impls */
