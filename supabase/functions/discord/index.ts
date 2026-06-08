@@ -156,6 +156,24 @@ async function execAction(userId: string, a: any): Promise<string> {
       await saveSent(userId, (n) => ({ ...n, reminders: [...(n.reminders || []), { id: uid(), text: a.text || "reminder", date: a.date, time: a.time || "10:00", done: false, toChannel: c.discordChannel, who: c.name, email: false, pings: 0 }] }));
       return `⏰ I'll remind ${c.name} in their channel on ${a.date}${a.time ? " at " + a.time : ""}`;
     }
+    case "addClient":
+      await saveSent(userId, (n) => ({ ...n, clients: [...(n.clients || []), { id: uid(), name: a.name || "client", status: a.status || "prospect", handle: a.handle || "", contact: a.contact || "", platforms: [], tasks: [], notes: [], created: todayStr() }] }));
+      return `🌸 added ${a.name || "client"} to Sakura Lightworks`;
+    case "setClientStatus": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, clients: (n.clients || []).map((c: any) => { if (!hit && fuzzy(c.name, a.name)) { hit = c; return { ...c, status: a.status || c.status }; } return c; }) })); return hit ? `🌸 ${hit.name} → ${a.status}` : `couldn't find a client like “${a.name}” 🌸`; }
+    case "addClientNeed": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, clients: (n.clients || []).map((c: any) => { if (!hit && fuzzy(c.name, a.client)) { hit = c; return { ...c, tasks: [...(c.tasks || []), { id: uid(), text: a.text || "need", status: "needs", due: a.due || "", done: false }] }; } return c; }) })); return hit ? `🔴 ${hit.name} needs “${a.text}”${a.due ? " by " + a.due : ""}` : `couldn't find a client like “${a.client}” 🌸`; }
+    case "doneClientNeed": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, clients: (n.clients || []).map((c: any) => fuzzy(c.name, a.client) ? { ...c, tasks: (c.tasks || []).map((t: any) => { if (!hit && !t.done && fuzzy(t.text, a.text)) { hit = t; return { ...t, status: "done", done: true }; } return t; }) } : c) })); return hit ? `✅ marked “${hit.text}” done` : "couldn't find that need 🌸"; }
+    case "addClientNote": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, clients: (n.clients || []).map((c: any) => { if (!hit && fuzzy(c.name, a.client)) { hit = c; return { ...c, notes: [...(c.notes || []), { id: uid(), date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }), text: a.text || "" }] }; } return c; }) })); return hit ? `📝 noted for ${hit.name}` : `couldn't find a client like “${a.client}” 🌸`; }
+    case "addInvoice": {
+      await saveSent(userId, (n) => ({ ...n, invoices: [...(n.invoices || []), { id: uid(), client: (a.client || a.name || "invoice"), amount: Number(a.amount) || 0, due: a.due || "", link: a.link || "", status: "sent", created: todayStr() }] }));
+      return `🧾 invoice added${a.client ? " for " + a.client : ""}${a.amount ? " · $" + a.amount : ""}`;
+    }
+    case "payInvoice": {
+      const s = await loadSent(userId); const iv = (s.invoices || []).find((x: any) => x.status !== "paid" && fuzzy(x.client, a.client || a.name));
+      if (!iv) return "couldn't find an unpaid invoice like that 🌸";
+      await saveSent(userId, (n) => ({ ...n, invoices: (n.invoices || []).map((x: any) => x.id === iv.id ? { ...x, status: "paid", paid_on: todayStr() } : x) }));
+      if (Number(iv.amount)) await sb().from("income_entries").insert({ user_id: userId, kind: "in", source: "sponsor", amount: Number(iv.amount), month: todayStr().slice(0, 8) + "01", note: "invoice · " + (iv.client || "") });
+      return `✅ ${iv.client || "invoice"} marked paid${Number(iv.amount) ? " — logged $" + iv.amount : ""} 💗`;
+    }
     default:
       return ""; // web-app-only actions (navigation, optimizer UI, …) just no-op here
   }

@@ -732,7 +732,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.5";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.6";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -4124,6 +4124,29 @@ render();
         return hit? "📝 noted that for "+hit.name : "couldn't find a client like “"+(a.client||"")+"” 🌸";
       }
       case "messageClient": case "remindClient": return await runClientRelay(a);   // needs the bot token → relay to the discord function
+      case "moveClientNeed": {
+        var cnm2=(a.client||"").toLowerCase(), tnm2=(a.text||"").toLowerCase(), stt=a.status||"doing"; var hit2=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if((c.name||"").toLowerCase().indexOf(cnm2)>=0){ return Object.assign({},c,{tasks:(c.tasks||[]).map(function(t){ if(!hit2&&(t.text||"").toLowerCase().indexOf(tnm2)>=0){hit2=t;return Object.assign({},t,{status:stt,done:stt==="done"});} return t; })}); } return c; })}); });
+        return hit2? "🗂️ moved “"+hit2.text+"” to "+stt : "couldn't find that need 🌸";
+      }
+      case "delClient": {
+        var cnm3=(a.name||"").toLowerCase(); var hit3=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).filter(function(c){ if(!hit3&&(c.name||"").toLowerCase().indexOf(cnm3)>=0){hit3=c;return false;} return true; })}); });
+        return hit3? "🗑 removed "+hit3.name+" from the roster" : "couldn't find a client like “"+(a.name||"")+"” 🌸";
+      }
+      case "addInvoice": {
+        var ivcl=(a.client||a.name||"").trim();
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{invoices:(n.invoices||[]).concat([{id:uid(),client:ivcl||"invoice",amount:Number(a.amount)||0,due:a.due||"",link:a.link||"",status:"sent",created:TODAY}])}); });
+        return "🧾 invoice added"+(ivcl?" for "+ivcl:"")+(a.amount?" · $"+(Number(a.amount)).toLocaleString():"")+(a.due?" · due "+a.due:"");
+      }
+      case "payInvoice": {
+        var ivnm=(a.client||a.name||"").toLowerCase();
+        var sx=await DB.daily(SENTINEL); var iv=(sx.invoices||[]).find(function(x){return x.status!=="paid"&&(x.client||"").toLowerCase().indexOf(ivnm)>=0;});
+        if(!iv) return "couldn't find an unpaid invoice like “"+(a.client||a.name||"")+"” 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{invoices:(n.invoices||[]).map(function(x){return x.id===iv.id?Object.assign({},x,{status:"paid",paid_on:TODAY}):x;})}); });
+        if(Number(iv.amount))await DB.addIncome({kind:"in",source:"sponsor",amount:Number(iv.amount),note:"invoice · "+(iv.client||"")});
+        return "✅ marked "+(iv.client||"invoice")+"'s invoice paid"+(Number(iv.amount)?" — logged $"+(Number(iv.amount)).toLocaleString()+" income":"")+" 💗";
+      }
       case "delSticky": {
         var nm=(a.text||"").toLowerCase();
         var st=(STICKIES||[]).find(function(s){return (s.text||"").toLowerCase().indexOf(nm)>=0;});
