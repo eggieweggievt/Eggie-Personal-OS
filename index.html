@@ -745,7 +745,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.7";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.8";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -4139,6 +4139,26 @@ render();
         return hit? "📝 noted that for "+hit.name : "couldn't find a client like “"+(a.client||"")+"” 🌸";
       }
       case "messageClient": case "remindClient": return await runClientRelay(a);   // needs the bot token → relay to the discord function
+      case "messageClients": {   // bulk: ONE template → many clients (avoids the model repeating long text per client)
+        var allC=((await DB.daily(SENTINEL)).clients)||[];
+        var who=a.clients, names=[];
+        if(who==="all"||who==="active"||!who){ names=allC.filter(function(c){ return who==="active" ? (c.tasks||[]).some(function(t){return !t.done;}) : true; }).map(function(c){return c.name;}); }
+        else if(Array.isArray(who)){ names=who; }
+        else { names=String(who).split(",").map(function(s){return s.trim();}).filter(Boolean); }
+        if(!names.length) return "no matching clients to message 🌸";
+        var tmpl=String(a.text||""); var sent=[], missed=[];
+        for(var bi=0;bi<names.length;bi++){
+          var nm=names[bi], cobj=allC.find(function(c){ return (c.name||"").toLowerCase().indexOf(String(nm).toLowerCase())>=0; });
+          if(!cobj){ missed.push(nm); continue; }
+          var body=tmpl.replace(/\{name\}/gi, (cobj.name||"").split(/\s+/)[0]);
+          var rr=await runClientRelay({type:"messageClient",client:cobj.name,text:body});
+          if(/done|posted|sent/i.test(rr)) sent.push(cobj.name); else missed.push(cobj.name+" ("+rr+")");
+        }
+        var msg="📣 messaged "+sent.length+" client"+(sent.length===1?"":"s");
+        if(sent.length) msg+=": "+sent.join(", ");
+        if(missed.length) msg+=" · couldn't reach: "+missed.join(", ");
+        return msg;
+      }
       case "moveClientNeed": {
         var cnm2=(a.client||"").toLowerCase(), tnm2=(a.text||"").toLowerCase(), stt=a.status||"doing"; var hit2=null;
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if((c.name||"").toLowerCase().indexOf(cnm2)>=0){ return Object.assign({},c,{tasks:(c.tasks||[]).map(function(t){ if(!hit2&&(t.text||"").toLowerCase().indexOf(tnm2)>=0){hit2=t;return Object.assign({},t,{status:stt,done:stt==="done"});} return t; })}); } return c; })}); });
