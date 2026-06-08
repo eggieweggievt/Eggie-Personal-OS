@@ -36,6 +36,24 @@ function userTag(discordId: string): string | null {
   if (discordId === Deno.env.get("DISCORD_OWNER_ID")) return "eggie";
   try { const m = JSON.parse(Deno.env.get("DISCORD_USER_MAP") || "{}"); return m[discordId] || null; } catch { return null; }
 }
+const OWNER = Deno.env.get("BRIEFING_USER_ID") || "eggie";
+
+async function postChannel(channelId: string, content: string): Promise<boolean> {
+  const tok = Deno.env.get("DISCORD_BOT_TOKEN"); if (!tok || !channelId) return false;
+  try {
+    const r = await fetch(`${API}/channels/${channelId}/messages`, {
+      method: "POST", headers: { authorization: `Bot ${tok}`, "content-type": "application/json" },
+      body: JSON.stringify({ content: String(content).slice(0, 1990) }),
+    });
+    return r.ok;
+  } catch { return false; }
+}
+async function findClient(userId: string, by: { name?: string; channelId?: string }): Promise<any> {
+  const s = await loadSent(userId); const cs = s.clients || [];
+  if (by.channelId) { const c = cs.find((x: any) => String(x.discordChannel || "") === String(by.channelId)); if (c) return c; }
+  if (by.name) { const nm = by.name.toLowerCase(); return cs.find((x: any) => (x.name || "").toLowerCase().includes(nm)) || null; }
+  return null;
+}
 
 /* ---------- sentinel JSON helpers (server-side twin of the web app's DB layer) ---------- */
 async function loadSent(userId: string): Promise<any> {
@@ -126,6 +144,18 @@ async function execAction(userId: string, a: any): Promise<string> {
     case "addJoy":
       await saveSent(userId, (n) => ({ ...n, joyJar: [...(n.joyJar || []), a.text || "a little joy"] }));
       return "🫙 added to the joy jar";
+    case "messageClient": {
+      const c = await findClient(userId, { name: a.client }); if (!c) return `couldn't find a client like “${a.client}” 🌸`;
+      if (!c.discordChannel) return `${c.name} has no Discord channel linked yet 🌸`;
+      const ok = await postChannel(c.discordChannel, a.text || ""); return ok ? `💬 sent to ${c.name}'s channel` : `couldn't post to ${c.name}'s channel 🌸`;
+    }
+    case "remindClient": {
+      const c = await findClient(userId, { name: a.client }); if (!c) return `couldn't find a client like “${a.client}” 🌸`;
+      if (!c.discordChannel) return `${c.name} has no Discord channel linked 🌸`;
+      if (!a.date) return "when should I remind them? 🌸";
+      await saveSent(userId, (n) => ({ ...n, reminders: [...(n.reminders || []), { id: uid(), text: a.text || "reminder", date: a.date, time: a.time || "10:00", done: false, toChannel: c.discordChannel, who: c.name, email: false, pings: 0 }] }));
+      return `⏰ I'll remind ${c.name} in their channel on ${a.date}${a.time ? " at " + a.time : ""}`;
+    }
     default:
       return ""; // web-app-only actions (navigation, optimizer UI, …) just no-op here
   }
@@ -191,6 +221,7 @@ const COMMANDS = [
   { name: "inspo", description: "Save a link to your inspiration vault ✨", options: [{ type: 3, name: "link", description: "URL", required: true }, { type: 3, name: "note", description: "why it sparked you", required: false }] },
   { name: "today", description: "Your day at a glance — stream, events, reminders, challenge ☀️" },
   { name: "done", description: "Mark a reminder (or task) done by name ✅", options: [{ type: 3, name: "what", description: "part of its name", required: true }] },
+  { name: "sakura", description: "Send a note / request to the Sakura Lightworks team 🌸", options: [{ type: 3, name: "message", description: "what do you need?", required: true }] },
 ].map((c) => ({ ...c, type: 1, integration_types: [0, 1], contexts: [0, 1, 2] })); // guild + user install; usable in servers, bot DMs, private channels
 
 Deno.serve(async (req) => {
@@ -210,14 +241,37 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.text();
+
+  // ---- relay from the owner's OWN web app (no Discord signature): post to a client channel / set a
+  //      client reminder. Gated by the publishable apikey header; execAction only ever touches the
+  //      owner's own clients' channels, so it can't message anyone else. ----
+  let pre: any = null; try { pre = JSON.parse(body); } catch { /* not JSON */ }
+  if (pre && pre.op === "relay") {
+    const rk = Deno.env.get("RELAY_KEY");
+    if (rk && req.headers.get("apikey") !== rk && req.headers.get("x-relay-key") !== rk) return json({ error: "unauthorized" }, 401);
+    if (!req.headers.get("apikey")) return json({ error: "missing apikey" }, 401);
+    try { const m = await execAction(pre.userId || OWNER, pre.action || {}); return json({ ok: true, message: m }); }
+    catch (e) { return json({ error: String((e as Error)?.message || e) }, 500); }
+  }
+
   if (!(await verifyReq(req, body))) return new Response("invalid request signature", { status: 401 });
-  const i = JSON.parse(body);
+  const i = pre || JSON.parse(body);
 
   if (i.type === 1) return json({ type: 1 }); // PING → PONG
 
+  // ---- client-facing: /sakura <message> → drops into the owner's inbox (anyone in a client channel can use it) ----
+  if (i.type === 2 && i.data?.name === "sakura") {
+    const msg = (i.data?.options || []).find((o: any) => o.name === "message")?.value || "";
+    const channelId = i.channel_id || "";
+    const who = i.member?.user?.global_name || i.member?.user?.username || i.user?.global_name || i.user?.username || "someone";
+    const c = await findClient(OWNER, { channelId });
+    await saveSent(OWNER, (n) => ({ ...n, inbox: [...(n.inbox || []), { id: uid(), from: c?.name || who, who, text: String(msg).slice(0, 700), clientId: c?.id || null, clientName: c?.name || null, channelId, date: new Date().toISOString(), read: false }] }));
+    return json({ type: 4, data: { content: "📨 sent to the Sakura Lightworks team — thank you! 🌸", flags: 64 } });
+  }
+
   const discordUser = i.member?.user?.id || i.user?.id || "";
   const tag = userTag(discordUser);
-  if (!tag) return json({ type: 4, data: { content: "aw — this is a private little octopus. 🐙 (ask Eggie to add your Discord id)", flags: 64 } });
+  if (!tag) return json({ type: 4, data: { content: "aw — this is a private little octopus. 🐙 (you can use /sakura to leave a note for the team though!)", flags: 64 } });
   const appId = Deno.env.get("DISCORD_APP_ID")!;
 
   // ---- buttons on reminder DMs: dn:<id> / snz:<id> ----

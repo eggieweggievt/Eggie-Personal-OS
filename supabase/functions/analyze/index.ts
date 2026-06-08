@@ -179,6 +179,8 @@ async function fullContext(userId: string, today: string): Promise<string> {
       const att = s.clients.filter((c: any) => c.status !== "offboarded" && (c.tasks || []).some((t: any) => !t.done && t.status !== "done"));
       lines.push(`SAKURA LIGHTWORKS (her mgmt clients): ${s.clients.length} total. Needing attention: ${att.length ? att.map((c: any) => { const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done"); const od = open.filter((t: any) => t.due && t.due < today).length; return `${c.name} (${open.length} open${od ? ", " + od + " OVERDUE" : ""}: ${open.slice(0, 2).map((t: any) => t.text).join("; ")})`; }).join(" | ") : "none — all caught up"}.`);
     }
+    const unread = (s.inbox || []).filter((m: any) => !m.read);
+    if (unread.length) lines.push(`INBOX: ${unread.length} unread from clients — ${unread.slice(-4).map((m: any) => `${m.from || "?"}: ${String(m.text || "").slice(0, 60)}`).join(" | ")}`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
@@ -478,6 +480,8 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addClientNeed: { client (fuzzy), text, due?: "YYYY-MM-DD" }   // "ClientX needs their thumbnail by Friday" — a to-do for that client
 - doneClientNeed: { client (fuzzy), text (fuzzy) }   // mark one of a client's needs handled
 - addClientNote: { client (fuzzy), text }            // log a note / meeting summary on a client
+- messageClient: { client (fuzzy), text }            // POST a message right now into that client's linked Discord channel (needs their channel linked). "tell ClientX their thumbnail is ready", "message ClientX …"
+- remindClient: { client (fuzzy), text, date: "YYYY-MM-DD", time?: "HH:MM" } // schedule a reminder that posts into the CLIENT's Discord channel at that time (e.g. "remind ClientX to post their schedule every Monday" → set the next Monday). Resolve relative dates.
 - delBoardCard: { text }              // remove a mood-board NOTE matching the text, or a SWATCH by exact "#hex"
 - delSticky: { text (fuzzy) }         // peel a sticky note off the screen
 

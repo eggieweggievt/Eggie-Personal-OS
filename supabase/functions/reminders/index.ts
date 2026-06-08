@@ -74,10 +74,25 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
   const MAXP = Number(Deno.env.get("NAG_MAX") || 4);
   const isDue = (r: any) => !r.done && (r.date < today || (r.date === today && (r.time || "09:00") <= hm));
   const waveOK = (r: any) => (Date.now() - (r.lastPing ? Date.parse(r.lastPing) : 0)) >= NAGMIN * 60000 && (r.pings || 0) < MAXP;
-  const dueWave = rems.filter((r) => isDue(r) && waveOK(r));
+  // client-channel reminders post ONCE to the linked Discord channel (not to the owner)
+  const dueChan = rems.filter((r) => isDue(r) && r.toChannel && !r.posted);
+  let posted = 0;
+  const dTokC = Deno.env.get("DISCORD_BOT_TOKEN");
+  if (dueChan.length && dTokC) {
+    for (const r of dueChan) {
+      try {
+        const res = await fetch(`https://discord.com/api/v10/channels/${r.toChannel}/messages`, {
+          method: "POST", headers: { authorization: `Bot ${dTokC}`, "content-type": "application/json" },
+          body: JSON.stringify({ content: `⏰ ${r.text} 🌸` }),
+        });
+        if (res.ok) { (r as any)._postok = true; posted++; }
+      } catch { /* retry next tick */ }
+    }
+  }
+  const dueWave = rems.filter((r) => isDue(r) && !r.toChannel && waveOK(r));
   const duePush = dueWave, dueDm = dueWave;
-  const dueEmail = rems.filter((r) => isDue(r) && !r.emailed && r.email !== false);
-  if (!dueWave.length && !dueEmail.length) return { user, push: 0, email: 0, dm: 0 };
+  const dueEmail = rems.filter((r) => isDue(r) && !r.toChannel && !r.emailed && r.email !== false);
+  if (!dueWave.length && !dueEmail.length && !dueChan.length) return { user, push: 0, email: 0, dm: 0, chan: posted };
 
   // ---- Discord ping with ✓ done / 😴 snooze buttons ----
   // Destination is per-user: sentinel notes.discordNotify = {mode:"dm"|"channel", channelId}
@@ -168,6 +183,7 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
     // a "wave" is claimed when anything actually went out — the next wave comes NAG_MINUTES later
     if (dueWave.some((d) => d.id === r.id) && (pushedDevices > 0 || (r as any)._dmok)) o = { ...o, lastPing: new Date().toISOString(), pings: (o.pings || 0) + 1 };
     if ((r as any)._dmok) { o = { ...o, dmed: true }; delete (o as any)._dmok; }
+    if ((r as any)._postok) { o = { ...o, posted: true, done: true }; delete (o as any)._postok; }   // client-channel reminder fired once → done
     return o;
   });
   await sb.from("daily_logs").upsert(

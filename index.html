@@ -732,7 +732,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.3";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.4";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2262,8 +2262,13 @@ async function renderClients(){
           </div>`;}).join("")}</div></div>`;
       }).join("")||`<p class="soft" style="font-size:12.5px">No clients here yet — add one above. 🌸</p>`;
   }
-  return `<div style="max-width:960px;margin:0 auto">${glance}${bar}${body}</div>`;
+  const inbox=(sent.inbox||[]); const unread=inbox.filter(m=>!m.read).length;
+  const inboxPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:18px">📨 Inbox${unread?` <span class="pill pill-pink">${unread} new</span>`:""}</h2>${inbox.some(m=>m.read)?`<button class="btn" data-act="inboxClearRead">clear read</button>`:""}</div>
+    ${inbox.length?`<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto">${inbox.slice().reverse().map(m=>{ const d=new Date(m.date); const when=isNaN(d)?"":d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); return `<div class="soft-card" style="padding:9px 11px;${m.read?'opacity:.62':'border-color:#f0c6dc'}"><div style="display:flex;align-items:center;gap:8px"><span class="pill pill-lav">${esc(m.from||m.who||"someone")}</span><span class="label">${esc(when)}</span><div style="flex:1"></div>${!m.read?`<button class="ft-ic" data-act="inboxRead" data-id="${m.id}" title="mark read">✓</button>`:""}${m.clientId?`<button class="ft-ic" data-act="inboxToNeed" data-id="${m.id}" title="turn into a client need">➕</button><button class="ft-ic" data-act="inboxReply" data-id="${m.id}" title="reply to their channel">↩</button>`:""}<button class="ft-ic" data-act="inboxDel" data-id="${m.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word">${esc(m.text)}</div></div>`; }).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">Nothing here yet. Clients drop a note with <b>/sakura</b> in their linked channel and it lands here — tag it to their needs or reply straight to their channel. 🌸</p>`}
+  </div>`;
+  return `<div style="max-width:960px;margin:0 auto">${inboxPanel}${glance}${bar}${body}</div>`;
 }
+function inboxReplyModal(id){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%"><div class="card-head"><h3 style="font-size:16px">↩ Reply to their channel</h3><button class="btn" data-act="closeModal">✕</button></div><p class="soft" style="font-size:12px;margin:0 0 8px">This posts straight into their Discord channel via Eugene. 💬</p><textarea class="inp" id="irp_text" rows="4" placeholder="your reply…"></textarea><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="inboxReplySend" data-id="${id}">💬 send</button></div></div></div>`; }
 async function clientModal(id){
   const sent=await DB.daily(SENTINEL); const c=(sent.clients||[]).find(x=>x.id===id); if(!c)return;
   const needs=(c.tasks||[]);
@@ -3182,6 +3187,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="invDel"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).filter(iv=>iv.id!==id)})); render(); return; }
   if(act==="invEdit"){ invoiceModal(id); return; }
   if(act==="clientView"){ state.clientView=el.dataset.v; render(); return; }
+  if(act==="inboxRead"){ await DB.saveDaily(SENTINEL,n=>({...n,inbox:(n.inbox||[]).map(m=>m.id===id?{...m,read:true}:m)})); render(); return; }
+  if(act==="inboxDel"){ await DB.saveDaily(SENTINEL,n=>({...n,inbox:(n.inbox||[]).filter(m=>m.id!==id)})); render(); return; }
+  if(act==="inboxClearRead"){ await DB.saveDaily(SENTINEL,n=>({...n,inbox:(n.inbox||[]).filter(m=>!m.read)})); render(); return; }
+  if(act==="inboxToNeed"){ const s2=await DB.daily(SENTINEL); const m=(s2.inbox||[]).find(x=>x.id===id); if(m&&m.clientId){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===m.clientId?{...c,tasks:[...(c.tasks||[]),{id:uid(),text:(m.text||"").slice(0,200),status:"needs",due:"",done:false}]}:c),inbox:(n.inbox||[]).map(x=>x.id===id?{...x,read:true}:x)})); toast("➕ added to their needs 🌸"); render(); } return; }
+  if(act==="inboxReply"){ inboxReplyModal(id); return; }
+  if(act==="inboxReplySend"){ const txt=((document.getElementById("irp_text")||{}).value||"").trim(); if(!txt){toast("Write a reply 🌸");return;} const s2=await DB.daily(SENTINEL); const m=(s2.inbox||[]).find(x=>x.id===id); const cl=m&&(s2.clients||[]).find(c=>c.id===m.clientId); if(!cl){toast("This message isn't linked to a client 🌸");return;} const r=await window.runClientRelay({type:"messageClient",client:cl.name,text:txt}); await DB.saveDaily(SENTINEL,n=>({...n,inbox:(n.inbox||[]).map(x=>x.id===id?{...x,read:true}:x)})); document.getElementById("modal").innerHTML=""; toast(r); render(); return; }
   if(act==="clientFilter"){ state.clientFilter=el.dataset.v; render(); return; }
   if(act==="clientAdd"){ const nm=((document.getElementById("cl_name")||{}).value||"").trim(); const why=((document.getElementById("cl_why")||{}).value||"").trim(); if(!nm){toast("Name the client 🌸");return;} const notes0=why?[{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:"📡 spotted: "+why}]:[]; await DB.saveDaily(SENTINEL,n=>({...n,clients:[...(n.clients||[]),{id:uid(),name:nm,status:"prospect",handle:"",contact:"",platforms:[],tasks:[],notes:notes0,created:TODAY}]})); toast("📡 added to the radar 🌸"); render(); return; }
   if(act==="clientOpen"){ clientModal(id); return; }
@@ -4074,6 +4085,7 @@ render();
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{notes:(c.notes||[]).concat([{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:a.text||""}])});} return c; })}); });
         return hit? "📝 noted that for "+hit.name : "couldn't find a client like “"+(a.client||"")+"” 🌸";
       }
+      case "messageClient": case "remindClient": return await runClientRelay(a);   // needs the bot token → relay to the discord function
       case "delSticky": {
         var nm=(a.text||"").toLowerCase();
         var st=(STICKIES||[]).find(function(s){return (s.text||"").toLowerCase().indexOf(nm)>=0;});
@@ -4150,6 +4162,8 @@ render();
       speechSynthesis.cancel(); speechSynthesis.speak(u);
     }catch(e){}
   }
+  async function runClientRelay(action){ if(DEMO||!SB)return "needs the backend deployed first 🌸"; try{ var r=await fetch(CONFIG.url+"/functions/v1/discord",{method:"POST",headers:{"content-type":"application/json","apikey":CONFIG.anonKey},body:JSON.stringify({op:"relay",userId:UID,action:action})}); var j=await r.json(); return j.message||(j.error?("hmm — "+j.error):"done"); }catch(e){ return "couldn't reach Discord: "+(e.message||e); } }
+  window.runClientRelay=runClientRelay;
   async function runAgent(q){
     var hist=window.EUGENE_HIST.slice(-10);
     var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist});
