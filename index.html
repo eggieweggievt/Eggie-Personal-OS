@@ -703,9 +703,27 @@ const DB = {
     const next=merge({...base});
     await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
     this._c.daily[date]=next;
+    if(date===SENTINEL){ DB.localBackup(next); }
     if(date!==SENTINEL){ Object.keys(this._c.range).forEach(k=>{ const arr=this._c.range[k]; if(!arr)return; const i=arr.findIndex(r=>r.date===date); if(i>=0)arr[i]={date,notes:next}; else arr.push({date,notes:next}); }); }
     return next;
   },
+  // On every config-row save, stash a timestamped copy on THIS device. Survives refreshes,
+  // so even if another device clobbers the server, the device that made the edits still has them.
+  // Keeps the most recent ~20 restore points (and a couple of older daily ones for depth).
+  localBackup(notes){
+    try{
+      const key="eggie-restore"; let list=[]; try{ list=JSON.parse(localStorage.getItem(key)||"[]"); }catch{}
+      const snap={ t:Date.now(), clients:(notes.clients||[]).length, inbox:(notes.inbox||[]).length, invoices:(notes.invoices||[]).length, data:notes };
+      // skip if identical client/inbox/invoice counts AND <90s since last, to avoid spamming tiny edits
+      const prev=list[0];
+      if(prev && prev.clients===snap.clients && prev.inbox===snap.inbox && prev.invoices===snap.invoices && (snap.t-prev.t)<90000){ list[0]=snap; }
+      else list.unshift(snap);
+      // keep last 20, plus thin older ones to ~30 total
+      if(list.length>30) list=list.slice(0,30);
+      localStorage.setItem(key, JSON.stringify(list));
+    }catch(e){ /* quota or serialize issues never block a save */ }
+  },
+  listBackups(){ try{ return JSON.parse(localStorage.getItem("eggie-restore")||"[]"); }catch{ return []; } },
   async dailyRange(days){ if(DEMO){ return Object.entries(demo.daily).filter(([d])=>d!==SENTINEL).map(([date,notes])=>({date,notes})); } if(this._c.range[days])return this._c.range[days]; const since=dayAgo(-days); const {data}=await SB.from("daily_logs").select("log_date,notes").eq("user_id",UID).gte("log_date",since).order("log_date",{ascending:false}).limit(100000); return this._c.range[days]=(data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {date:r.log_date,notes:n};}); },
   async captures(){ if(DEMO)return demo.captures; if(this._c.captures)return this._c.captures; const {data}=await SB.from("raw_captures").select("id, raw_text, created_at").eq("user_id",UID).order("created_at",{ascending:false}).limit(500); return this._c.captures=(data||[]); },
   async addCapture(text){ this._c.captures=null; if(DEMO){demo.captures.unshift({id:uid(),raw_text:text,created_at:new Date().toISOString()});return;} await SB.from("raw_captures").insert({user_id:UID,source:"web",raw_text:text}); },
@@ -745,7 +763,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.11";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2227,6 +2245,15 @@ async function renderSettings(){
       <button class="btn" data-act="exportData">⬇️ export all my data (backup)</button>
       <p class="soft" style="font-size:11.5px;margin:10px 0 0">Connected to ${esc(CONFIG.url)}${RO?" · read-only right now":""}. If a device misbehaves, compare its build number here to the newest one.</p>
     </div>
+
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🛟 Restore points</h2><span class="label">this device · auto-saved</span></div>
+      <p class="soft" style="font-size:11.5px;margin:0 0 10px">Every time you change something, this device keeps a private copy. If clients, inbox or invoices ever go missing, restore the newest copy that still has them. (Saved on this device only — restore from the same one you made the edits on.)</p>
+      ${(function(){ const bk=DB.listBackups(); if(!bk.length) return `<p class="soft" style="font-size:12px;margin:0">No restore points yet — they'll start saving as you use the OS.</p>`;
+        return `<div style="display:flex;flex-direction:column;gap:6px">`+bk.slice(0,15).map((b,i)=>`<div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow" style="min-width:0"><div style="font-size:12.5px;font-weight:600">${esc(relTime(b.t))}</div><div class="soft" style="font-size:11px">🌸 ${b.clients} client${b.clients===1?"":"s"} · 📨 ${b.inbox} inbox · 🧾 ${b.invoices} invoice${b.invoices===1?"":"s"}</div></div><button class="btn" data-act="restoreLocal" data-i="${i}" ${RO?"disabled":""}>restore</button></div>`).join("")+`</div>`;
+      })()}
+      <button class="btn" data-act="serverBackups" style="margin-top:10px" ${RO?"disabled":""}>☁️ check cloud snapshots too</button>
+      <div id="srvBackups"></div>
+    </div>
   </div>`;
 }
 
@@ -3024,6 +3051,15 @@ function cardJournal(day){
     <textarea class="inp" id="journalBox" rows="3" ${RO?"disabled":""} placeholder="today I…">${esc((day&&day.journal)||"")}</textarea>
     <button class="btn btn-pink" data-act="saveJournal" ${RO?"disabled":""} style="margin-top:8px">💾 save</button></section>`;
 }
+function relTime(t){ const s=Math.floor((Date.now()-t)/1000); if(s<60)return "just now"; const m=Math.floor(s/60); if(m<60)return m+" min ago"; const h=Math.floor(m/60); if(h<24)return h+(h===1?" hour ago":" hours ago"); const d=Math.floor(h/24); if(d<7)return d+(d===1?" day ago":" days ago"); return new Date(t).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }
+/* Restore clients+inbox+invoices from a saved copy, merging onto the LIVE row so nothing else is touched */
+async function restoreFrom(data,labelWhen){
+  if(!data){ toast("That copy looks empty 🌸"); return; }
+  const c=(data.clients||[]).length;
+  if(!confirm(`Restore ${c} client${c===1?"":"s"} (+ inbox & invoices) from ${labelWhen}?\n\nThis replaces the current clients / inbox / invoices with that copy. Everything else stays as-is.`)) return;
+  await DB.saveDaily(SENTINEL,n=>({...n, clients:data.clients||n.clients||[], inbox:data.inbox||n.inbox||[], invoices:data.invoices||n.invoices||[]}));
+  toast("🛟 Restored — welcome back 🌸"); state.clientPage=null; render();
+}
 async function exportData(){
   toast("Packing your backup… 🐙");
   const [content,income,sponsors,savings,days]=await Promise.all([DB.content(),DB.income(),DB.sponsors(),DB.savings(),DB.dailyRange(400)]);
@@ -3394,6 +3430,16 @@ document.addEventListener("click",async(e)=>{
   if(act==="editConfig")return configModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
+  if(act==="restoreLocal"){ const bk=DB.listBackups(); const b=bk[parseInt(el.dataset.i)||0]; if(b)await restoreFrom(b.data, relTime(b.t)); return; }
+  if(act==="serverBackups"){ const box=document.getElementById("srvBackups"); if(!box)return; if(DEMO||!SB){ box.innerHTML=`<p class="soft" style="font-size:12px;margin:10px 0 0">Cloud snapshots need the live backend 🌸</p>`; return; }
+    box.innerHTML=`<p class="label" style="margin:10px 0 0">checking cloud…</p>`;
+    const rows=["1999-01-01","1999-01-02","1999-01-03","1999-01-04","1999-01-05","1999-01-06","1999-01-07"];
+    const {data}=await SB.from("daily_logs").select("log_date,notes,updated_at").eq("user_id",UID).in("log_date",rows);
+    const snaps=(data||[]).map(r=>{let n={};try{n=JSON.parse(r.notes||"{}");}catch{} return {when:r.updated_at,clients:(n.clients||[]).length,inbox:(n.inbox||[]).length,invoices:(n.invoices||[]).length,data:n};}).filter(s=>s.when).sort((a,b)=>(b.when>a.when?1:-1));
+    window._srvSnaps=snaps;
+    box.innerHTML = snaps.length? `<div class="label" style="margin:12px 0 6px">☁️ daily cloud snapshots</div><div style="display:flex;flex-direction:column;gap:6px">`+snaps.map((s,i)=>`<div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)"><div class="grow" style="min-width:0"><div style="font-size:12.5px;font-weight:600">${esc(relTime(new Date(s.when).getTime()))}</div><div class="soft" style="font-size:11px">🌸 ${s.clients} client${s.clients===1?"":"s"} · 📨 ${s.inbox} inbox · 🧾 ${s.invoices} invoice${s.invoices===1?"":"s"}</div></div><button class="btn" data-act="restoreServer" data-i="${i}">restore</button></div>`).join("")+`</div>` : `<p class="soft" style="font-size:12px;margin:10px 0 0">No cloud snapshots found yet 🌸</p>`;
+    return; }
+  if(act==="restoreServer"){ const s=(window._srvSnaps||[])[parseInt(el.dataset.i)||0]; if(s)await restoreFrom(s.data, "cloud · "+relTime(new Date(s.when).getTime())); return; }
   if(act==="resetLayout"){ try{localStorage.removeItem("tab-order");}catch(e){} await DB.saveDaily(SENTINEL,n=>({...n,layouts:{},homeOrder:[],homeSize:{},homeMin:{},homeHidden:{}})); document.getElementById("modal").innerHTML=""; toast("Layout reset 🌸"); render(); return; }
   if(act==="homeMin"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.min=Object.assign({},L.min,{[k]:!L.min[k]});}); render(); return; }
   if(act==="homeHide"){ const k=el.dataset.w, g=el.closest(".grid-modular"), tab=g?g.dataset.tab:"home"; await setLayout(tab,L=>{L.hidden=Object.assign({},L.hidden,{[k]:true});}); toast("Card hidden — restore it from ＋ cards 🌸"); render(); return; }
