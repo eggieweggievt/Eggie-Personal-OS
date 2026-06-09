@@ -38,15 +38,28 @@ function userTag(discordId: string): string | null {
 }
 const OWNER = Deno.env.get("BRIEFING_USER_ID") || "eggie";
 
-async function postChannel(channelId: string, content: string): Promise<boolean> {
+async function postChannel(channelId: string, content: string, ping?: string): Promise<boolean> {
   const tok = Deno.env.get("DISCORD_BOT_TOKEN"); if (!tok || !channelId) return false;
   try {
+    // ping = a Discord user ID ("12345…") or role mention. Prepend the @mention and
+    // explicitly allow it (Discord suppresses pings unless allowed_mentions lists them).
+    let body = String(content); const am: any = { parse: [] };
+    const id = String(ping || "").replace(/[^0-9]/g, "");
+    if (id) {
+      const isRole = /^<@&/.test(String(ping)) || /role/i.test(String(ping));
+      body = (isRole ? `<@&${id}> ` : `<@${id}> `) + body;
+      if (isRole) am.roles = [id]; else am.users = [id];
+    }
     const r = await fetch(`${API}/channels/${channelId}/messages`, {
       method: "POST", headers: { authorization: `Bot ${tok}`, "content-type": "application/json" },
-      body: JSON.stringify({ content: String(content).slice(0, 1990) }),
+      body: JSON.stringify({ content: body.slice(0, 1990), allowed_mentions: am }),
     });
     return r.ok;
   } catch { return false; }
+}
+// the single shared "talent" Discord role to @ when posting to client channels (set in Settings)
+async function talentRole(userId: string): Promise<string> {
+  try { const s = await loadSent(userId); return String(s?.appConfig?.talentRole || "").replace(/[^0-9]/g, ""); } catch { return ""; }
 }
 async function findClient(userId: string, by: { name?: string; channelId?: string }): Promise<any> {
   const s = await loadSent(userId); const cs = s.clients || [];
@@ -147,13 +160,15 @@ async function execAction(userId: string, a: any): Promise<string> {
     case "messageClient": {
       const c = await findClient(userId, { name: a.client }); if (!c) return `couldn't find a client like “${a.client}” 🌸`;
       if (!c.discordChannel) return `${c.name} has no Discord channel linked yet 🌸`;
-      const ok = await postChannel(c.discordChannel, a.text || ""); return ok ? `💬 sent to ${c.name}'s channel` : `couldn't post to ${c.name}'s channel 🌸`;
+      // @ the shared "talent" role (one role for all clients) unless this message opts out (a.ping===false)
+      const role = a.ping === false ? "" : await talentRole(userId);
+      const ok = await postChannel(c.discordChannel, a.text || "", role ? `<@&${role}>` : ""); return ok ? `💬 sent to ${c.name}'s channel${role ? " (pinged talent)" : ""}` : `couldn't post to ${c.name}'s channel 🌸`;
     }
     case "remindClient": {
       const c = await findClient(userId, { name: a.client }); if (!c) return `couldn't find a client like “${a.client}” 🌸`;
       if (!c.discordChannel) return `${c.name} has no Discord channel linked 🌸`;
       if (!a.date) return "when should I remind them? 🌸";
-      await saveSent(userId, (n) => ({ ...n, reminders: [...(n.reminders || []), { id: uid(), text: a.text || "reminder", date: a.date, time: a.time || "10:00", done: false, toChannel: c.discordChannel, who: c.name, email: false, pings: 0 }] }));
+      await saveSent(userId, (n) => ({ ...n, reminders: [...(n.reminders || []), { id: uid(), text: a.text || "reminder", date: a.date, time: a.time || "10:00", done: false, toChannel: c.discordChannel, role: a.ping === false ? "" : String(n?.appConfig?.talentRole || ""), who: c.name, email: false, pings: 0 }] }));
       return `⏰ I'll remind ${c.name} in their channel on ${a.date}${a.time ? " at " + a.time : ""}`;
     }
     case "addClient":

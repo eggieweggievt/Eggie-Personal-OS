@@ -28,7 +28,7 @@ if (-not (Test-Path $dest)) {
 }
 
 # copy everything that belongs on the site
-foreach ($f in @("index.html","picker.html","setup.html","README.md","RUN-THIS-ONCE-supabase.sql")) {
+foreach ($f in @("index.html","app.html","picker.html","setup.html","README.md","RUN-THIS-ONCE-supabase.sql","LOCK-IT-DOWN-supabase.sql")) {
     if (Test-Path "$src\$f") { Copy-Item -Force "$src\$f" "$dest\$f" }
 }
 if (-not (Test-Path "$dest\sheet.png") -and (Test-Path $sheet)) {

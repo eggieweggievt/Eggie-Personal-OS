@@ -43,7 +43,12 @@ Deno.serve(async (req) => {
     const { data: sent } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", "2000-01-01").maybeSingle();
     const s = parse(sent?.notes ?? null);
     const goals = (s.goals_week_items || []).filter((g: any) => !g.done).slice(0, 3);
-    const todayStream = (s.schedule || []).filter((x: any) => x.day === dayShort);
+    // per-week schedule: read THIS week's slots (schedWeeks[thisMonday]) with legacy `schedule` fallback
+    const todayTO = now.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+    const md = new Date(todayTO + "T00:00"); md.setDate(md.getDate() - ((md.getDay() + 6) % 7));
+    const mondayISO = md.toLocaleDateString("en-CA");
+    const weekSched = (s.schedWeeks && s.schedWeeks[mondayISO]) ? s.schedWeeks[mondayISO] : (s.schedule || []);
+    const todayStream = weekSched.filter((x: any) => x.day === dayShort);
 
     // yesterday habits
     const { data: yday } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", yKey).maybeSingle();

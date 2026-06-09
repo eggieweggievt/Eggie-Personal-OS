@@ -43,7 +43,18 @@ Her two proven templates — prefer these when generating titles:
  1) REACTION/COMMENTARY: "[CAPS-charged curiosity claim]?! | [Eggie Reacts to / Vtuber Reacts / r/AITA] [source]"  (e.g. her 99-scorer: "She CHEATED and Called it Poly?! | Poly Vtuber Reacts to Seeking Brother Husband")
  2) EDUCATIONAL: "[Contrarian or benefit claim w/ a CAPS word] | [Topic 101]"  OR  "[Bold claim] — How to [specific outcome]"  (e.g. "Sponsors Want THIS, Not Big Numbers! | Creator Sponsorships 101")
  3) SHORTS: a punchy question/hook, optional tasteful emoji, then 2–3 niche hashtags (#vtuber + the game/topic).
-Her voice: warm, playful, a little unhinged/self-deprecating, squid/🐙 energy, kind underneath. Match that — aim for the 90+ bar she already hits.`;
+Her voice: warm, playful, a little unhinged/self-deprecating, squid/🐙 energy, kind underneath. Match that — aim for the 90+ bar she already hits.
+
+=== VTUBER GROWTH PLAYBOOK (current 2026 best practices — apply whenever you advise on growth, optimize content, or plan; always inside her sustainable spoon-theory pace, never as hustle pressure) ===
+DISCOVERY: Livestreaming deepens existing fans but barely reaches NEW people. New-viewer discovery for VTubers comes from CLIPS + short-form (YouTube Shorts, TikTok, Reels), search-friendly long-form, collabs, and community loops. Short-form is not optional — most momentum happens OFF-stream. Treat every stream as raw material: pull 2–4 clippable moments.
+YOUTUBE: the algorithm rewards click-through rate, retention, and satisfaction. Shorts are the front door (enormous daily reach, algorithm-pushed) — use them as cheap hook tests; when a Short loops well and converts even a few subs, expand it into a long video plus a playlist. Build THEMED SERIES (5–7 videos on one topic) so the algorithm learns the niche and viewers binge. Niche clarity beats random uploads.
+THUMBNAILS: big clean text (3–4 words MAX), one emotive face/expression, high contrast, a single clear subject, curiosity, no clutter — the single biggest CTR lever.
+TITLES: topic + promise + curiosity; specific beats vague (use the TITLE ENGINE above).
+SHORT-FORM HOOKS: the first ~3 seconds decide everything; viewers scroll in under 3s and the algorithm weights watch-time and completion rate. Lead with a concrete promise of value (specific value beats pure curiosity-bait). Best completion around 15–45s.
+CADENCE (sustainable, spoon-aware): short-form 3–7 posts/week is realistic and plenty (1–3/day max; 5+/day risks spam-throttling). Streaming roughly 3x/week, about 3 hours, on consistent days trains both the algorithm and the audience — hardcore fans literally plan their week around her schedule. Consistency of name, vibe, visuals and hook matters more than raw hours.
+TWITCH: consistency trains the algorithm but does NOT solve discovery on its own. Pick smaller, less-saturated game categories (rough target 500–5,000 total viewers, e.g. via SullyGnome) so she isn't buried; high-ratio/low-saturation niches reach Affiliate about 3x faster. Affiliate = within a rolling 30 days: 50 followers, 500 stream minutes, 7 unique broadcast days, and an average of 3+ concurrent viewers.
+CROSS-PLATFORM: exposure matters more than total stream hours. Repurpose ONE idea across YouTube, Shorts, TikTok and X, keeping a recognizable identity everywhere.
+VTUBER-SPECIFIC: lore and a character backstory turn ordinary content into an ongoing saga fans follow; collabs with ADJACENT audiences (overlapping but not identical) are the fastest route to new viewers; show up in community spaces (Discord, subreddits, hashtags); a strong debut plus a consistent early schedule validates the persona. Reaction, compilation, and out-of-context clip formats trend well for VTubers. Search demand for "vtuber" is largest in Japan (~39%), then the US (~11%) and Brazil (~8%); related opportunity terms include vtuber clips, vtuber edit, and envtuber.`;
 
 // Fallback personality for any non-eggie user (e.g. the desktop pet). Each user's real
 // persona lives in THEIR sentinel daily_logs row (log_date 2000-01-01) under
@@ -121,13 +132,15 @@ async function fullContext(userId: string, today: string): Promise<string> {
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const parse = (n: any) => { try { return typeof n === "string" ? JSON.parse(n) : (n || {}); } catch { return {}; } };
-    const [todayRow, sentRow, recentRows, income, sponsors, savings] = await Promise.all([
+    const [todayRow, sentRow, recentRows, income, sponsors, savings, content, captures] = await Promise.all([
       sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", today).maybeSingle(),
       sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle(),
       sb.from("daily_logs").select("log_date,notes").eq("user_id", userId).neq("log_date", "2000-01-01").order("log_date", { ascending: false }).limit(14),
       sb.from("income_entries").select("kind,source,category,amount,month,note").eq("user_id", userId).order("created_at", { ascending: false }).limit(60),
       sb.from("sponsors").select("brand,stage,deal_type,value").eq("user_id", userId).limit(40),
       sb.from("savings_goals").select("name,saved,target").eq("user_id", userId).limit(20),
+      sb.from("content_items").select("title,stage,format,priority,parent_id,scheduled_for,published_at,pillar").eq("user_id", userId).limit(200),
+      sb.from("raw_captures").select("raw_text,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
     ]);
     const d = parse(todayRow?.data?.notes), s = parse(sentRow?.data?.notes);
     const lines: string[] = [];
@@ -142,13 +155,31 @@ async function fullContext(userId: string, today: string): Promise<string> {
       const taken = h.meds || {};
       lines.push(`MEDS: ${s.medsList.map((m: any) => `${m.name}${taken[m.id] ? " ✓taken" : ""}`).join(", ")}`);
     }
+    // habits library + which are done today
+    if (s.habitsLib?.length) {
+      const _hc = d.habits?.counts || {};
+      lines.push(`HABITS (${s.habitsLib.length} in library, ✓ = done today): ${s.habitsLib.slice(0, 22).map((hb: any) => `${hb.label || hb.id}${(_hc[hb.id] || 0) >= (hb.total || 1) ? " ✓" : ""}`).join(", ")}.`);
+    }
     // tasks
     const tasks = (s.tasks || s.planner || []).filter((t: any) => t && !t.done).slice(0, 12);
     if (tasks.length) lines.push(`OPEN TASKS: ${tasks.map((t: any) => `${t.text}${t.bucket ? " [" + t.bucket + "]" : ""}${t.due ? " due:" + t.due : ""}`).join("; ")}`);
-    // schedule + goals
-    if (s.schedule?.length) lines.push(`STREAM SCHEDULE: ${s.schedule.map((x: any) => `${x.day}${x.time ? " " + x.time : ""}`).join(", ")}`);
-    if (s.goals_week_items?.length) lines.push(`WEEK GOALS: ${s.goals_week_items.map((g: any) => g.text || g).join("; ")}`);
-    if (s.goals_month_items?.length) lines.push(`MONTH GOALS: ${s.goals_month_items.map((g: any) => g.text || g).join("; ")}`);
+    // schedule (per-week: this week's plan from schedWeeks, legacy `schedule` as fallback) + goals
+    const _mon = new Date(today + "T00:00"); _mon.setDate(_mon.getDate() - ((_mon.getDay() + 6) % 7)); const _monISO = _mon.toLocaleDateString("en-CA");
+    const wkSched = (s.schedWeeks && s.schedWeeks[_monISO]) ? s.schedWeeks[_monISO] : (s.schedule || []);
+    if (wkSched.length) lines.push(`STREAM SCHEDULE (this week): ${wkSched.map((x: any) => `${x.day}${x.time ? " " + x.time : ""}${x.title ? " " + x.title : ""}`).join(", ")}.`);
+    if (s.goals_week_items?.length) lines.push(`WEEK GOALS: ${s.goals_week_items.map((g: any) => `${g.text || g}${g.done ? " ✓" : ""}`).join("; ")}`);
+    if (s.goals_month_items?.length) lines.push(`MONTH GOALS: ${s.goals_month_items.map((g: any) => `${g.text || g}${g.done ? " ✓" : ""}`).join("; ")}`);
+    // CONTENT PIPELINE (her videos/shorts/posts)
+    if (content?.data?.length) {
+      const _items = content.data.filter((c: any) => !c.parent_id);
+      const _byStage: Record<string, number> = {}; _items.forEach((c: any) => { _byStage[c.stage] = (_byStage[c.stage] || 0) + 1; });
+      const _flight = _items.filter((c: any) => c.stage !== "published").sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0)).slice(0, 8);
+      const _since7 = (() => { const d = new Date(today + "T00:00"); d.setDate(d.getDate() - 7); return d.toLocaleDateString("en-CA"); })();
+      const _pub7 = _items.filter((c: any) => c.published_at && String(c.published_at).slice(0, 10) >= _since7).length;
+      lines.push(`CONTENT PIPELINE: ${_items.length} items — ${Object.entries(_byStage).map(([k, v]) => `${v} ${k}`).join(", ")}. In flight: ${_flight.map((c: any) => `"${c.title}"${c.format ? " (" + c.format + ")" : ""}${c.pillar ? " {" + c.pillar + "}" : ""} [${c.stage}]`).join("; ") || "none"}. Published last 7 days: ${_pub7}.`);
+      const _sched = _items.filter((c: any) => c.scheduled_for && c.scheduled_for >= today).sort((a: any, b: any) => a.scheduled_for.localeCompare(b.scheduled_for)).slice(0, 6);
+      if (_sched.length) lines.push(`SCHEDULED CONTENT: ${_sched.map((c: any) => `${c.scheduled_for}: ${c.title}`).join("; ")}.`);
+    }
     // calendar (next few)
     const evs = (s.calendarEvents || []).filter((e: any) => (e.date || "") >= today).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || "")).slice(0, 8);
     if (evs.length) lines.push(`UPCOMING EVENTS: ${evs.map((e: any) => `${e.date}${e.time ? " " + e.time : ""} ${e.title}`).join("; ")}`);
@@ -178,15 +209,46 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (s.clients?.length) {
       const att = s.clients.filter((c: any) => c.status !== "offboarded" && (c.tasks || []).some((t: any) => !t.done && t.status !== "done"));
       lines.push(`SAKURA LIGHTWORKS (her mgmt clients): ${s.clients.length} total. Needing attention: ${att.length ? att.map((c: any) => { const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done"); const od = open.filter((t: any) => t.due && t.due < today).length; return `${c.name} (${open.length} open${od ? ", " + od + " OVERDUE" : ""}: ${open.slice(0, 2).map((t: any) => t.text).join("; ")})`; }).join(" | ") : "none — all caught up"}.`);
+      // FULL live profiles so Eugene always reflects whatever she just entered (notes, brand brain,
+      // deliverables, goals, due dates, contact, etc.) — read fresh from the DB on every message.
+      const fld = (label: string, v: any) => v ? ` ${label}=${String(v).slice(0, 160)}` : "";
+      s.clients.slice(0, 14).forEach((c: any) => {
+        const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done");
+        const needs = open.length ? open.map((t: any) => `${t.text}${t.due ? " (due " + t.due + (t.due < today ? " OVERDUE" : "") + ")" : ""}${t.status && t.status !== "needs" ? " [" + t.status + "]" : ""}`).join("; ") : "none open";
+        const notes = (c.notes || []).slice(-3).map((n: any) => `${n.date ? n.date + ": " : ""}${String(n.text || "").slice(0, 140)}`).join(" | ");
+        const plats = (c.platforms || []).map((p: any) => p.label || p.url).filter(Boolean).slice(0, 4).join(", ");
+        lines.push(`  • CLIENT ${c.name}${c.pronouns ? " (" + c.pronouns + ")" : ""} — status=${c.status || "?"}${fld("priority", c.priority)}${fld("tz", c.tz)}${fld("role", c.tier)}${fld("handle", c.handle)}${fld("contact", c.contact)}${fld("discord", c.discord)}${fld("niche", c.niche)}${fld("voice", c.brain)}${fld("winningStyle", c.style)}${fld("deliverables", c.deliverables)}${fld("goals", c.goals)}${fld("prefs", c.prefs)}${plats ? " platforms=" + plats : ""}${c.discordChannel ? " (Discord channel linked)" : ""}. NEEDS: ${needs}.${notes ? " RECENT NOTES: " + notes + "." : ""}`);
+      });
     }
     const unread = (s.inbox || []).filter((m: any) => !m.read);
     if (unread.length) lines.push(`INBOX: ${unread.length} unread from clients — ${unread.slice(-4).map((m: any) => `${m.from || "?"}: ${String(m.text || "").slice(0, 60)}`).join(" | ")}`);
     if (savings?.data?.length) lines.push(`SAVINGS GOALS: ${savings.data.map((g: any) => `${g.name} $${g.saved}/${g.target || "?"}`).join(", ")}`);
+    if (s.invoices?.length) {
+      const _out = s.invoices.filter((i: any) => i.status !== "paid"); const _paid = s.invoices.filter((i: any) => i.status === "paid");
+      const _owed = _out.reduce((a: number, i: any) => a + Number(i.amount || 0), 0);
+      lines.push(`INVOICES: ${_out.length} outstanding ($${_owed})${_out.length ? ": " + _out.map((i: any) => `${i.client || "?"} $${i.amount || 0}${i.due ? " due " + i.due + (i.due < today ? " OVERDUE" : "") : ""}`).join("; ") : ""}; ${_paid.length} paid.`);
+    }
+    if (s.taxRate || s.setAside) { const _aside = (s.setAside || {})[today.slice(0, 7)]; lines.push(`TAX/SET-ASIDE: rate ${Math.round((s.taxRate || 0) * 100)}%${_aside != null ? `, set aside $${_aside} this month` : ""}.`); }
+    if (s.gameEvents?.length) { const _up = s.gameEvents.filter((g: any) => g.date >= today).sort((a: any, b: any) => a.date.localeCompare(b.date)).slice(0, 6); if (_up.length) lines.push(`UPCOMING GAME DATES (for content planning): ${_up.map((g: any) => `${g.date}: ${g.title}`).join("; ")}.`); }
+    if (s.artIdeas?.length || s.artInspo?.length) lines.push(`ART IDEAS/INSPO: ${s.artIdeas?.length || 0} parked idea(s); ${(s.artInspo || []).filter((x: any) => !x.done).length} inspiration item(s) to try.`);
+    if (s.creative?.project || s.creative?.step) lines.push(`CREATIVE FOCUS: ${s.creative.project || ""}${s.creative.step ? " — next tiny step: " + s.creative.step : ""}.`);
+    if (s.joyJar?.length) lines.push(`JOY JAR: ${s.joyJar.length} entr${s.joyJar.length === 1 ? "y" : "ies"} (recent: ${s.joyJar.slice(-3).join(", ")}).`);
+    if (s.review && Object.keys(s.review).some((k) => s.review[k])) lines.push(`THIS WEEK'S REVIEW: ${["wins", "slipped", "loops", "followups", "notes", "top3"].map((k) => s.review[k] ? `${k}: ${String(s.review[k]).slice(0, 90)}` : "").filter(Boolean).join(" | ")}.`);
+    if (captures?.data?.length) lines.push(`BRAIN DUMP (recent unsorted captures): ${captures.data.slice(0, 5).map((c: any) => String(c.raw_text || "").slice(0, 70)).join(" | ")}.`);
     // gentle trends from recent rows
     const recs = (recentRows?.data || []).map((r: any) => parse(r.notes));
     const avg = (f: string) => { const v = recs.map((r: any) => r.health?.[f]).filter((x: any) => x != null && x !== "").map(Number); return v.length ? (v.reduce((a: number, b: number) => a + b, 0) / v.length).toFixed(1) : null; };
-    const tr = [["pain", avg("pain")], ["fatigue", avg("fatigue")], ["fog", avg("fog")], ["mood", avg("mood")], ["sleepH", avg("sleepH")]].filter((x) => x[1] != null);
-    if (tr.length) lines.push(`RECENT ${recs.length}-DAY AVG: ${tr.map(([k, v]) => `${k} ${v}`).join(", ")}.`);
+    const tr = [["pain", avg("pain")], ["fatigue", avg("fatigue")], ["fog", avg("fog")], ["dizziness", avg("dizziness")], ["mood", avg("mood")], ["anxiety", avg("anxiety")], ["focus", avg("focus")], ["sleepH", avg("sleepH")], ["water", avg("water")], ["salt", avg("salt")]].filter((x) => x[1] != null);
+    if (tr.length) lines.push(`RECENT ${recs.length}-DAY HEALTH AVG: ${tr.map(([k, v]) => `${k} ${v}`).join(", ")}.`);
+    // latest logged channel/follower numbers
+    const _chRow = recs.find((r: any) => r.channel && Object.keys(r.channel).length);
+    if (_chRow) lines.push(`CHANNEL STATS (latest logged): ${Object.entries(_chRow.channel).map(([k, v]) => `${k}:${v}`).join(", ")}.`);
+    // RECENT DAILY SERIES — one row per day so you can CORRELATE across ANY metrics
+    const _sorted = (recentRows?.data || []).slice().sort((a: any, b: any) => a.log_date.localeCompare(b.log_date)).slice(-10);
+    if (_sorted.length) {
+      const _series = _sorted.map((r: any) => { const n = parse(r.notes); const h = n.health || {}; const hb = n.habits?.counts ? Object.values(n.habits.counts).filter((v: any) => v).length : 0; const art = (s.artLog || []).filter((e: any) => e.date === r.log_date).reduce((a: number, e: any) => a + Number(e.min || 0), 0); return `${r.log_date.slice(5)}[en:${n.energy || "?"} pain:${h.pain ?? "-"} fat:${h.fatigue ?? "-"} fog:${h.fog ?? "-"} mood:${h.mood ?? "-"} anx:${h.anxiety ?? "-"} slp:${h.sleepH ?? "-"} wtr:${h.water ?? "-"} salt:${h.salt ?? "-"} hab:${hb} art:${art}${n.health?.flare ? " FLARE" : ""}${n.streamDay ? " STREAM" : ""}]`; }).join(" ");
+      lines.push(`RECENT DAILY SERIES (oldest→newest; dash = not logged — use this to spot correlations across ANY metrics): ${_series}`);
+    }
     return lines.join("\n") || "(database is empty so far — fresh start)";
   } catch (e) {
     return "(couldn't read full OS context: " + (e as Error).message + ")";
@@ -387,7 +449,8 @@ Max 12 events, future dates only.`,
 
 You are also Eggie's hands inside the OS: you can DO things by emitting actions, not just talk. Today (her local date) is ${today}; her calendar timezone is ${tz}. Resolve relative dates ("tomorrow", "next Friday", "in 2 weeks") to absolute YYYY-MM-DD using that.
 
-You can SEE her whole OS. Use this live snapshot to answer questions about ANY part of her data (health, money, tasks, schedule, sponsors, goals, trends) and to make smart choices — never claim you can't see her data:
+You can SEE her whole OS. Use this live snapshot to answer questions about ANY part of her data — health, POTS/EDS care, meds, mood/emotion, executive-function, energy/spoons, habits, tasks, the content pipeline, calendar, stream schedule, goals, money, invoices, sponsors, savings, channel/follower stats, art, joy jar, creative focus, the weekly review, brain-dump captures, her Sakura Lightworks clients and inbox — and to make smart choices. NEVER claim you can't see her data; it is all here.
+CROSS-REFERENCE & TRENDS: this is read fresh every message, so it is always current. You can and should CORRELATE across ANY metrics — e.g. sleep vs brain fog, water/salt vs dizziness/lightheadedness, energy/spoons vs habits done or art minutes, stream days vs next-day pain/fatigue, posting/content cadence vs mood, money in vs effort. Use the RECENT DAILY SERIES to reason about relationships over time. When she asks things like "what affects my fatigue?", "any patterns?", "how's my month going?", "am I overdoing it?", or "what should I focus on?", actually look across the data and answer specifically with the numbers you see. Frame health correlations as gentle observations from her own logs, never medical proof or diagnosis.
 --- LIVE OS SNAPSHOT ---
 ${ctx}
 --- END SNAPSHOT ---
@@ -481,6 +544,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - doneClientNeed: { client (fuzzy), text (fuzzy) }   // mark one of a client's needs handled
 - addClientNote: { client (fuzzy), text }            // log a note / meeting summary on a client
 - messageClient: { client (fuzzy), text }            // POST a message right now into that client's linked Discord channel (needs their channel linked). "tell ClientX their thumbnail is ready", "message ClientX …"
+- messageClients: { clients: "all" | "active" | ["Name", ...], text }   // BULK: send ONE message to MANY clients. ALWAYS use this (never many messageClient actions) when she says "message all/active clients", "tell everyone …", or lists several. Write the "text" ONCE with a {name} placeholder (it's replaced per client with their first name). "active" = clients with at least one open need. This keeps your reply tiny — do NOT paste the full message per client.
 - remindClient: { client (fuzzy), text, date: "YYYY-MM-DD", time?: "HH:MM" } // schedule a reminder that posts into the CLIENT's Discord channel at that time (e.g. "remind ClientX to post their schedule every Monday" → set the next Monday). Resolve relative dates.
 - moveClientNeed: { client (fuzzy), text (fuzzy), status: "needs"|"doing"|"done" }   // move a client's need across the board
 - delClient: { name (fuzzy) }         // remove a client from the roster (destructive — confirm if unsure)
@@ -536,9 +600,16 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
       const userMsg = userId === "eggie"
         ? `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`
         : `${convo}They say: "${q}"\n\nReturn ONLY the JSON object.`;
-      const { text: raw, sources } = await claudeWeb(sys, userMsg, 1400);
+      const { text: raw, sources } = await claudeWeb(sys, userMsg, 4000);
       const parsed = parseJSON(raw);
-      if (!parsed) return json({ reply: stripCites(raw), actions: [], sources });
+      // Never leak the model's raw reasoning / a truncated JSON blob into her chat.
+      // If parsing failed, salvage a clean "reply" string if we can find one, else say so plainly.
+      if (!parsed) {
+        let salvage = "";
+        const m = raw.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (m) { try { salvage = JSON.parse('"' + m[1] + '"'); } catch { salvage = m[1]; } }
+        return json({ reply: salvage || "Hmm, that one got a little tangled on my end 🐙 — try saying it once more?", actions: [], sources });
+      }
       if (!Array.isArray(parsed.actions)) parsed.actions = [];
       return json({ reply: stripCites(parsed.reply || "okay!"), actions: parsed.actions, sources });
     }

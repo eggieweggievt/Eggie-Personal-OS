@@ -81,9 +81,10 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
   if (dueChan.length && dTokC) {
     for (const r of dueChan) {
       try {
+        const rid = String((r as any).role || "").replace(/[^0-9]/g, "");
         const res = await fetch(`https://discord.com/api/v10/channels/${r.toChannel}/messages`, {
           method: "POST", headers: { authorization: `Bot ${dTokC}`, "content-type": "application/json" },
-          body: JSON.stringify({ content: `⏰ ${r.text} 🌸` }),
+          body: JSON.stringify({ content: `${rid ? `<@&${rid}> ` : ""}⏰ ${r.text} 🌸`, allowed_mentions: rid ? { roles: [rid] } : { parse: [] } }),
         });
         if (res.ok) { (r as any)._postok = true; posted++; }
       } catch { /* retry next tick */ }

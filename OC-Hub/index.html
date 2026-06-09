@@ -16,8 +16,9 @@
   OC Hub — a gentle candy-pastel home for original characters, for Eggie 🦄
   Characters · lore · story arcs · ships · idea wall · per-OC ref boards.
   Built on the Eggie-OS foundation: one file, vanilla JS, Supabase storage.
-  Shares the same Supabase project as the main OS; ALL data here lives under
-  oc-prefixed keys on the sentinel daily_logs row (log_date 2000-01-01).
+  Shares the Supabase PROJECT with the main OS but nothing else: this app's data
+  lives under its own user_id ("ochub") on its own sentinel row — the main OS's
+  rows (user_id "eggie") are never written by this app.
 ========================================================================== -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Fredoka:wght@500;600&display=swap" rel="stylesheet" />
@@ -33,8 +34,11 @@
     --r:18px; --sans:"Quicksand",ui-rounded,"SF Pro Rounded",system-ui,sans-serif; --display:"Fredoka",var(--sans);
   }
   *{box-sizing:border-box;} html,body{margin:0;padding:0;}
-  /* never let a stray wide element widen the page — keeps `main` truly centered (iPad portrait fix) */
-  html,body{width:100%;max-width:100%;overflow-x:hidden;}
+  /* never let a stray wide element widen the page — keeps `main` truly centered (iPad portrait fix).
+     html is the REAL scroller (overflow-x:hidden); body uses CLIP, which is NOT a scroll container —
+     otherwise body + overscroll-behavior swallows mouse-wheel scrolling on Windows. */
+  html{width:100%;max-width:100%;overflow-x:hidden;}
+  body{width:100%;max-width:100%;overflow-x:clip;}
   main{overflow-x:clip;}
   body{background:var(--bg);background-image:radial-gradient(80% 50% at 100% 0%,#fbdff0 0%,transparent 60%),radial-gradient(70% 50% at 0% 0%,#ddeafc 0%,transparent 55%),radial-gradient(60% 40% at 50% 100%,#efe6fb 0%,transparent 60%);background-attachment:fixed;color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;font-weight:500;-webkit-font-smoothing:antialiased;min-height:100vh;}
   /* her unicorn-sky art, muted, behind everything */
@@ -265,7 +269,7 @@
   }
   /* ---- native-app feel ---- */
   *{-webkit-tap-highlight-color:transparent;}
-  body{overscroll-behavior-y:none;}            /* no whole-page rubber-band */
+  html{overscroll-behavior-y:none;}            /* no whole-page rubber-band — on the real scroller so wheel chaining stays alive */
   nav,.kanban{overscroll-behavior-x:contain;}  /* inner swipes don't yank the page */
   .btn,.chip,.chiptog,.hbtn,.seg>button,.check,.pill,.tab{touch-action:manipulation;}  /* no dbl-tap-zoom delay (drag handles keep touch-action:none) */
   #nav .tab{touch-action:pan-x;}               /* re-assert after the manipulation rule above */
@@ -311,7 +315,7 @@
 const CONFIG = {
   url: "https://clpfyxlenotepuceczbh.supabase.co",
   anonKey: "sb_publishable_TC-7HVpzQdxwS7DUMr7zwQ_rmJyjcV2",
-  userId: "eggie",
+  userId: "ochub",        // this app's OWN identity — the main OS owns "eggie"; they share nothing
   readOnly: false,
   mainOs: "https://eggieweggievt.github.io/Eggie-Personal-OS/",
   creator: { name:"Eggie", emoji:"🦄" },
@@ -325,11 +329,14 @@ let RO = CONFIG.readOnly || DEMO;
 const SB = (!DEMO && window.supabase) ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
 const UID = CONFIG.userId;
 const TODAY = new Date().toLocaleDateString("en-CA");
-/* OC Hub's OWN storage row. The main OS reads/writes "2000-01-01" as a whole blob,
-   so sharing it meant a stale Eggie-OS tab could overwrite OC data (it did, once).
-   "2000-01-02" belongs to this hub alone — the two apps can never clobber each other again. */
+/* OC Hub's OWN storage identity: user_id "ochub" + its own sentinel row. The main OS owns
+   user_id "eggie" and reads/writes its rows as whole blobs — sharing ANY row with it meant a
+   stale tab on either side could overwrite the other (it happened in both directions).
+   With separate user_ids the two apps cannot touch the same row, ever. The constants below
+   are used ONLY for one-time read-only migration of data out of the old shared homes. */
 const SENTINEL = "2000-01-02";
-const SHARED_SENTINEL = "2000-01-01";
+const LEGACY_USER = "eggie";          // never written by this app
+const LEGACY_ROWS = ["2000-01-02","2000-01-01"];   // old oc-hub row, then the original shared row
 const OC_KEYS = ["ocs","ocLore","ocShips","ocArcs","ocIdeas","ocInspo","ocRpInfo","ocJournals","ocDesigns","ocStickies","ocLayouts","ocAppConfig"];
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(36).slice(2));
 
@@ -1584,18 +1591,23 @@ document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
 })();
 
 /* ===================== BOOT ===================== */
-/* one-time migration: pull any surviving OC data off the old shared row into our own */
+/* one-time migration: pull OC data out of the old homes (READ-ONLY on the legacy rows —
+   this app never writes anything under the main OS's user_id) */
 async function migrateFromShared(){
   if(DEMO||!SB)return;
   try{
     const cur=await DB.daily(SENTINEL);
-    if(OC_KEYS.some(k=>cur[k]!=null&&(!Array.isArray(cur[k])||cur[k].length)))return;   // our row already has data
-    const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",SHARED_SENTINEL).maybeSingle();
-    let old={}; try{ old=data&&data.notes?JSON.parse(data.notes):{}; }catch(e){}
-    const found=OC_KEYS.filter(k=>old[k]!=null);
-    if(!found.length)return;
-    await DB.saveDaily(SENTINEL,n=>{ const out={...n}; found.forEach(k=>{ if(out[k]==null)out[k]=old[k]; }); return out; });
-    toast("Moved your hub data to its own safe shelf 📦✨");
+    if(OC_KEYS.some(k=>cur[k]!=null&&(!Array.isArray(cur[k])||cur[k].length)))return;   // our own account already has data
+    let old=null, found=[];
+    for(const row of LEGACY_ROWS){
+      const {data}=await SB.from("daily_logs").select("notes").eq("user_id",LEGACY_USER).eq("log_date",row).maybeSingle();
+      let n={}; try{ n=data&&data.notes?JSON.parse(data.notes):{}; }catch(e){}
+      const f=OC_KEYS.filter(k=>n[k]!=null);
+      if(f.length){ old=n; found=f; break; }
+    }
+    if(!old)return;
+    const r=await DB.saveDaily(SENTINEL,n=>{ const out={...n}; found.forEach(k=>{ if(out[k]==null)out[k]=old[k]; }); return out; });
+    if(r)toast("Hub data moved to its own account — fully separate from the main OS 📦✨");
   }catch(e){ console.error("migrate",e); }
 }
 applySettings();

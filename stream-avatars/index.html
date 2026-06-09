@@ -25,20 +25,37 @@
 
   #hud{position:fixed;top:8px;left:8px;z-index:30;display:none;font:600 12px ui-monospace,monospace;color:#fff;
     background:rgba(40,30,60,.75);border:1px solid #a98fe0;border-radius:10px;padding:7px 11px;line-height:1.6;}
+  /* debug-only: a known-square box. If it looks like a rectangle in OBS, the */
+  /* browser source is being stretched (its Width/Height don't match the canvas). */
+  #sqtest{position:fixed;top:8px;right:8px;width:100px;height:100px;z-index:30;display:none;
+    border:3px solid #8fe0b3;border-radius:6px;box-sizing:border-box;
+    font:600 10px ui-monospace,monospace;color:#8fe0b3;text-align:center;padding-top:38px;}
   #help{position:fixed;inset:0;z-index:40;display:none;place-items:center;font:14px/1.7 system-ui,sans-serif;color:#3a3550;}
   #help .card{background:#fff;border:1px solid #e4d4ef;border-radius:18px;padding:22px 28px;max-width:520px;
     box-shadow:0 16px 42px rgba(120,110,160,.3);}
   #help h1{font-size:17px;margin:0 0 8px;color:#ec7faf;}
   #help code{background:#f6f0fb;border-radius:6px;padding:1px 6px;color:#a96fd0;}
+  /* tiny note for humans who open the overlay in a normal browser — hidden inside OBS */
+  #obsnote{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:none;
+    font:600 13px system-ui,sans-serif;color:#3a3550;background:#fff;border:1px solid #e4d4ef;
+    border-radius:999px;padding:8px 16px;box-shadow:0 6px 20px rgba(120,110,160,.28);}
+  #obsnote a{color:#a96fd0;text-decoration:none;font-weight:800;}
+  /* debug-only: outlines the EXACT rectangle OBS gives the page. */
+  /* If this outline is a square (or any non-16:9 shape), the Browser Source rectangle is wrong. */
+  #vpedge{position:fixed;inset:0;z-index:29;display:none;pointer-events:none;
+    border:4px solid #8fe0b3;box-sizing:border-box;}
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="hud"></div>
+<div id="sqtest">100×100<br>square?</div>
+<div id="vpedge"></div>
+<div id="obsnote">🐙 This is the OBS overlay — paste this URL into a Browser Source. Setting up? → <a href="app.html">open Chat Buddies</a></div>
 <div id="help"><div class="card">
   <h1>🐙 Chat Buddies</h1>
   No channel is set up yet!<br>
-  👉 <a href="setup.html"><b>Open the setup page</b></a> — type your channel name, pick a size, and copy your OBS link.<br><br>
+  👉 <a href="app.html"><b>Open Chat Buddies</b></a> — sign in, choose Streamer or Viewer, and you're set.<br><br>
   (Or add <code>?channel=YOURCHANNEL</code> to this address by hand, or <code>?debug=1</code> to test with fake avatars.)
 </div></div>
 
@@ -65,7 +82,11 @@ var SETTINGS = {
 
   walkSpeed: 44,              // walking speed in pixels per second
 
-  floor: 0                    // raise everyone off the bottom edge by this many pixels
+  floor: 0,                   // raise everyone off the bottom edge by this many pixels
+
+  edge: 0                     // extra px past each screen edge. 0 = the character's body just touches
+                              // the edges (the empty padding around the art is ignored automatically).
+                              // positive pushes them a little further off-screen if you ever want that.
 };
 /* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
    (everything below just works — URL options like &debug=1 still
@@ -140,7 +161,9 @@ var SPEED     = +(Q.get("speed") || SETTINGS.walkSpeed);
 var FRAME_MS  = 150;
 var IDLE_MS   = 110;                               // ≈ the pack's 9 fps
 var FLOOR     = Math.max(0, +(Q.get("floor") || SETTINGS.floor)); // px lifted off the bottom edge
-var MARGIN    = 12;                                // px kept clear at left/right edges
+var EDGE_EXTRA = Q.has("edge") ? +Q.get("edge") : (SETTINGS.edge != null ? SETTINGS.edge : 0); // extra px past each edge
+var LBL_PX    = Math.max(12, Math.round(13 * SCALE));   // name labels + bubbles scale with avatar size
+var BUB_PX    = Math.max(12, Math.round(12.5 * SCALE));
 
 function calm(){
   if (CALM_FLAG) return true;
@@ -148,7 +171,6 @@ function calm(){
 }
 
 var screenW = innerWidth, screenH = innerHeight;
-var B_MIN = MARGIN;
 addEventListener("resize", function(){ screenW = innerWidth; screenH = innerHeight; });
 
 var stage = document.getElementById("stage");
@@ -191,13 +213,37 @@ function makeSet(url, W, H, walk, sit, extras){
   var maxW = Math.max.apply(null, all.map(function(f){ return f.w; }));
   var maxH = Math.max.apply(null, all.map(function(f){ return f.h; }));
   return {
-    url: url, W: W, H: H, anims: anims, sit: sit,
+    url: url, W: W, H: H, anims: anims, sit: sit, scale: SCALE,   // scale straight off the raw frame size
     sprW: Math.round(maxW*SCALE), sprH: Math.round(maxH*SCALE),
-    bgSize: (W*SCALE)+"px "+(H*SCALE)+"px"
+    bgSize: (W*SCALE)+"px "+(H*SCALE)+"px",
+    insetL: 0, insetR: sit.w     // character's opaque left/right within the standing frame (measured below)
   };
 }
 var SHEET_SETS = { "default": makeSet(DEF_SHEET, DEF_W, DEF_H, DEF_ANIMS.walk, DEF_ANIMS.idle[0], DEF_ANIMS) };
 function setFor(role){ return SHEET_SETS[role] || SHEET_SETS["default"]; }
+
+/* Find the character's actual left/right edge inside the standing frame, so
+   walk bounds follow the body — not the empty transparent padding around it.
+   (That padding was the "invisible blocks" stopping buddies short of the edges.) */
+function measureInsets(set){
+  var img = new Image(); img.crossOrigin = "anonymous";
+  img.onload = function(){
+    try {
+      var f = set.sit;
+      var cv = document.createElement("canvas"); cv.width = set.W; cv.height = set.H;
+      var ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0);
+      var d = ctx.getImageData(f.x, f.y, f.w, f.h).data;
+      var minC = f.w, maxC = -1;
+      for (var x = 0; x < f.w; x++){
+        for (var y = 0; y < f.h; y++){
+          if (d[(y*f.w + x)*4 + 3] > 25){ if (x < minC) minC = x; if (x > maxC) maxC = x; break; }
+        }
+      }
+      if (maxC >= 0){ set.insetL = minC; set.insetR = maxC + 1; }
+    } catch(e){ /* cross-origin sheet → keep full-frame bounds */ }
+  };
+  img.src = set.url;
+}
 
 /* -------- gear persistence: Map cache → localStorage → Supabase -------- */
 var gearCache = new Map();   // twitch user-id → {set: piece, ...}
@@ -245,9 +291,12 @@ function Avatar(user, display, color, badges, uid){
   el.style.bottom = FLOOR + "px";
 
   var bub = document.createElement("div"); bub.className = "bub";
+  bub.style.fontSize = BUB_PX + "px";
+  bub.style.maxWidth = Math.round(230 * SCALE) + "px";
   var lbl = document.createElement("div"); lbl.className = "lbl";
   lbl.textContent = badgeIcon(this.role) + display;          // textContent = safe vs hostile chat
   lbl.style.color = color || hashColor(user);
+  lbl.style.fontSize = LBL_PX + "px";
 
   var wrap = document.createElement("div"); wrap.className = "sprwrap";
   var spr = document.createElement("div"); spr.className = "spr";
@@ -261,8 +310,8 @@ function Avatar(user, display, color, badges, uid){
   this._flipV = "";
 
   // state
-  var bMax = this.bMax();
-  this.x = B_MIN + Math.random()*(bMax-B_MIN);
+  var bMin = this.bMin(), bMax = this.bMax();
+  this.x = bMin + Math.random()*(bMax-bMin);
   this.y = 0; this.vx = 0; this.vy = 0;
   this.dir = Math.random() < .5 ? -1 : 1;
   this.fi = 0; this.ft = 0; this.jt = 0;
@@ -273,7 +322,12 @@ function Avatar(user, display, color, badges, uid){
   this.setFrame(this.set.sit); this.render();
 }
 
-Avatar.prototype.bMax = function(){ return Math.max(B_MIN+10, screenW - MARGIN - this.set.sprW); };
+// walk boundaries that follow the CHARACTER's pixels, not the padded cell:
+Avatar.prototype.bMin = function(){ return Math.round(-(this.set.insetL||0) * this.set.scale) - EDGE_EXTRA; };
+Avatar.prototype.bMax = function(){
+  var rightBody = (this.set.insetR != null ? this.set.insetR : this.set.sit.w) * this.set.scale;
+  return Math.max(this.bMin()+10, Math.round(screenW - rightBody) + EDGE_EXTRA);
+};
 
 Avatar.prototype.applySkin = function(){
   this.spr.style.backgroundSize = this.set.bgSize;
@@ -291,38 +345,28 @@ Avatar.prototype.setGear = function(g){
     var piece = gs.pieces[self.gear[setName]]; if (!piece || !piece.url) return;
     var el;
     if (piece.anim){
-      // frame-anim sheet: same grid as the avatar — cell follows the avatar's frame
+      // frame-anim sheet shares the avatar's grid, so the gear is just the
+      // sprite with a different image: overlay it on the exact same rectangle
+      // as the current frame. That keeps it aligned (crown on head, etc.).
       el = document.createElement("div"); el.className = "gear";
       el.style.zIndex = gs.behind ? 1 : 3;
-      (function(holder){
-        var im = new Image();
-        im.onload = function(){
-          var cols = piece.cols || 7, rows = piece.rows || 5;
-          var cw = im.naturalWidth/cols, chh = im.naturalHeight/rows;
-          var s = SCALE * (piece.scale || 1);
-          holder.style.width  = Math.round(cw*s)+"px";
-          holder.style.height = Math.round(chh*s)+"px";
-          holder.style.backgroundImage = "url('"+piece.url+"')";
-          holder.style.backgroundSize = Math.round(im.naturalWidth*s)+"px "+Math.round(im.naturalHeight*s)+"px";
-          holder.style.left = "50%";
-          holder.style.marginLeft = Math.round((piece.ox||0)*SCALE - cw*s/2)+"px";
-          holder.style.top = Math.round((self.set.sit.h*SCALE - chh*s)/2 + (piece.oy||0)*SCALE)+"px";
-          self.animGear.push({el: holder, cw: cw, ch: chh, s: s});
-          self.syncGearFrame();
-        };
-        im.src = piece.url;
-      })(el);
+      el.style.left = "0"; el.style.top = "0";
+      el.style.backgroundRepeat = "no-repeat";
+      el.style.backgroundImage = "url('"+piece.url+"')";
+      self.animGear.push({el: el, cols: piece.cols || 7, rows: piece.rows || 5});
+      self.syncGearFrame();
     } else {
       el = document.createElement("img"); el.className = "gear"; el.alt = "";
       el.style.zIndex = gs.behind ? 1 : 3;        // sprite sits at z 2
       (function(img){
         img.onload = function(){
-          var s = SCALE * (piece.scale || 1);
+          var base = self.set.scale;
+          var s = base * (piece.scale || 1);
           img.style.width  = Math.round(img.naturalWidth*s)+"px";
           img.style.height = Math.round(img.naturalHeight*s)+"px";
           img.style.left = "50%";
-          img.style.marginLeft = Math.round((piece.ox||0)*SCALE - img.naturalWidth*s/2)+"px";
-          img.style.top = Math.round((piece.oy||0)*SCALE)+"px";
+          img.style.marginLeft = Math.round((piece.ox||0)*base - img.naturalWidth*s/2)+"px";
+          img.style.top = Math.round((piece.oy||0)*base)+"px";
         };
         img.src = piece.url;
       })(el);
@@ -331,20 +375,28 @@ Avatar.prototype.setGear = function(g){
     self.wrap.appendChild(el);
   });
 };
-/* keep frame-anim gear cells in lockstep with the avatar's current frame */
+/* frame-anim gear overlays the avatar's current cell. We size the gear sheet
+   by its OWN grid (cols×rows) mapped to the avatar's cell size — so it aligns
+   no matter what resolution the gear PNG is, as long as it shares the layout. */
 Avatar.prototype.syncGearFrame = function(){
-  var f = this._curF; if (!f || !this.animGear.length) return;
-  var col = Math.round(f.x / Math.max(1, f.w)), row = Math.round(f.y / Math.max(1, f.h));
+  var f = this._curF; if (!f || !this.animGear || !this.animGear.length) return;
+  var s = this.set.scale;
+  var col = Math.round(f.x / Math.max(1, f.w));
+  var row = Math.round(f.y / Math.max(1, f.h));
   for (var i = 0; i < this.animGear.length; i++){
-    var g = this.animGear[i];
-    g.el.style.backgroundPosition = "-"+Math.round(col*g.cw*g.s)+"px -"+Math.round(row*g.ch*g.s)+"px";
+    var g = this.animGear[i], el = g.el;
+    el.style.width  = (f.w*s)+"px";
+    el.style.height = (f.h*s)+"px";
+    el.style.backgroundSize = (g.cols*f.w*s)+"px "+(g.rows*f.h*s)+"px";
+    el.style.backgroundPosition = "-"+(col*f.w*s).toFixed(1)+"px -"+(row*f.h*s).toFixed(1)+"px";
   }
 };
 
 Avatar.prototype.setFrame = function(f){
   this._curF = f;
-  this.spr.style.width = (f.w*SCALE)+"px"; this.spr.style.height = (f.h*SCALE)+"px";
-  this.spr.style.backgroundPosition = "-"+(f.x*SCALE).toFixed(1)+"px -"+(f.y*SCALE).toFixed(1)+"px";
+  var s = this.set.scale;
+  this.spr.style.width = (f.w*s)+"px"; this.spr.style.height = (f.h*s)+"px";
+  this.spr.style.backgroundPosition = "-"+(f.x*s).toFixed(1)+"px -"+(f.y*s).toFixed(1)+"px";
   if (this.animGear && this.animGear.length) this.syncGearFrame();
 };
 Avatar.prototype.facing = function(){
@@ -374,7 +426,7 @@ Avatar.prototype.step = function(dt){
   if (calm()){ this.setFrame(this.set.anims.idle[0]); this.setFlip(this.facing()); this.render(); return; }
 
   this.stt += dt;
-  var bMax = this.bMax();
+  var bMin = this.bMin(), bMax = this.bMax();
 
   if (this.st === "thrown"){
     this.jt += dt;
@@ -391,7 +443,7 @@ Avatar.prototype.step = function(dt){
       if (Math.abs(this.vy) < 150){
         this.vy = 0; this.vx *= 0.55;
         if (Math.abs(this.vx) < 30){
-          this.x = Math.max(B_MIN, Math.min(this.x, bMax));
+          this.x = Math.max(bMin, Math.min(this.x, bMax));
           this.st = "walk"; this.stt = 0;
         }
       } else { this.vy = -this.vy * 0.5; this.vx *= 0.8; }
@@ -435,7 +487,7 @@ Avatar.prototype.step = function(dt){
 
   if (this.st === "walk"){
     this.x += this.dir * SPEED * dt/1000;
-    if (this.x <= B_MIN){ this.x = B_MIN; this.dir = 1; }
+    if (this.x <= bMin){ this.x = bMin; this.dir = 1; }
     else if (this.x >= bMax){ this.x = bMax; this.dir = -1; }
     this.anim("walk", FRAME_MS, dt);
     this.setFlip(this.facing());
@@ -666,7 +718,7 @@ function handleChat(c){
     } else if (gs.pieces && gs.pieces[arg]){
       g[cmd] = arg;
       a.setGear(g);
-      if (c.id) saveGearPref(c.id, g);
+      if (c.id) saveGearPref(c.id, g);   // live now + remembered on this PC; permanent cross-device save = picker page
     } else {
       a.say("🎒 " + cmd + ": " + Object.keys(gs.pieces || {}).join(", ") + ", none", true);
     }
@@ -678,15 +730,27 @@ function handleChat(c){
 /* ============================================================
    Debug mode — 20 fake avatars + FPS meter, no Twitch needed
    ============================================================ */
+var WANT = (Q.get("canvas")||"").split("x");   // e.g. ["1920","1080"] if the setup page added &canvas=
 function paintHud(){
   if (!DEBUG) return;
+  var w = innerWidth, h = innerHeight;
+  var ok = Math.abs(w/h - 16/9) < 0.02 ? " ✔16:9" : " ⚠ not 16:9";
+  var match = "";
+  if (WANT.length === 2 && +WANT[0] && +WANT[1]){
+    match = (w === +WANT[0] && h === +WANT[1])
+      ? " · OBS size ✔ matches " + WANT[0] + "×" + WANT[1]
+      : " · ⚠ OBS source is " + w + "×" + h + " but should be " + WANT[0] + "×" + WANT[1] + " — fix Width/Height in the source";
+  }
   hud.textContent = "fps " + fps + " · avatars " + avatars.size +
     " · chat: " + (CHANNEL ? ircStatus : "debug only") +
-    " · gear sets " + Object.keys(GEAR.sets).length;
+    " · gear sets " + Object.keys(GEAR.sets).length +
+    " · viewport " + w + "×" + h + ok + match;
 }
 function startDebug(){
   if (!window.obsstudio) document.body.classList.add("debugbg");   // dark test bg only OUTSIDE OBS — stays transparent on stream
   hud.style.display = "block";
+  document.getElementById("sqtest").style.display = "block";       // square-check box (top-right)
+  document.getElementById("vpedge").style.display = "block";       // outline of the page's true rectangle
   var NAMES = ["mochi","boba","pudding","taro","clover","sprout","nimbus","pebble","waffle","syrup",
                "comet","biscuit","noodle","plum","maple","tofu","truffle","dango","poppy","miso"];
   var DBG_BADGES = ["broadcaster/1","moderator/1","vip/1","subscriber/3","subscriber/1"];
@@ -728,9 +792,12 @@ function startDebug(){
    Boot — load this channel's saved sprites + gear
    ============================================================ */
 function boot(){
+  for (var k in SHEET_SETS) measureInsets(SHEET_SETS[k]);   // body-accurate walk edges
   if (DEBUG) startDebug();
   if (CHANNEL) connect();
   else if (!DEBUG) document.getElementById("help").style.display = "grid";
+  // friendly note for a human who opened this in a normal browser (never shows inside OBS or in debug)
+  if (!window.obsstudio && !DEBUG && CHANNEL) document.getElementById("obsnote").style.display = "block";
 }
 function loadConfigs(done){
   if (!CHANNEL){ done(); return; }
