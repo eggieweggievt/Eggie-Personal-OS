@@ -763,7 +763,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.13";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.14";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -3007,35 +3007,42 @@ function renderOptimize(){
     <div class="panel">
     <div class="card-head"><h2 style="font-size:18px">🎯 ${live?"Livestream":"Video"} optimization</h2>${seg}</div>
     <p class="soft" style="font-size:12.5px;margin:0 0 12px">${live?"Set up a YouTube stream — get stream titles (your format + the game), a ready-to-paste description with your links, tags, and a going-live post.":"Title score, stronger titles, tags, 1S/2M/2L hashtags, and a full description — in your voice, learning from your channel."}${DEMO?` <b>(Deploy the analyze function + switch demo off to run it.)</b>`:""}</p>
-    ${pf.title||pf.topic?`<div class="soft-card" style="font-size:11.5px;margin:0 0 10px">🎯 pulled in from a content brief — tweak and optimize 🌸</div>`:""}
+    ${state.optFromBrief&&(pf.title||pf.topic)?`<div class="soft-card" style="font-size:11.5px;margin:0 0 10px">🎯 pulled in from a content brief — tweak and optimize 🌸</div>`:""}
     <div class="label">${live?"Game / stream focus":"Title / working title"}</div><input class="inp" id="oTitle" value="${esc(pf.title||"")}" placeholder="${live?"e.g. Elden Ring DLC — first deathless attempt":"e.g. I tried VTubing on a $0 budget"}" />
     ${live?"":`<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
       <div class="grow" style="min-width:140px"><div class="label">Format</div><select class="inp" id="oFormat"><option value="long" ${pf.format==="long"?"selected":""}>Long form</option><option value="short" ${pf.format==="short"?"selected":""}>Short form</option><option value="twitter" ${pf.format==="twitter"?"selected":""}>Twitter post</option></select></div>
       <div class="grow" style="min-width:140px"><div class="label">Platform</div><select class="inp" id="oPlatform">${Object.entries(CONFIG.platforms).map(([k,v])=>`<option value="${k}" ${pf.platform===k?"selected":""}>${v}</option>`).join("")}</select></div>
     </div>`}
     <div class="label" style="margin-top:10px">${live?"Anything special this stream? (vibe, goal, milestone)":"What's it about? (topic, hook, key points)"}</div><textarea class="inp" id="oTopic" rows="3" placeholder="${live?"subathon, first playthrough, chill vibes, charity goal…":"the angle, what happens, who it's for…"}">${esc(pf.topic||"")}</textarea>
-    <button class="btn btn-pink" data-act="runOptimize" style="margin-top:12px">✨ optimize</button>
-    <div id="optOut" style="margin-top:14px"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="runOptimize">✨ optimize</button>${state.optResult?`<button class="btn" data-act="clearOpt">✕ clear result</button>`:""}</div>
+    <div id="optOut" style="margin-top:14px">${state.optResult?optResultHTML(state.optResult,state.optResultMode||state.optMode):""}</div>
     <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
       <div class="label">🖼️ Thumbnail check</div>
       <p class="soft" style="font-size:12px;margin:4px 0 8px">Upload your ${live?"stream/VOD ":""}thumbnail — see it at real feed sizes and get a click-potential read.</p>
       <input type="file" id="thumbFile" accept="image/*" class="inp" />
-      <div id="thumbPrev" style="margin-top:10px"></div>
+      <div id="thumbPrev" style="margin-top:10px">${thumbPrevHTML()}</div>
       <button class="btn btn-pink" data-act="checkThumb" style="margin-top:8px">🖼️ check thumbnail</button>
-      <div id="thumbOut" style="margin-top:12px"></div>
+      <div id="thumbOut" style="margin-top:12px">${state.thumbResult?thumbResultHTML(state.thumbResult):""}</div>
     </div>
     </div>
   </div>`;
 }
+function thumbPrevHTML(){ if(!state._thumb)return ""; return `<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">${[[120,"mobile feed"],[320,"desktop"],[480,"large"]].map(([w,l])=>`<div style="text-align:center"><img src="${state._thumb}" style="width:${w}px;max-width:100%;border-radius:8px;border:1px solid var(--line)" /><div class="label" style="margin-top:3px">${w}px · ${l}</div></div>`).join("")}</div>`; }
+function thumbResultHTML(r){ if(!r)return ""; return `<div class="soft-card">
+      ${r.score!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:24px;font-family:var(--display)">${r.score}</span><span class="label">/ 100 click potential</span></div>`:""}
+      ${r.verdict?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.verdict)}</p>`:""}
+      ${(r.strengths&&r.strengths.length)?`<div class="label" style="margin-top:8px">working 💚</div>${r.strengths.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
+      ${(r.improvements&&r.improvements.length)?`<div class="label" style="margin-top:8px">try 🌸</div>${r.improvements.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
+    </div>`; }
 function loadThumb(file){
   const reader=new FileReader();
   reader.onload=()=>{ const img=new Image(); img.onload=()=>{
     const max=640, sc=Math.min(1,max/img.width), c=document.createElement("canvas");
     c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-    state._thumb=c.toDataURL("image/jpeg",0.82);
+    state._thumb=c.toDataURL("image/jpeg",0.82); state.thumbResult=null;   // new image → old verdict no longer applies
     const p=document.getElementById("thumbPrev");
-    if(p)p.innerHTML=`<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">${[[120,"mobile feed"],[320,"desktop"],[480,"large"]].map(([w,l])=>`<div style="text-align:center"><img src="${state._thumb}" style="width:${w}px;max-width:100%;border-radius:8px;border:1px solid var(--line)" /><div class="label" style="margin-top:3px">${w}px · ${l}</div></div>`).join("")}</div>`;
+    if(p)p.innerHTML=thumbPrevHTML();
   }; img.src=reader.result; };
   reader.readAsDataURL(file);
 }
@@ -3047,13 +3054,26 @@ async function checkThumb(){
   try{
     const r=await aiCall("thumbnail",{image:state._thumb,title:document.getElementById("oTitle").value});
     if(r.error){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(r.error)}</div>`; return; }
-    out.innerHTML=`<div class="soft-card">
-      ${r.score!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:24px;font-family:var(--display)">${r.score}</span><span class="label">/ 100 click potential</span></div>`:""}
-      ${r.verdict?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.verdict)}</p>`:""}
-      ${(r.strengths&&r.strengths.length)?`<div class="label" style="margin-top:8px">working 💚</div>${r.strengths.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
-      ${(r.improvements&&r.improvements.length)?`<div class="label" style="margin-top:8px">try 🌸</div>${r.improvements.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
-    </div>`;
+    state.thumbResult=r;   // persist across re-renders
+    out.innerHTML=thumbResultHTML(r);
   }catch(e){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(e.message||e)}</div>`; }
+}
+/* build the optimizer result HTML from a stored result object so it survives re-renders (tab switches) */
+function optResultHTML(r,mode){
+  if(!r) return "";
+  const ls=mode==="livestream";
+  const block=(label,text)=>`<div class="label" style="margin-top:10px">${label} <button class="btn" data-act="copyText" data-t="${esc(text)}" style="padding:2px 8px;margin-left:6px">copy</button></div><div class="soft" style="font-size:12px;white-space:pre-wrap;margin-top:4px;border:1px solid var(--line);border-radius:10px;padding:10px">${esc(text)}</div>`;
+  return `<div class="soft-card">
+      ${r.titleScore!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.titleScore}</span><span class="label">/ 100 title potential</span></div>`:""}
+      ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
+      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${ls?"YouTube stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
+      ${r.description?block(ls?"YouTube description":"Description",r.description):""}
+      ${(r.tags&&r.tags.length)?(()=>{ let acc=[],len=0; r.tags.forEach(t=>{ t=String(t).replace(/^#/,"").trim(); if(!t||acc.indexOf(t)>=0)return; const add=(acc.length?2:0)+t.length; if(len+add<=500){acc.push(t);len+=add;} }); const joined=acc.join(", "); return `<div class="label" style="margin-top:10px">${ls?"YouTube tags":"tags"} · ${acc.length} tags · ${len}/500 chars <button class="btn" data-act="copyText" data-t="${esc(joined)}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${esc(joined)}</div>`; })():""}
+      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">${ls?"YouTube hashtags":"hashtags · 1S/2M/2L"} <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
+      ${r.twitchTitle?block("Twitch title",r.twitchTitle):""}
+      ${r.twitterTitle?block("Twitter / X title",r.twitterTitle):""}
+      ${(r.tips&&r.tips.length)?`<div class="label" style="margin-top:10px">stream reminders 🌸</div>${r.tips.map(t=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(t)}</div>`).join("")}`:""}
+    </div>`;
 }
 async function runOptimize(){
   const out=document.getElementById("optOut"); if(!out)return;
@@ -3062,20 +3082,12 @@ async function runOptimize(){
   try{
     const fmtEl=document.getElementById("oFormat"), platEl=document.getElementById("oPlatform");
     const input={ kind:state.optMode, title:document.getElementById("oTitle").value, format:fmtEl?fmtEl.value:"long", platform:platEl?platEl.value:"youtube", topic:document.getElementById("oTopic").value, footer:CONFIG.descFooter };
+    // keep the typed inputs so a tab switch / re-render doesn't wipe them
+    state.optPrefill=Object.assign({},state.optPrefill,{title:input.title,topic:input.topic,format:input.format,platform:input.platform});
     const r=await aiCall("optimize",input);
     if(r.error){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
-    const block=(label,text)=>`<div class="label" style="margin-top:10px">${label} <button class="btn" data-act="copyText" data-t="${esc(text)}" style="padding:2px 8px;margin-left:6px">copy</button></div><div class="soft" style="font-size:12px;white-space:pre-wrap;margin-top:4px;border:1px solid var(--line);border-radius:10px;padding:10px">${esc(text)}</div>`;
-    out.innerHTML=`<div class="soft-card">
-      ${r.titleScore!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:26px;font-family:var(--display)">${r.titleScore}</span><span class="label">/ 100 title potential</span></div>`:""}
-      ${r.titleWhy?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.titleWhy)}</p>`:""}
-      ${(r.titles&&r.titles.length)?`<div class="label" style="margin-top:8px">${state.optMode==="livestream"?"YouTube stream titles":"stronger titles"} — tap to copy</div>${r.titles.map(t=>`<button class="hbtn" data-act="copyText" data-t="${esc(t)}" style="width:100%;margin-top:4px;font-size:12px">${esc(t)}</button>`).join("")}`:""}
-      ${r.description?block(state.optMode==="livestream"?"YouTube description":"Description",r.description):""}
-      ${(r.tags&&r.tags.length)?(()=>{ let acc=[],len=0; r.tags.forEach(t=>{ t=String(t).replace(/^#/,"").trim(); if(!t||acc.indexOf(t)>=0)return; const add=(acc.length?2:0)+t.length; if(len+add<=500){acc.push(t);len+=add;} }); const joined=acc.join(", "); return `<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube tags":"tags"} · ${acc.length} tags · ${len}/500 chars <button class="btn" data-act="copyText" data-t="${esc(joined)}" style="padding:2px 8px;margin-left:6px">copy all</button></div><div style="font-size:12px;margin-top:3px">${esc(joined)}</div>`; })():""}
-      ${(r.hashtags&&r.hashtags.length)?`<div class="label" style="margin-top:10px">${state.optMode==="livestream"?"YouTube hashtags":"hashtags · 1S/2M/2L"} <button class="btn" data-act="copyText" data-t="${esc(r.hashtags.join(" "))}" style="padding:2px 8px;margin-left:6px">copy</button></div><div style="font-size:12px;margin-top:3px">${r.hashtags.map(esc).join(" ")}</div>`:""}
-      ${r.twitchTitle?block("Twitch title",r.twitchTitle):""}
-      ${r.twitterTitle?block("Twitter / X title",r.twitterTitle):""}
-      ${(r.tips&&r.tips.length)?`<div class="label" style="margin-top:10px">stream reminders 🌸</div>${r.tips.map(t=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(t)}</div>`).join("")}`:""}
-    </div>`;
+    state.optResult=r; state.optResultMode=input.kind;   // persist the result across re-renders
+    out.innerHTML=optResultHTML(r,input.kind);
   }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
 }
 
@@ -3316,7 +3328,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="smart")return smart();
   if(act==="smartClear"){ state.smartIds=null; render(); }
   if(act==="openContent")return openContent(id);
-  if(act==="briefToOptimizer"){ const gv=i=>{const e=document.getElementById(i);return e?e.value:"";}; state.optPrefill={ title:gv("f_title"), topic:gv("f_script"), format:gv("f_format")||"long", platform:gv("f_platform")||"youtube" }; state.optMode="video"; document.getElementById("modal").innerHTML=""; setTab("optimize"); toast("Sent to the Optimizer 🎯"); return; }
+  if(act==="briefToOptimizer"){ const gv=i=>{const e=document.getElementById(i);return e?e.value:"";}; state.optPrefill={ title:gv("f_title"), topic:gv("f_script"), format:gv("f_format")||"long", platform:gv("f_platform")||"youtube" }; state.optFromBrief=true; state.optResult=null; state.optMode="video"; document.getElementById("modal").innerHTML=""; setTab("optimize"); toast("Sent to the Optimizer 🎯"); return; }
   if(act==="critToggle"){ const k=el.dataset.k; modalCrit[k]=!modalCrit[k]; el.classList.toggle("done"); el.querySelector(".check").classList.toggle("on"); }
   if(act==="saveContent")return saveContent(id);
   if(act==="delContentModal"){ await DB.delContent(id); document.getElementById("modal").innerHTML=""; toast("Deleted"); render(); }
@@ -3597,6 +3609,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="copyScript"){ const el2=document.getElementById("scrScript"); if(el2&&navigator.clipboard)navigator.clipboard.writeText(el2.innerText); toast("Copied 💗"); return; }
   if(act==="teleprompter"){ const src=el.dataset.src; const f=src?document.getElementById(src):null; const text=f?(f.value!=null?f.value:f.innerText):""; openTeleprompter(text); return; }
   if(act==="runOptimize")return runOptimize();
+  if(act==="clearOpt"){ state.optResult=null; return render(); }
   if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
   if(act==="saveReview")return saveReview();
@@ -3610,6 +3623,7 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
   if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
   if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
+  if(e.target&&(e.target.id==="oFormat"||e.target.id==="oPlatform")){ state.optPrefill=Object.assign({},state.optPrefill||{},{[e.target.id==="oFormat"?"format":"platform"]:e.target.value}); }
   if(e.target&&e.target.dataset&&e.target.dataset.mbnote){ const idn=e.target.dataset.mbnote; DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===idn?{...c,text:e.target.value}:c)})).catch(()=>{}); }
   if(e.target&&e.target.id==="mbFile"&&e.target.files&&e.target.files.length){ (async()=>{ const files=[...e.target.files]; let added=0;
     for(const f of files){ try{ const {url,ar}=await mbFileToDataURL(f); const w=180, h=Math.max(100,Math.min(260,Math.round(180/ar)));
@@ -3617,6 +3631,10 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
       await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"img",url,x:ox,y:oy,w,h}]})); added++;
     }catch(err){ console.error(err); } }
     toast(added?("Added "+added+" photo"+(added>1?"s":"")+" 🖼️"):"Couldn't read that image 🌸"); render(); })(); } });
+/* keep optimizer text inputs in state as they're typed, so a tab switch / re-render never wipes them */
+document.addEventListener("input",e=>{ const t=e.target; if(!t||!t.id)return;
+  if(t.id==="oTitle"||t.id==="oTopic"){ state.optPrefill=Object.assign({},state.optPrefill||{},{[t.id==="oTitle"?"title":"topic"]:t.value}); state.optFromBrief=false; }
+});
 /* sticky drag */
 let dragSticky=null,dragOff={x:0,y:0};
 document.addEventListener("pointerdown",e=>{ if(e.target.closest("button,textarea,input,select,a"))return; const h=e.target.closest('[data-act="stickyDrag"],[data-act="dragTimer"]'); if(!h)return; const el=h.dataset.act==="dragTimer"?document.getElementById("focusWidget"):h.closest(".sticky"); if(!el)return; if(el.classList.contains("sticky")&&RO)return; dragSticky=el; const r=el.getBoundingClientRect(); dragOff={x:e.clientX-r.left,y:e.clientY-r.top}; try{h.setPointerCapture(e.pointerId);}catch(er){} e.preventDefault(); });
