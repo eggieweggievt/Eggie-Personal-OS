@@ -763,7 +763,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.12";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-06.13";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -824,7 +824,7 @@ async function renderCalendar(){
     const ds=d.toLocaleDateString("en-CA");
     const inMonth=d.getMonth()===m, isToday=ds===TODAY;
     const dayShort=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
-    const streamChips=showStream?schedule.filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join(""):"";
+    const streamChips=showStream?slotsForDate(sent,ds).filter(s=>s.day===dayShort).map(s=>`<div class="cal-stream" data-act="editSchedule" title="Stream day — tap to edit your schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join(""):"";
     const gameChips=showGame?games.filter(g=>g.date===ds).map(g=>`<div class="cal-game" ${g.url?`data-act="gameLink" data-url="${esc(g.url)}"`:""} title="${esc(g.title)}${g.approx?" — date is a window/estimate, not officially confirmed":""}">🎮 ${esc(g.title)}${g.approx?" ~":""}</div>`).join(""):"";
     const contentChips=showContent?content.filter(c=>!c.parent_id&&c.scheduled_for===ds).map(c=>`<div class="cal-content" data-act="openContent" data-id="${c.id}" title="${esc(c.title)}">🎬 ${stageShort(c.stage)} ${esc(c.title)}</div>`).join(""):"";
     const dayEvents=showEvent?events.filter(ev=>ds>=ev.date && ds<=((ev.endDate&&ev.endDate>=ev.date)?ev.endDate:ev.date)):[];
@@ -995,7 +995,7 @@ async function renderHome(){
     money:()=>cardMoneyPulse(income,sponsors),
     creator:()=>cardCreator(day), session:()=>cardSession(day,content), goals:()=>cardGoals(goals),
     channel:()=>cardChannel(day), habits:()=>cardHabits(day), journal:()=>cardJournal(day),
-    schedule:()=>cardSchedule(goals.schedule), ship:()=>cardShipToday(content), sponsors:()=>cardSponsorsMini(sponsors),
+    schedule:()=>cardSchedule(goals), ship:()=>cardShipToday(content), sponsors:()=>cardSponsorsMini(sponsors),
     pipeline:()=>cardPipelineSnap(content), braindump:()=>cardBrainDump(captures),
   };
   /* fresh "home2" layout slot for the revamp — legacy cards start hidden but live in ＋cards */
@@ -1061,7 +1061,7 @@ async function manageCardsModal(tab, labels){
 /* ---- revamped home cards ---- */
 function cardToday(day,sent){
   const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
-  const slot=(sent.schedule||[]).find(s=>(s.day||"").slice(0,3)===wd);
+  const slot=slotsForDate(sent,TODAY).find(s=>(s.day||"").slice(0,3)===wd);
   const evs=(sent.calendarEvents||[]).filter(e=>e.date===TODAY||(e.endDate&&e.date<=TODAY&&e.endDate>=TODAY)).slice(0,4);
   const rems=(sent.reminders||[]).filter(r=>!r.done&&r.date<=TODAY).sort((a,b)=>String(a.date+(a.time||"")).localeCompare(String(b.date+(b.time||"")))).slice(0,4);
   const energy=day.energy||"medium";
@@ -1327,8 +1327,18 @@ async function saveContent(id){
   document.getElementById("modal").innerHTML=""; toast("Brief saved 🌸"); render();
 }
 /* ===================== HABITS (editable library) ===================== */
+/* §4 — a glanceable 7-day strip of how many habits got done each day (relative, non-punitive) */
+function habitsWeekStrip(rows){
+  const lib=state.lib||[]; const totalOf=id=>{const h=lib.find(x=>x.id===id);return (h&&h.total)||1;};
+  const byDate={}; (rows||[]).forEach(r=>byDate[r.date]=r.notes);
+  const days=[]; for(let i=6;i>=0;i--){ const d=dayAgo(-i); const counts=(byDate[d]&&byDate[d].habits&&byDate[d].habits.counts)||{}; const n=Object.keys(counts).filter(id=>(counts[id]||0)>=totalOf(id)).length; days.push({d,n}); }
+  const mx=Math.max(1,...days.map(x=>x.n)); const dl=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const bars=days.map(x=>{ const pct=x.n/mx, isT=x.d===TODAY; return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:36px;display:flex;align-items:flex-end"><div title="${x.d} — ${x.n} done" style="width:100%;border-radius:5px;height:${Math.max(8,Math.round(pct*100))}%;background:${x.n>0?'linear-gradient(180deg,#ec7faf,#a98fe0)':'var(--line)'};opacity:${(0.4+pct*0.6).toFixed(2)}"></div></div><span class="label" style="font-size:9px;${isT?'color:var(--pink-deep);font-weight:700':''}">${dl[new Date(x.d+"T00:00").getDay()]}</span></div>`; }).join("");
+  const total=days.reduce((a,x)=>a+x.n,0);
+  return `<div style="margin-top:12px"><div class="label" style="margin-bottom:5px">Last 7 days · ${total} habit${total===1?"":"s"} tended 🌷</div><div style="display:flex;gap:6px;align-items:flex-end">${bars}</div><p class="soft" style="font-size:10.5px;margin:6px 0 0">Just a gentle picture — a quiet day is rest, not a miss. 💗</p></div>`;
+}
 async function renderHabits(){
-  const day=await DB.daily(TODAY); const energy=day.energy||"medium", streamDay=!!day.streamDay;
+  const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(7)]); const energy=day.energy||"medium", streamDay=!!day.streamDay;
   const counts=(day.habits&&day.habits.counts)||{};
   const used=[...new Set(state.lib.map(h=>h.cat))];
   const cats=[...HABIT_CATS.map(c=>c.name).filter(n=>used.includes(n)), ...used.filter(n=>!HABIT_CATS.some(c=>c.name===n))];
@@ -1354,6 +1364,7 @@ async function renderHabits(){
         <div><div class="label" style="margin-bottom:4px">Energy 🥄</div><div class="seg">${eOpt("low","🌙","Low")}${eOpt("medium","🌤","Medium")}${eOpt("high","🌞","High")}</div></div>
         <button class="hbtn ${streamDay?'done':''}" data-act="streamDay" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center"><span class="check ${streamDay?'on':''}"></span>🎙️ Stream day</button>
       </div>
+      ${habitsWeekStrip(rows)}
     </div>${groups}</div>`;
 }
 function habitModal(h){
@@ -2063,6 +2074,21 @@ function healthChartMultiSVG(rows,metrics,days){
     <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px">${legend.join("")}</div>
     <div class="soft" style="font-size:11px;margin-top:6px;text-align:center">each line scaled to its own range (0–100%) so you can compare shapes 🌸</div>`;
 }
+/* §2 — a warm, spoon-aware one-liner that ties today's tracked data to how she might feel and
+   gently encourages her. Rotates daily so it stays fresh. Reads her own health logs, never weight. */
+function healthInsight(rows){
+  const R=(rows||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>r.notes&&r.notes.health).filter(Boolean);
+  if(R.length<2) return "";
+  const last=R[R.length-1], prev=R[R.length-2], msgs=[];
+  if(last.water!=null && Number(last.water)<4) msgs.push("Your water's on the low side today 💧 — with POTS, a few more cups (and a pinch of salt) can soften the dizziness and fatigue. Sip when you remember, no pressure. 🌸");
+  if((last.dizziness>=3||last.lighthead>=3) && Number(last.salt||0)<2) msgs.push("Lightheaded today and salt's running low — a salty snack or electrolytes might help your blood volume. 🧂 Rise slowly and be kind to yourself. 💗");
+  if(last.sleepH!=null && Number(last.sleepH)<6) msgs.push("Short sleep last night — if today feels foggy or low-spoon, that's your body being reasonable, not you falling short. Lower the bar today. 🌙");
+  if(last.pain!=null && prev.pain!=null && Number(last.pain)>Number(prev.pain)+1) msgs.push("Pain ticked up since your last check-in 💜 — a flare-aware day. Pacing and a recovery block are completely valid choices, not giving up.");
+  if(Number(last.pain||0)<=2 && Number(last.fatigue||0)<=2) msgs.push("Pain and fatigue both gentle today ✨ — a lighter-body day. If a spare spoon shows up, something small and fun could feel really lovely.");
+  if(last.water!=null && Number(last.water)>=8) msgs.push("Look at that hydration today 💧✨ — future-you on a standing-up day says thank you. Lovely self-care.");
+  if(!msgs.length) return "Every check-in is just one dot 🌷 — the pattern across the weeks is what tells your story, never any single day.";
+  return msgs[parseInt(TODAY.replace(/-/g,""),10)%msgs.length];
+}
 async function renderHealth(){
   const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(30)]);
   const pat=healthPatterns(rows);
@@ -2153,7 +2179,10 @@ async function renderHealth(){
              <p class="soft" style="font-size:11px;margin:12px 0 0">These are gentle observations from your own tracking — patterns, not proof, and never a diagnosis. Worth a mention to your care team if something rings true. 🐙</p>`
           : `<p class="soft" style="font-size:12.5px;margin:0">Nothing's jumping out across your recent days — which is honestly a fine thing. I'll keep quietly watching as you log. 💗</p>`)}
     </div>`;
-  return modularPage("health",{today:"How are you today",pots:"POTS care",joints:"Joints & pacing",meds:"Meds today",flare:"Flare + notes",trends:"Trends",patterns:"Gentle patterns"},[["today",HP.today],["pots",HP.pots],["joints",HP.joints],["meds",HP.meds],["flare",HP.flare],["trends",HP.trends],["patterns",HP.patterns]],6);
+  const insight=healthInsight(rows);
+  const banner=insight?`<div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);max-width:none;margin-bottom:14px"><div style="display:flex;gap:11px;align-items:flex-start"><span style="font-size:24px;flex:0 0 auto">🐙</span><p style="font-size:13px;line-height:1.55;margin:0">${insight}</p></div></div>`:"";
+  const grid=modularPage("health",{today:"How are you today",pots:"POTS care",joints:"Joints & pacing",meds:"Meds today",flare:"Flare + notes",trends:"Trends",patterns:"Gentle patterns"},[["today",HP.today],["pots",HP.pots],["joints",HP.joints],["meds",HP.meds],["flare",HP.flare],["trends",HP.trends],["patterns",HP.patterns]],6);
+  return banner+grid;
 }
 async function medsModal(){
   const meds=await loadMeds();
@@ -3054,21 +3083,47 @@ async function runOptimize(){
 const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 async function loadSchedule(){ const s=await DB.daily(SENTINEL); return s.schedule||[]; }
 async function saveSchedule(list){ await DB.saveDaily(SENTINEL,n=>({...n,schedule:list})); }
-function cardSchedule(sched){
-  sched=sched||[]; const order=d=>DAYS.indexOf(d);
+/* ── §5 per-week schedule: every week is its OWN plan (no infinite repeat). The legacy flat
+   `schedule` array is the fallback for THIS week only and is NEVER deleted, so nothing is lost. ── */
+function weekStartISO(off){ const m=mondayOf(TODAY); if(!off)return m; const d=new Date(m+"T00:00"); d.setDate(d.getDate()+off*7); return d.toLocaleDateString("en-CA"); }
+function weekSlots(sent,wkISO){ const sw=(sent&&sent.schedWeeks)||{}; if(sw[wkISO])return sw[wkISO]; if(wkISO===mondayOf(TODAY))return (sent&&sent.schedule)||[]; return []; }
+function slotsForDate(sent,ds){ return weekSlots(sent,mondayOf(ds)); }
+async function setWeekSlots(wkISO,fn){ await DB.saveDaily(SENTINEL,n=>{ const sw={...(n.schedWeeks||{})}; const base=sw[wkISO]?sw[wkISO].slice():(wkISO===mondayOf(TODAY)?(n.schedule||[]).slice():[]); sw[wkISO]=fn(base); return {...n,schedWeeks:sw}; }); }
+function weekLabel(off){ if(off===0)return "This week"; if(off===1)return "Next week"; if(off===-1)return "Last week"; const d=new Date(weekStartISO(off)+"T00:00"); return "Week of "+d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+/* per-day ideas for empty days. REAL 🎮 dates come ONLY from the calendar game layer (so they land on
+   the right day and aren't invented); every other day gets a date-agnostic activity idea. */
+function streamSuggestions(sent,wkISO){ const start=new Date(wkISO+"T00:00"); const games=(GAME_RELEASES||[]).concat(sent.gameEvents||[]); const byDay={};
+  games.forEach(g=>{ if(!g.date)return; const d=new Date(g.date+"T00:00"); const diff=Math.round((d-start)/86400000); if(diff>=0&&diff<7){ const wd=DAYS[(d.getDay()+6)%7]; if(!byDay[wd])byDay[wd]=g.title; } });
+  const ideas=["Cozy variety stream","Just chatting + a game","Art / creative stream","Community game night","Chill long stream","Reacts / watch-along","Catch-up cozy games"];
+  return DAYS.map((wd,i)=>byDay[wd]?{day:wd,text:byDay[wd],real:true}:{day:wd,text:ideas[i%ideas.length],real:false}); }
+function cardSchedule(sent){
+  const sched=weekSlots(sent,mondayOf(TODAY)); const order=d=>DAYS.indexOf(d);
   const rows=sched.slice().sort((a,b)=>order(a.day)-order(b.day)).map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav" style="min-width:36px;text-align:center">${esc(s.day)}</span><span class="grow" style="font-size:12.5px">${esc(s.title||"Stream")}</span><span class="label">${esc(s.time||"")}</span></div>`).join("")||`<div class="soft" style="font-size:12.5px">No stream days set — tap edit to add yours. 🌸</div>`;
-  return `<section class="panel"><div class="card-head"><span class="label">Stream schedule 🗓️</span><button class="btn" data-act="editSchedule" ${RO?"disabled":""}>edit</button></div>${rows}</section>`;
+  return `<section class="panel"><div class="card-head"><span class="label">Stream schedule 🗓️ · this week</span><button class="btn" data-act="editSchedule" ${RO?"disabled":""}>edit</button></div>${rows}</section>`;
 }
-function scheduleModal(){ loadSchedule().then(sched=>{
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🗓️ Stream schedule</h3><button class="btn" data-act="closeModal">✕</button></div>
-    ${sched.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav">${esc(s.day)}</span><span class="grow" style="font-size:12.5px">${esc(s.title||"")} <span class="label">${esc(s.time||"")}</span></span><button class="label" data-act="delSlot" data-id="${s.id}" style="background:none;border:none;color:var(--rose)">remove</button></div>`).join("")||`<div class="soft" style="font-size:12.5px">No slots yet.</div>`}
-    <div class="label" style="margin:12px 0 4px">Add a stream day</div>
+function scheduleModal(){ DB.daily(SENTINEL).then(sent=>{
+  const off=state.schedWeekOff||0, wk=weekStartISO(off);
+  const order=d=>DAYS.indexOf(d);
+  const sched=weekSlots(sent,wk).slice().sort((a,b)=>order(a.day)-order(b.day));
+  const filled=new Set(sched.map(s=>s.day));
+  const sug=streamSuggestions(sent,wk).filter(x=>!filled.has(x.day));
+  const rows=sched.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav">${esc(s.day)}</span><span class="grow" style="font-size:12.5px">${esc(s.title||"")} <span class="label">${esc(s.time||"")}</span></span><button class="label" data-act="delSlot" data-id="${esc(s.id)}" style="background:none;border:none;color:var(--rose)">remove</button></div>`).join("")||`<div class="soft" style="font-size:12.5px">This week's blank so far — fill it from the ideas below, or add a day. 🌸</div>`;
+  const sugBlock=sug.length?`<div class="label" style="margin:14px 0 5px">💡 ideas for the empty days</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${sug.map(x=>`<button class="chiptog" data-act="addSug" data-day="${esc(x.day)}" data-text="${esc(x.text)}" title="add to ${esc(x.day)}" style="font-size:11.5px">${x.real?"🎮 ":""}${esc(x.day)} · ${esc(x.text)}</button>`).join("")}</div>
+    <p class="soft" style="font-size:10.5px;margin:6px 0 0">🎮 = a real dated game from your calendar that week; the rest are just starting ideas, not fixed plans.</p>`:"";
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:460px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🗓️ Stream schedule</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div style="display:flex;align-items:center;gap:8px;margin:2px 0 10px"><button class="btn" data-act="schedWeek" data-d="-1" title="previous week">‹</button><span class="grow" style="text-align:center;font-weight:700;font-size:13px">${esc(weekLabel(off))}</span><button class="btn" data-act="schedWeek" data-d="1" title="next week">›</button>${off!==0?`<button class="btn" data-act="schedThisWeek">↺ today</button>`:""}</div>
+    <p class="soft" style="font-size:11px;margin:0 0 10px">Each week is its own plan — what you set here doesn't repeat into other weeks. 🐙</p>
+    ${rows}
+    ${sugBlock}
+    <div class="label" style="margin:14px 0 4px">Add a stream day to ${esc(weekLabel(off).toLowerCase())}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap"><select class="inp" id="slDay" style="width:88px">${DAYS.map(d=>`<option value="${d}">${d}</option>`).join("")}</select><input class="inp" id="slTime" placeholder="4–6pm EDT" style="flex:1;min-width:90px" /><input class="inp" id="slTitle" placeholder="what / game" style="flex:2;min-width:120px" /></div>
     <button class="btn btn-pink" data-act="addSlot" style="margin-top:8px">+ add</button>
   </div></div>`;
 }); }
-async function addSlot(){ const day=document.getElementById("slDay").value,time=document.getElementById("slTime").value.trim(),title=document.getElementById("slTitle").value.trim(); const sched=await loadSchedule(); sched.push({id:"s"+uid().slice(0,8),day,time,title}); await saveSchedule(sched); scheduleModal(); }
-async function delSlot(id){ const sched=(await loadSchedule()).filter(s=>s.id!==id); await saveSchedule(sched); scheduleModal(); }
+async function addSlot(){ const off=state.schedWeekOff||0, wk=weekStartISO(off); const day=document.getElementById("slDay").value,time=document.getElementById("slTime").value.trim(),title=document.getElementById("slTitle").value.trim(); await setWeekSlots(wk,base=>base.concat([{id:"s"+uid().slice(0,8),day,time,title}])); scheduleModal(); render(); }
+async function delSlot(id){ const off=state.schedWeekOff||0, wk=weekStartISO(off); await setWeekSlots(wk,base=>base.filter(s=>s.id!==id)); scheduleModal(); render(); }
+async function addSug(day,text){ const off=state.schedWeekOff||0, wk=weekStartISO(off); await setWeekSlots(wk,base=>base.concat([{id:"s"+uid().slice(0,8),day,time:"",title:text}])); scheduleModal(); render(); }
 function cardJournal(day){
   return `<section class="panel"><div class="card-head"><span class="label">Journal 🌙</span></div>
     <p class="soft" style="font-size:12px;margin:0 0 6px">A line about today — how it went, a thought, nothing fancy.</p>
@@ -3490,9 +3545,12 @@ document.addEventListener("click",async(e)=>{
   if(act==="stickyColor"){ const cols=["#fff3b0","#ffd6e8","#d6f5e3","#e0d6fb","#cfe8ff"]; const n=STICKIES.find(s=>s.id===id); if(n){const i=cols.indexOf(n.color); n.color=cols[(i+1)%cols.length]; saveStickies(); renderStickies();} return; }
   if(act==="delSticky"){ STICKIES=STICKIES.filter(s=>s.id!==id); saveStickies(); renderStickies(); return; }
   if(act==="stickyFmt"){ const n=STICKIES.find(s=>s.id===id); if(!n)return; const f=el.dataset.f; if(f==="inc")n.fs=Math.min(30,(n.fs||12.5)+1.5); else if(f==="dec")n.fs=Math.max(9,(n.fs||12.5)-1.5); else n[f]=!n[f]; saveStickies(); renderStickies(); return; }
-  if(act==="editSchedule")return scheduleModal();
+  if(act==="editSchedule"){ state.schedWeekOff=0; return scheduleModal(); }
   if(act==="addSlot")return addSlot();
   if(act==="delSlot")return delSlot(id);
+  if(act==="addSug")return addSug(el.dataset.day,el.dataset.text);
+  if(act==="schedWeek"){ state.schedWeekOff=(state.schedWeekOff||0)+Number(el.dataset.d); return scheduleModal(); }
+  if(act==="schedThisWeek"){ state.schedWeekOff=0; return scheduleModal(); }
   if(act==="saveJournal"){ const v=document.getElementById("journalBox").value; await DB.saveDaily(TODAY,n=>({...n,journal:v})); toast("Journaled 🌙"); return; }
   if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
@@ -3881,7 +3939,7 @@ render();
         await DB.addIncome({kind:a.kind||"in",source:a.source||"other",category:a.category||null,amount:Number(a.amount)||0,note:a.note||null});
         return "💰 logged "+(a.kind==="out"?"expense":"income")+" $"+(Number(a.amount)||0);
       case "addScheduleSlot":
-        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{schedule:(n.schedule||[]).concat([{id:"s"+uid().slice(0,8),day:a.day,time:a.time||"",title:a.title||"Stream"}])}); });
+        await DB.saveDaily(SENTINEL,function(n){ var wk=mondayOf(TODAY); var sw=Object.assign({},n.schedWeeks||{}); var base=sw[wk]?sw[wk].slice():((n.schedule||[]).slice()); base=base.concat([{id:"s"+uid().slice(0,8),day:a.day,time:a.time||"",title:a.title||"Stream"}]); sw[wk]=base; return Object.assign({},n,{schedWeeks:sw}); });
         return "🔴 added "+a.day+" to your stream schedule";
       case "setStreamDay":
         await DB.saveDaily(TODAY,function(n){ return Object.assign({},n,{streamDay:!!a.on}); });
@@ -4111,8 +4169,8 @@ render();
       }
       case "delScheduleSlot": {
         var dy=(a.day||"").slice(0,3).toLowerCase(); var hit=null;
-        await DB.saveDaily(SENTINEL,function(n){ var sch=(n.schedule||[]).filter(function(s){ if(!hit&&(s.day||"").slice(0,3).toLowerCase()===dy){hit=s;return false;} return true; }); return Object.assign({},n,{schedule:sch}); });
-        return hit? "🗑 removed "+hit.day+" from your stream schedule" : "no "+(a.day||"")+" slot found 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ var wk=mondayOf(TODAY); var sw=Object.assign({},n.schedWeeks||{}); var base=sw[wk]?sw[wk].slice():((n.schedule||[]).slice()); base=base.filter(function(s){ if(!hit&&(s.day||"").slice(0,3).toLowerCase()===dy){hit=s;return false;} return true; }); sw[wk]=base; return Object.assign({},n,{schedWeeks:sw}); });
+        return hit? "🗑 removed "+hit.day+" from this week's stream schedule" : "no "+(a.day||"")+" slot found this week 🌸";
       }
       case "delContent": {
         var list=await DB.content(); var nm=(a.name||"").toLowerCase();
@@ -4404,7 +4462,7 @@ render();
       var sent=await DB.daily(SENTINEL);
       var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
       var evs=(sent.calendarEvents||[]).filter(function(e){ return e.date===TODAY||(e.endDate&&e.date<=TODAY&&e.endDate>=TODAY); });
-      var slot=(sent.schedule||[]).find(function(s){ return (s.day||"").slice(0,3)===wd; });
+      var slot=slotsForDate(sent,TODAY).find(function(s){ return (s.day||"").slice(0,3)===wd; });
       var openT=(sent.tasks||[]).filter(function(t){ return !t.done; }).length;
       var ch=artChallengeState(sent);
       var bits=[];
