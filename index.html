@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.14";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.15";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.15: chatting with you (Eugene) got comfier — the message box is bigger, grows as she types, and Shift+Enter makes a new line (Enter still sends); same in the floating pet bubble",
   "2026-06-10.14: fixed the optimizer 'r.tags.forEach is not a function' crash — results now render even when the AI returns lists as comma-strings (optimizer + thumbnail check)",
   "2026-06-10.13: Clients tab streamlined — now modular cards you can reorder/hide like Home (fixed: ☀️ today's three had silently vanished), 🔍 live search across clients AND needs, tap-the-pill to move a need along (no dragging), 🧹 sweep done piles, 📣 message-many broadcasts one note to every checked client channel ({name} personalizes), inbox senders are clickable",
   "2026-06-10.12: fixed the teleport-to-top glitch — checking anything off now keeps your scroll position on every page",
@@ -3504,8 +3505,8 @@ async function renderEugene(){
       <div class="eu-log" id="euLog">${logHtml}${busyHtml}</div>
       ${showAsks?asks:""}
       ${state.euImage?`<div style="display:flex;align-items:center;gap:8px;padding:6px 14px 0"><img src="${state.euImage.thumb}" alt="attached" style="height:42px;border-radius:8px"/><span class="label">photo attached — Eugene will look at it 🐙</span><button class="ft-ic" data-act="euPhotoClear" title="remove photo">✕</button></div>`:""}
-      <div class="eu-input">
-        <input class="inp" id="euInput" placeholder="${state.euImage?"say something about the photo (optional)…":"ask Eugene anything…"}" ${state.eugeneBusy?"disabled":""} />
+      <div class="eu-input" style="align-items:flex-end">
+        <textarea class="inp" id="euInput" rows="2" placeholder="${state.euImage?"say something about the photo (optional)…":"ask Eugene anything… (Shift+Enter = new line)"}" ${state.eugeneBusy?"disabled":""} style="flex:1;resize:none;min-height:60px;max-height:170px;line-height:1.5;font-size:14px" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,170)+'px'"></textarea>
         <button class="btn" data-act="euPhoto" title="show Eugene a photo">📷</button>
         <input type="file" id="euPhotoFile" accept="image/*" style="display:none"/>
         <button class="btn" id="euMicBtn" data-act="euMic" title="talk instead of type">${euRecOn?'⏹':'🎙️'}</button>
@@ -3530,7 +3531,7 @@ async function euAttachPhoto(file){
     const data=await euScaleImage(file,1280,0.85), thumb=await euScaleImage(file,160,0.7);
     state.euImage={data,thumb};
     if(state.tab!=="eugene"){ setTab("eugene"); } else { render(); }
-    const ni=document.getElementById("euInput"); if(ni&&keep) ni.value=keep;
+    const ni=document.getElementById("euInput"); if(ni&&keep){ ni.value=keep; ni.style.height="auto"; ni.style.height=Math.min(ni.scrollHeight,170)+"px"; }
   }catch(e){ toast("couldn't read that photo 🌸 (iPhone HEIC? try a screenshot or JPEG)"); }
 }
 /* paste a screenshot straight into the Eugene tab (skipped when typing in the floating pet chat — that has its own paste) */
@@ -4794,7 +4795,7 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="ledAmount"||t.id==="ledNote")document.querySelector('[data-act="addLedger"]').click();
   if(t.id==="sponsorBrand")document.querySelector('[data-act="addSponsor"]').click();
   if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
-  if(t.id==="euInput"){ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
+  if(t.id==="euInput"){ if(e.shiftKey)return; /* Shift+Enter = new line */ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
   if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
   if(t.id==="cl_name"){ const b=document.querySelector('[data-act="clientAdd"]'); if(b)b.click(); }
   if(t.id==="cm_tasktext"){ const b=document.querySelector('[data-act="clientTaskAdd"]'); if(b)b.click(); }

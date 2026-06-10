@@ -54,8 +54,8 @@
     .pet-msg{font-size:12.5px;line-height:1.45;padding:8px 11px;border-radius:14px;max-width:86%;white-space:pre-wrap;word-break:break-word;}
     .pet-msg.me{align-self:flex-end;background:linear-gradient(135deg,${c.accentFrom},${c.accentTo});color:#fff;border-bottom-right-radius:4px;}
     .pet-msg.pet{align-self:flex-start;background:#f6f8ff;border:1px solid #e4e6f5;color:#3a3550;border-bottom-left-radius:4px;}
-    .pet-input{display:flex;gap:6px;padding:10px;border-top:1px solid #e4e6f5;}
-    .pet-input input{flex:1;border:1.5px solid #dde0f1;border-radius:12px;padding:9px 12px;font:inherit;font-size:13px;color:#3a3550;outline:none;}
+    .pet-input{display:flex;gap:6px;padding:10px;border-top:1px solid #e4e6f5;align-items:flex-end;}
+    .pet-input textarea{flex:1;border:1.5px solid #dde0f1;border-radius:12px;padding:9px 12px;font:inherit;font-size:13px;color:#3a3550;outline:none;resize:none;min-height:52px;max-height:140px;line-height:1.45;}
     .pet-input button{border:none;border-radius:12px;padding:8px 14px;font:inherit;font-weight:700;font-size:13px;color:#fff;cursor:pointer;background:linear-gradient(135deg,${c.accentFrom},${c.accentTo});}
     .pet-sugg-h{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#9b96b6;font-weight:700;margin:2px 1px 0;}
     .pet-sugg{display:flex;flex-direction:column;gap:6px;margin-top:2px;}
@@ -203,7 +203,7 @@
         '<button class="pet-x" data-close>✕</button></div>' +
         '<div class="pet-log" id="petLog">' + logHtml + (S.busy ? '<div class="pet-msg pet">…thinking</div>' : "") + suggHtml() + "</div>" +
         (S.img ? '<div style="display:flex;align-items:center;gap:7px;padding:7px 10px 0"><img src="' + S.img.thumb + '" alt="attached" style="height:34px;border-radius:7px"><span style="font-size:11px;color:#8d87a8;flex:1">photo attached 📷</span><button data-imgclear style="border:none;background:none;cursor:pointer;color:#c98ab0;font-size:13px">✕</button></div>' : "") +
-        '<div class="pet-input"><input id="petInput" placeholder="' + (S.img ? "about this photo… (optional)" : "ask…") + '" ' + (S.busy ? "disabled" : "") + '>' +
+        '<div class="pet-input"><textarea id="petInput" rows="2" placeholder="' + (S.img ? "about this photo… (optional)" : "ask… (Shift+Enter = new line)") + '" ' + (S.busy ? "disabled" : "") + ' oninput="this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,140)+\'px\'"></textarea>' +
         (c.pickPhoto ? '<button data-photo title="show me a photo" ' + (S.busy ? "disabled" : "") + '>📷</button><input type="file" data-photofile accept="image/*" style="display:none">' : "") +
         '<button data-send ' + (S.busy ? "disabled" : "") + ">send</button></div>";
       chat.classList.toggle("pet-big", !!S.big);
@@ -221,7 +221,7 @@
       }
       var pc = chat.querySelector("[data-imgclear]"); if (pc) pc.onclick = function () { S.img = null; paintChat(); };
       var input = chat.querySelector("#petInput");
-      input.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); send(); } };
+      input.onkeydown = function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
       var lg = chat.querySelector("#petLog"); if (lg) lg.scrollTop = lg.scrollHeight;
       if (!S.busy) try { input.focus(); } catch (e) { }
     }
