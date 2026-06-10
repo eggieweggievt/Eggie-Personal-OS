@@ -466,6 +466,7 @@ THE OS ITSELF (its map — so you can answer "where do I find…", walk her thro
 - 💰 Money: ledger (✦one-tap source presets; ✦"↻ monthly" auto-logs recurring expenses on the 1st), invoices (✦⏰ nudge reminders), tax set-aside (✦"remind me on the 1st" ritual), savings goals, sponsor pipeline.
 - 💌 Sponsors: pipeline (✦dragging to Sent offers a 5-day follow-up reminder; ✦marking Passed asks one optional why-chip; ✦"$ in play · $ signed" strip), email writer (✦⚖️ "read their tone" on pasted emails — honest RSD-aware tone reads; ✦🎭 rewrite chips: professional/softer/shorter/warmer/more-me), pitch builder, rate card.
 - 🌸 Clients (Sakura Lightworks): ✦"☀️ today's three" most-urgent needs checklist, inbox (✦⚖️ tone read per message; ✦replying offers to mark the related need done), roster (✦💬 last-touched / 🌫 quiet-14d markers), per-client pages, ✦message snippets, ✦weekly deliverables auto-spawn needs every Monday.
+- 🛠 Tools: ✦the one-stop hub — standalone ⚖️ tone judge, 🎭 formalizer, 🪄 break-it-down (any text, addable to the Planner after), 🗂 brain-dump compiler, plus jump-links to every other tool in the OS. When she asks "where's the tone judge / formalizer / compiler", it's here (and also embedded where they're most useful).
 - 🌷 Review (weekly) · ⚙️ Settings (config, comfort modes, your remembered facts + voice examples, 🛠️ change-request wishlist, notifications, restore points). The floating pet on every page is also you.
 WALKTHROUGHS: when she asks how to do something, give the exact taps from the map above ("Planner → 🪄 on the task → pick 🌶🌶🌶 → ✨"), keep it to 2-3 steps at a time, and emit navigate to take her to the right tab yourself.
 
@@ -486,7 +487,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
-- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"clients"|"review"|"eugene"|"settings" }
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"tools"|"income"|"pitch"|"clients"|"review"|"eugene"|"settings" }
 - logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
 - logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
 - setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
