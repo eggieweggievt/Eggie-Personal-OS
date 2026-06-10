@@ -829,7 +829,19 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.9";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+/* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
+   current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
+   feature change updates this list (newest first, keep ~12 lines, one line per change). */
+const OS_NEWS=[
+  "2026-06-10.10: you (Eugene) now receive this live changelog with every message — you are never out of date",
+  "2026-06-10.9: Home rebuilt — 💗 body & brain card first (spoons/mood/meds/insight), ☀️ today's plate, clients' three; Health + Care moved onto the MAIN tab bar",
+  "2026-06-10.8: 🛠 Tools hub tab (tone judge, formalizer, break-it-down, compiler + links); Planner board = full parity with list (✓/☀/🪄/＋/subs/tuck); simple-mode columns renameable via ✎; taps now give instant feedback",
+  "2026-06-10.7: goblin tools everywhere — 🪄 task break-down w/ spice + estimates, ⚖️ tone judge (sponsors+inbox), 🎭 rewrite chips, 🗂 capture compiler; your aimless/stuck guide-me mode + focusTask action",
+  "2026-06-10.6: ADHD pass on every tab — Today lens + ☀ stars + tuck-away (Planner), week-agenda + quick-add calendar, capture box on Home, triage ritual + 🌿 simple board (Content), art focus mode + timer auto-log, money presets + ↻ recurring, sponsor follow-up offers, clients today's-three + snippets + weekly auto-needs, your daily bubble = energy check-in",
+  "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
+  "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
+];
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -5146,7 +5158,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
   window.runClientRelay=runClientRelay;
   async function runAgent(q,img){
     var hist=window.EUGENE_HIST.slice(-16);
-    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist,image:img||undefined});
+    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist,image:img||undefined,appBuild:APP_BUILD,news:OS_NEWS});
     if(r && r._needsBackend) return "I can actually run things once the analyze function is deployed + demo mode is off 🐙 — redeploy and I'll be your hands! 🌸";
     if(r && r.error) throw new Error(r.error);
     var acts = Array.isArray(r.actions)? r.actions : [];
