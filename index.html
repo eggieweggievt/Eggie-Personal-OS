@@ -763,7 +763,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-06.14";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.1";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2239,6 +2239,9 @@ async function renderSettings(){
       <div class="label" style="margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center">🎓 voice examples <button class="btn" data-act="teachAdd" data-kind="any" style="padding:2px 9px">＋ add</button></div>
       <p class="soft" style="font-size:11.5px;margin:0 0 6px">Real posts/scripts/emails you've written (or corrections). Eugene matches these when he writes for you.</p>
       ${(sent.eqVoice||[]).length?(sent.eqVoice||[]).slice().reverse().map(v=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav" style="flex:0 0 auto">${v.kind==="any"?"🌸":v.kind==="twitter"?"🐦":v.kind==="script"?"🎬":v.kind==="email"?"✉️":"🎯"}</span><div class="grow" style="min-width:0"><div style="font-size:12px;white-space:pre-wrap;max-height:60px;overflow:hidden">${esc(v.example)}</div>${v.note?`<div class="soft" style="font-size:11px;margin-top:2px">↳ ${esc(v.note)}</div>`:""}</div><button class="ft-ic" data-act="teachDel" data-id="${v.id}" style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">None yet — hit 🎓 teach Eugene on any output, or ＋ add a real example.</p>`}
+      <div class="label" style="margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center">🛠️ change requests for Claude ${(sent.osChangeRequests||[]).some(r=>r.status!=="done")?`<button class="btn" data-act="crCopy" style="padding:2px 9px">📋 copy for Claude</button>`:""}</div>
+      <p class="soft" style="font-size:11.5px;margin:0 0 6px">Tell Eugene “request that the OS…” / “add to the wishlist…” — here or via Discord /ask on the road. Requests are saved as a record; paste them into a Claude chat and he'll build them.</p>
+      ${(sent.osChangeRequests||[]).length?(sent.osChangeRequests||[]).slice().reverse().map(r=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:0 0 auto">${r.status==="done"?"✅":"🛠️"}</span><div class="grow" style="min-width:0"><div style="font-size:12.5px;${r.status==="done"?"opacity:.55;text-decoration:line-through":""}">${esc(r.title)}</div>${r.detail?`<div class="soft" style="font-size:11px;margin-top:2px;white-space:pre-wrap">${esc(r.detail)}</div>`:""}<div class="soft" style="font-size:10.5px;margin-top:2px">${esc(r.date||"")}${r.area?" · "+esc(r.area):""}</div></div><button class="ft-ic" data-act="crDone" data-id="${r.id}" ${RO?"disabled":""} title="${r.status==="done"?"reopen":"mark built"}">${r.status==="done"?"↺":"✓"}</button><button class="ft-ic" data-act="crDel" data-id="${r.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">None yet — tell Eugene “request that…” and it lands here for Claude.</p>`}
     </div>
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏰ Notifications</h2></div>
@@ -2763,15 +2766,16 @@ const EUGENE_ASKS=[
   "Give me 3 cozy short ideas for this week",
   "Add a stream this Friday at 4pm",
   "What's on my calendar coming up?",
-  "Score this title for me: I tried VTubing on $0"
+  "Score this title for me: I tried VTubing on $0",
+  "What's on my OS wishlist for Claude?"
 ];
 function renderEugene(){
   if(state.eugeneLog==null){ try{ state.eugeneLog=JSON.parse(localStorage.getItem("eugene-log")||"[]"); }catch(e){ state.eugeneLog=[]; } }
   const log=state.eugeneLog||[];
   const max=!!state.eugeneMax;
   const logHtml = log.length
-    ? log.map(m=>`<div class="eu-msg ${m.role==="me"?"me":"pet"}">${esc(m.text)}</div>`).join("")
-    : `<div class="eu-msg pet">Hi, I'm Eugene! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. Tap an example below to start. 🌸</div>`;
+    ? log.map(m=>`<div class="eu-msg ${m.role==="me"?"me":"pet"}">${m.img?`<img src="${m.img}" alt="photo" style="display:block;max-width:180px;max-height:140px;border-radius:10px;margin:0 0 6px"/>`:""}${esc(m.text)}</div>`).join("")
+    : `<div class="eu-msg pet">Hi, I'm Eugene! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. You can also 📷 show me a photo, or ask me to note a change request for Claude. Tap an example below to start. 🌸</div>`;
   const busyHtml = state.eugeneBusy ? `<div class="eu-msg pet">…thinking 🐙</div>` : "";
   const asks = `<div style="padding:0 16px 14px"><div class="label" style="margin:2px 0 8px">✨ try asking me</div><div class="eu-asks">${EUGENE_ASKS.map(q=>`<button class="eu-chip" data-act="eugeneAsk" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div></div>`;
   const showAsks = (log.length===0) || state.eugeneShowAsks;
@@ -2786,8 +2790,11 @@ function renderEugene(){
       </div>
       <div class="eu-log" id="euLog">${logHtml}${busyHtml}</div>
       ${showAsks?asks:""}
+      ${state.euImage?`<div style="display:flex;align-items:center;gap:8px;padding:6px 14px 0"><img src="${state.euImage.thumb}" alt="attached" style="height:42px;border-radius:8px"/><span class="label">photo attached — Eugene will look at it 🐙</span><button class="ft-ic" data-act="euPhotoClear" title="remove photo">✕</button></div>`:""}
       <div class="eu-input">
-        <input class="inp" id="euInput" placeholder="ask Eugene anything…" ${state.eugeneBusy?"disabled":""} />
+        <input class="inp" id="euInput" placeholder="${state.euImage?"say something about the photo (optional)…":"ask Eugene anything…"}" ${state.eugeneBusy?"disabled":""} />
+        <button class="btn" data-act="euPhoto" title="show Eugene a photo">📷</button>
+        <input type="file" id="euPhotoFile" accept="image/*" style="display:none"/>
         <button class="btn" id="euMicBtn" data-act="euMic" title="talk instead of type">${euRecOn?'⏹':'🎙️'}</button>
         <button class="btn btn-pink" data-act="eugeneSend" ${state.eugeneBusy?"disabled":""}>send</button>
       </div>
@@ -2800,6 +2807,21 @@ function renderEugene(){
     </div>
     ${card}</div>`;
 }
+
+/* ===== Eugene photos: downscale on-device so the upload stays light (≤1280px JPEG) + a tiny thumb for the chat log ===== */
+function euScaleImage(file,max,q){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(new Error("read failed")); r.onload=()=>{ const im=new Image(); im.onerror=()=>rej(new Error("not an image")); im.onload=()=>{ try{ const k=Math.min(1,max/Math.max(im.width||1,im.height||1)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(im.width*k)); c.height=Math.max(1,Math.round(im.height*k)); const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height); ctx.drawImage(im,0,0,c.width,c.height); res(c.toDataURL("image/jpeg",q)); }catch(e){ rej(e); } }; im.src=r.result; }; r.readAsDataURL(file); }); }
+async function euAttachPhoto(file){
+  if(!file||!/^image\//.test(file.type||"")){ toast("that doesn't look like an image 🌸"); return; }
+  try{
+    const keep=(document.getElementById("euInput")||{}).value||"";
+    const data=await euScaleImage(file,1280,0.85), thumb=await euScaleImage(file,160,0.7);
+    state.euImage={data,thumb};
+    if(state.tab!=="eugene"){ setTab("eugene"); } else { render(); }
+    const ni=document.getElementById("euInput"); if(ni&&keep) ni.value=keep;
+  }catch(e){ toast("couldn't read that photo 🌸 (iPhone HEIC? try a screenshot or JPEG)"); }
+}
+/* paste a screenshot straight into the Eugene tab */
+document.addEventListener("paste",e=>{ try{ if(state.tab!=="eugene"||state.eugeneBusy) return; const it=[...((e.clipboardData||{}).items||[])].find(x=>x.type&&x.type.indexOf("image/")===0); if(it){ const f=it.getAsFile(); if(f){ e.preventDefault(); euAttachPhoto(f); } } }catch(err){} });
 
 /* ===== web push: this device subscribes itself; the public key comes from the reminders function (GET) ===== */
 if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js").catch(function(){}); }catch(e){} }
@@ -3283,7 +3305,7 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -3468,15 +3490,18 @@ document.addEventListener("click",async(e)=>{
   if(act==="eugeneMax"){ state.eugeneMax=!state.eugeneMax; render(); return; }
   if(act==="eugeneClear"){ state.eugeneLog=[]; state.eugeneShowAsks=true; window.EUGENE_HIST=[]; try{ localStorage.removeItem("eugene-log"); localStorage.removeItem("eugene-hist"); }catch(e){} render(); return; }
   if(act==="eugeneAsksToggle"){ state.eugeneShowAsks=!state.eugeneShowAsks; render(); return; }
+  if(act==="euPhoto"){ const f=document.getElementById("euPhotoFile"); if(f){ f.onchange=async function(){ if(f.files&&f.files[0]) await euAttachPhoto(f.files[0]); f.value=""; }; f.click(); } return; }
+  if(act==="euPhotoClear"){ state.euImage=null; render(); return; }
   if(act==="euMic"){ euMicToggle(); return; }
   if(act==="euSpeak"){ let on=false; try{ on=localStorage.getItem("eugene-speak")==="1"; localStorage.setItem("eugene-speak",on?"0":"1"); }catch(e){} if(!on){ try{ const u=new SpeechSynthesisUtterance("Hi! I'll read my replies out loud now."); u.pitch=1.1; speechSynthesis.speak(u); }catch(e){} } else { try{speechSynthesis.cancel();}catch(e){} } render(); return; }
   if(act==="eugeneSend"||act==="eugeneAsk"){
     if(state.eugeneBusy) return;
     if(euRecOn) euMicToggle();
     const q = act==="eugeneAsk" ? (el.dataset.q||"") : ((document.getElementById("euInput")||{}).value||"").trim();
-    if(!q) return;
-    state.eugeneLog=[...(state.eugeneLog||[]),{role:"me",text:q}]; state.eugeneBusy=true; state.eugeneShowAsks=false; render();
-    let ans; try{ ans = window.eugeneAsk ? await window.eugeneAsk(q) : "Eugene's brain isn't wired up yet 🌸"; }
+    const img = act==="eugeneSend" ? state.euImage : null;   // photo rides along on typed sends only
+    if(!q && !img) return;
+    state.eugeneLog=[...(state.eugeneLog||[]),{role:"me",text:q,img:img?img.thumb:undefined}]; state.eugeneBusy=true; state.eugeneShowAsks=false; state.euImage=null; render();
+    let ans; try{ ans = window.eugeneAsk ? await window.eugeneAsk(q,img?img.data:null) : "Eugene's brain isn't wired up yet 🌸"; }
     catch(e){ ans="aw, I couldn't reach the OS brain — "+(e.message||"try again in a moment")+" 🌸"; }
     state.eugeneLog=[...(state.eugeneLog||[]),{role:"pet",text:ans}]; state.eugeneBusy=false;
     if(state.eugeneLog.length>60) state.eugeneLog=state.eugeneLog.slice(-60);
@@ -3566,6 +3591,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="factDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:(n.eugeneFacts||[]).filter((_,i2)=>i2!==ix)})); render(); return; }
+  if(act==="crDone"){ await DB.saveDaily(SENTINEL,n=>({...n,osChangeRequests:(n.osChangeRequests||[]).map(r=>r.id===id?{...r,status:r.status==="done"?"new":"done"}:r)})); render(); return; }
+  if(act==="crDel"){ await DB.saveDaily(SENTINEL,n=>({...n,osChangeRequests:(n.osChangeRequests||[]).filter(r=>r.id!==id)})); render(); return; }
+  if(act==="crCopy"){ const s=await DB.daily(SENTINEL); const open=(s.osChangeRequests||[]).filter(r=>r.status!=="done"); if(!open.length){ toast("nothing open to copy 🌸"); return; } const txt="Eugene's change requests for the Eggie OS (copied "+TODAY+"):\n\n"+open.map((r,i)=>(i+1)+". "+r.title+(r.area?" ["+r.area+"]":"")+(r.detail?"\n   "+String(r.detail).replace(/\n/g,"\n   "):"")+"\n   (requested "+(r.date||"?")+")").join("\n\n"); try{ await navigator.clipboard.writeText(txt); toast("📋 copied — paste it to Claude 🌸"); }catch(e){ prompt("Copy this for Claude:",txt); } return; }
   if(act==="discordMode"){ const v=el.dataset.v==="channel"?"channel":"dm"; await DB.saveDaily(SENTINEL,n=>({...n,discordNotify:Object.assign({mode:"dm",channelId:""},n.discordNotify||{},{mode:v})})); render(); return; }
   if(act==="discordChanSave"){ const v=(((document.getElementById("dcChan")||{}).value)||"").replace(/[^0-9]/g,""); if(!v){toast("Paste the channel ID 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,discordNotify:{mode:"channel",channelId:v}})); toast("Discord pings → that channel 📢"); render(); return; }
   if(act==="talentRoleSave"){ const v=(((document.getElementById("talRole")||{}).value)||"").replace(/[^0-9]/g,""); await DB.saveDaily(SENTINEL,n=>({...n,appConfig:{...(n.appConfig||{}),talentRole:v}})); toast(v?"🌸 Eugene will @ that role in client channels":"ping cleared 🌸"); render(); return; }
@@ -4382,6 +4410,10 @@ render();
         if(!a.fact) return "";
         await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push(String(a.fact).slice(0,300)); if(f.length>40)f=f.slice(-40); return Object.assign({},n,{eugeneFacts:f}); });
         return "🧠 got it — I'll remember that";
+      case "requestChange":
+        if(!a.title) return "";
+        await DB.saveDaily(SENTINEL,function(n){ var r=(n.osChangeRequests||[]).slice(); r.push({id:uid(),date:TODAY,title:String(a.title).slice(0,200),detail:String(a.detail||"").slice(0,1200),area:String(a.area||"other").slice(0,20),status:"new"}); if(r.length>100)r=r.slice(-100); return Object.assign({},n,{osChangeRequests:r}); });
+        return "🛠️ noted on the wishlist for Claude: “"+String(a.title).slice(0,120)+"” (Settings → 🛠️ change requests)";
       case "forgetFact": {
         var nm=(a.hint||"").toLowerCase(); var hit=null;
         await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).filter(function(x){ if(!hit&&String(x).toLowerCase().indexOf(nm)>=0){hit=x;return false;} return true; }); return Object.assign({},n,{eugeneFacts:f}); });
@@ -4424,9 +4456,9 @@ render();
   }
   async function runClientRelay(action){ if(DEMO||!SB)return "needs the backend deployed first 🌸"; try{ var r=await fetch(CONFIG.url+"/functions/v1/discord",{method:"POST",headers:{"content-type":"application/json","apikey":CONFIG.anonKey},body:JSON.stringify({op:"relay",userId:UID,action:action})}); var j=await r.json(); return j.message||(j.error?("hmm — "+j.error):"done"); }catch(e){ return "couldn't reach Discord: "+(e.message||e); } }
   window.runClientRelay=runClientRelay;
-  async function runAgent(q){
-    var hist=window.EUGENE_HIST.slice(-10);
-    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist});
+  async function runAgent(q,img){
+    var hist=window.EUGENE_HIST.slice(-16);
+    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist,image:img||undefined});
     if(r && r._needsBackend) return "I can actually run things once the analyze function is deployed + demo mode is off 🐙 — redeploy and I'll be your hands! 🌸";
     if(r && r.error) throw new Error(r.error);
     var acts = Array.isArray(r.actions)? r.actions : [];
@@ -4435,13 +4467,13 @@ render();
     if(did.length){ try{ render(); }catch(e){} }
     var reply = plainText(r.reply) || (did.length? "done!" : "okay!");
     if(did.length) reply += "\n\n"+did.join("\n");
-    window.EUGENE_HIST.push({role:"me",text:q},{role:"pet",text:reply});
-    if(window.EUGENE_HIST.length>24) window.EUGENE_HIST=window.EUGENE_HIST.slice(-24);
+    window.EUGENE_HIST.push({role:"me",text:(q||"")+(img?" 📷[she attached a photo]":"")},{role:"pet",text:reply});
+    if(window.EUGENE_HIST.length>32) window.EUGENE_HIST=window.EUGENE_HIST.slice(-32);
     try{ localStorage.setItem("eugene-hist",JSON.stringify(window.EUGENE_HIST)); }catch(e){}
     eugeneSpeak(reply);
     return reply;
   }
-  window.eugeneAsk = function(q){ return runAgent(q); };   // lets the 🐙 Ask Eugene tab share the same brain
+  window.eugeneAsk = function(q,img){ return runAgent(q,img); };   // lets the 🐙 Ask Eugene tab share the same brain (img = optional photo dataURL)
   var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
   window.PET = PetWidget.init({
     sheet:"pet-widget/Sprite Sheet.png", sheetW:672, sheetH:480,
@@ -4464,10 +4496,11 @@ render();
       "What's on my calendar coming up?"
     ],
     reduceMotion:function(){ try{ return document.body.classList.contains("calm") || matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } },
-    ask: async function(q){
-      try{ return await runAgent(q); }
+    ask: async function(q,img){
+      try{ return await runAgent(q,img); }
       catch(e){ throw new Error(e.message||"couldn't reach the OS brain"); }
-    }
+    },
+    pickPhoto: (typeof euScaleImage==="function") ? async function(file){ const data=await euScaleImage(file,1280,0.85); const thumb=await euScaleImage(file,160,0.7); return {data,thumb}; } : null
   });
   /* ---- Eugene's once-a-day check-in: a bubble with today's shape, built from her own data ---- */
   function showPetBubble(text,ms){ var b=document.getElementById("petBubble"); if(!b)return; b.textContent=text; b.classList.remove("pet-hidden"); clearTimeout(b._h); b._h=setTimeout(function(){ b.classList.add("pet-hidden"); },ms||9000); }

@@ -17,8 +17,8 @@
          scale: 2.1, faces: "right",
          avatar: "Kiko Sit.png",         // round chat-header icon (optional)
          title: "Kiko", subtitle: "your snowfox helper",
-         ask: async (q) => {             // wire your own backend here
-           const r = await fetch("/api/ask", {method:"POST", body: JSON.stringify({q})});
+         ask: async (q, img) => {        // wire your own backend here (img = optional photo dataURL, 2nd arg)
+           const r = await fetch("/api/ask", {method:"POST", body: JSON.stringify({q, img})});
            return (await r.json()).answer;
          }
        });
@@ -191,7 +191,7 @@
     }
     function paintChat() {
       var logHtml = S.log.length
-        ? S.log.map(function (m) { return '<div class="pet-msg ' + m.role + '">' + esc(m.text) + "</div>"; }).join("")
+        ? S.log.map(function (m) { return '<div class="pet-msg ' + m.role + '">' + (m.img ? '<img src="' + m.img + '" alt="photo" style="display:block;max-width:150px;max-height:110px;border-radius:9px;margin:0 0 5px">' : "") + esc(m.text) + "</div>"; }).join("")
         : '<div class="pet-msg pet">Hi, I\'m ' + esc(c.title) + '! Ask me about your OS or send me to the web. 🐙</div>';
       var hasSugg = c.suggestions && c.suggestions.length;
       chat.innerHTML =
@@ -200,7 +200,10 @@
         (hasSugg ? '<button class="pet-sbtn" data-sugg title="example questions">💡</button>' : "") +
         '<button class="pet-x" data-close>✕</button></div>' +
         '<div class="pet-log" id="petLog">' + logHtml + (S.busy ? '<div class="pet-msg pet">…thinking</div>' : "") + suggHtml() + "</div>" +
-        '<div class="pet-input"><input id="petInput" placeholder="ask…" ' + (S.busy ? "disabled" : "") + '><button data-send ' + (S.busy ? "disabled" : "") + ">send</button></div>";
+        (S.img ? '<div style="display:flex;align-items:center;gap:7px;padding:7px 10px 0"><img src="' + S.img.thumb + '" alt="attached" style="height:34px;border-radius:7px"><span style="font-size:11px;color:#8d87a8;flex:1">photo attached 📷</span><button data-imgclear style="border:none;background:none;cursor:pointer;color:#c98ab0;font-size:13px">✕</button></div>' : "") +
+        '<div class="pet-input"><input id="petInput" placeholder="' + (S.img ? "about this photo… (optional)" : "ask…") + '" ' + (S.busy ? "disabled" : "") + '>' +
+        (c.pickPhoto ? '<button data-photo title="show me a photo" ' + (S.busy ? "disabled" : "") + '>📷</button><input type="file" data-photofile accept="image/*" style="display:none">' : "") +
+        '<button data-send ' + (S.busy ? "disabled" : "") + ">send</button></div>";
       chat.classList.toggle("pet-big", !!S.big);
       var bigBtn = chat.querySelector("[data-big]"); if (bigBtn) bigBtn.onclick = function () { S.big = !S.big; chat.classList.toggle("pet-big", S.big); paintChat(); positionUI(); };
       chat.querySelector("[data-close]").onclick = toggle;
@@ -209,6 +212,19 @@
       chat.querySelectorAll("[data-sugg-i]").forEach(function (b) {
         b.onclick = function () { if (S.busy) return; S.showSugg = false; send(c.suggestions[+b.getAttribute("data-sugg-i")]); };
       });
+      var pb = chat.querySelector("[data-photo]"), pf = chat.querySelector("[data-photofile]");
+      if (pb && pf) {
+        pb.onclick = function () { pf.click(); };
+        pf.onchange = async function () {
+          var f = pf.files && pf.files[0]; pf.value = "";
+          if (!f || !c.pickPhoto || S.busy) return;
+          var keep = (chat.querySelector("#petInput") || {}).value || "";
+          try { S.img = await c.pickPhoto(f); } catch (e) { S.img = null; }
+          paintChat();
+          var ni = chat.querySelector("#petInput"); if (ni && keep) ni.value = keep;
+        };
+      }
+      var pc = chat.querySelector("[data-imgclear]"); if (pc) pc.onclick = function () { S.img = null; paintChat(); };
       var input = chat.querySelector("#petInput");
       input.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); send(); } };
       var lg = chat.querySelector("#petLog"); if (lg) lg.scrollTop = lg.scrollHeight;
@@ -217,10 +233,11 @@
     async function send(preset) {
       var input = chat.querySelector("#petInput");
       var q = (typeof preset === "string" ? preset : (input ? input.value : "")).trim();
-      if (!q || S.busy) return;
-      S.log.push({ role: "me", text: q }); S.busy = true; paintChat();
+      var img = S.img || null;
+      if ((!q && !img) || S.busy) return;
+      S.log.push({ role: "me", text: q, img: img ? img.thumb : undefined }); S.busy = true; S.img = null; paintChat();
       var ans;
-      try { ans = await c.ask(q); ans = ans || "hmm, ask me again?"; }
+      try { ans = await c.ask(q, img ? img.data : null); ans = ans || "hmm, ask me again?"; }
       catch (e) { ans = "aw, I couldn't reach the server — " + (e.message || "try again"); }
       S.log.push({ role: "pet", text: ans }); S.busy = false; paintChat();
     }
