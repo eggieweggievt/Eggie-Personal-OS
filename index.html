@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.13";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.14";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.14: fixed the optimizer 'r.tags.forEach is not a function' crash — results now render even when the AI returns lists as comma-strings (optimizer + thumbnail check)",
   "2026-06-10.13: Clients tab streamlined — now modular cards you can reorder/hide like Home (fixed: ☀️ today's three had silently vanished), 🔍 live search across clients AND needs, tap-the-pill to move a need along (no dragging), 🧹 sweep done piles, 📣 message-many broadcasts one note to every checked client channel ({name} personalizes), inbox senders are clickable",
   "2026-06-10.12: fixed the teleport-to-top glitch — checking anything off now keeps your scroll position on every page",
   "2026-06-10.11: Care + Health rebuilt on the research — Care: front-door weather check-in routes to ONE thing, 📈 bipolar mood chart (elevation −4..+4 + irritability), 🕰️ rhythm anchors, ✨ one-good-thing (rated), 🚸 early-warning signature, 🛟 WRAP-lite plan + 9-8-8 crisis card, breathing presets; Health: 🌅 morning check sets the day's spoons, 🎯 clinician-agreed water/salt targets + 🥵 heat + 🌺 period flags, 🩹 skin-picking companion (urge surf, strategy shelf, healing days, zero shame), 🛁 tiered hygiene care-menu (wipes count like showers), ↩ same-as-yesterday, 🩺 90-day doctor export",
@@ -3764,7 +3765,7 @@ function renderOptimize(){
   </div>`;
 }
 function thumbPrevHTML(){ if(!state._thumb)return ""; return `<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">${[[120,"mobile feed"],[320,"desktop"],[480,"large"]].map(([w,l])=>`<div style="text-align:center"><img src="${state._thumb}" style="width:${w}px;max-width:100%;border-radius:8px;border:1px solid var(--line)" /><div class="label" style="margin-top:3px">${w}px · ${l}</div></div>`).join("")}</div>`; }
-function thumbResultHTML(r){ if(!r)return ""; return `<div class="soft-card">
+function thumbResultHTML(r){ if(!r)return ""; r=Object.assign({},r,{strengths:asList(r.strengths,/\n/),improvements:asList(r.improvements,/\n/)}); return `<div class="soft-card">
       ${r.score!=null?`<div style="display:flex;align-items:center;gap:10px"><span class="num" style="font-size:24px;font-family:var(--display)">${r.score}</span><span class="label">/ 100 click potential</span></div>`:""}
       ${r.verdict?`<p class="soft" style="font-size:12.5px;margin:6px 0">${esc(r.verdict)}</p>`:""}
       ${(r.strengths&&r.strengths.length)?`<div class="label" style="margin-top:8px">working 💚</div>${r.strengths.map(s=>`<div class="soft" style="font-size:12px;margin-top:2px">• ${esc(s)}</div>`).join("")}`:""}
@@ -3794,9 +3795,12 @@ async function checkThumb(){
     out.innerHTML=thumbResultHTML(r);
   }catch(e){ out.innerHTML=`<div class="soft" style="font-size:12px;color:var(--rose)">${esc(e.message||e)}</div>`; }
 }
+/* the model occasionally returns a list field as one comma/newline string — coerce, never crash */
+function asList(v,sep){ if(Array.isArray(v))return v; if(v==null||v==="")return []; if(typeof v==="string")return v.split(sep||/[,\n]/).map(s=>s.trim()).filter(Boolean); return [v]; }
 /* build the optimizer result HTML from a stored result object so it survives re-renders (tab switches) */
 function optResultHTML(r,mode){
   if(!r) return "";
+  r=Object.assign({},r,{titles:asList(r.titles,/\n/),tags:asList(r.tags),hashtags:asList(r.hashtags,/[\s,]+/),tips:asList(r.tips,/\n/)});
   const ls=mode==="livestream";
   const block=(label,text)=>`<div class="label" style="margin-top:10px">${label} <button class="btn" data-act="copyText" data-t="${esc(text)}" style="padding:2px 8px;margin-left:6px">copy</button></div><div class="soft" style="font-size:12px;white-space:pre-wrap;margin-top:4px;border:1px solid var(--line);border-radius:10px;padding:10px">${esc(text)}</div>`;
   return `<div class="soft-card">
