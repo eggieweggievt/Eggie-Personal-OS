@@ -138,6 +138,13 @@ async function execAction(userId: string, a: any): Promise<string> {
       if (!a.fact) return "";
       await saveSent(userId, (n) => { const f = (n.eugeneFacts || []).slice(); f.push(String(a.fact).slice(0, 300)); return { ...n, eugeneFacts: f.slice(-40) }; });
       return "🧠 got it — I'll remember that";
+    case "delCalendarEvent": { let hit: any = null; const nm = (a.title || "").toLowerCase(); await saveSent(userId, (n) => ({ ...n, calendarEvents: (n.calendarEvents || []).filter((ev: any) => { const m = (ev.title || "").toLowerCase().includes(nm) && (!a.date || ev.date === a.date); if (m && !hit) { hit = ev; return false; } return true; }) })); return hit ? `🗑 removed “${hit.title}” (${hit.date})` : "couldn't find an event like that 🌸"; }
+    case "moveCalendarEvent": { let hit: any = null; const nm = (a.title || "").toLowerCase(); await saveSent(userId, (n) => { const evs = (n.calendarEvents || []).slice(); const ev = evs.find((x: any) => (x.title || "").toLowerCase().includes(nm)); if (ev && a.date) { hit = ev; ev.date = a.date; } return { ...n, calendarEvents: evs }; }); return hit ? `📅 moved “${hit.title}” to ${a.date}` : "couldn't find an event like that 🌸"; }
+    // desktop-pet settings: persona/name/email live on the user's own sentinel (the AI + cron read them there)
+    case "setAssistantPrompt": {
+      await saveSent(userId, (n) => ({ ...n, appConfig: { ...(n.appConfig || {}), ...(a.prompt !== undefined ? { assistantPrompt: String(a.prompt).slice(0, 4000) } : {}), ...(a.name !== undefined ? { assistantName: String(a.name).slice(0, 60) } : {}), ...(a.email !== undefined ? { email: String(a.email).slice(0, 120) } : {}) } }));
+      return "⚙️ saved";
+    }
     case "requestChange":
       if (!a.title) return "";
       await saveSent(userId, (n) => { const r = (n.osChangeRequests || []).slice(); r.push({ id: uid(), date: todayStr(), title: String(a.title).slice(0, 200), detail: String(a.detail || "").slice(0, 1200), area: String(a.area || "other").slice(0, 20), status: "new" }); return { ...n, osChangeRequests: r.slice(-100) }; });
