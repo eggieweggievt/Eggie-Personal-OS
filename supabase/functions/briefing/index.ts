@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
     const monthKey = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-CA");
     const yKey = new Date(now.getTime() - 86400000).toLocaleDateString("en-CA");
 
-    // content in flight
-    const { data: content } = await sb.from("content_items").select("title,stage,priority,parent_id,completed_at").eq("user_id", USER).is("completed_at", null).order("priority", { ascending: false }).limit(50);
+    // content in flight (NOTE: no completed_at column exists — published stage is the "done" marker)
+    const { data: content } = await sb.from("content_items").select("title,stage,priority,parent_id").eq("user_id", USER).order("priority", { ascending: false }).limit(50);
     const inFlight = (content || []).filter((c: any) => !c.parent_id && c.stage !== "published");
     const top = inFlight.slice(0, 3);
 
@@ -50,9 +50,10 @@ Deno.serve(async (req) => {
     const weekSched = (s.schedWeeks && s.schedWeeks[mondayISO]) ? s.schedWeeks[mondayISO] : (s.schedule || []);
     const todayStream = weekSched.filter((x: any) => x.day === dayShort);
 
-    // yesterday habits
+    // yesterday habits — the app stores habits as {counts:{habitId:n}}, not a done[] array
     const { data: yday } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", yKey).maybeSingle();
-    const yHabits = parse(yday?.notes ?? null).habits?.done?.length || 0;
+    const yCounts = parse(yday?.notes ?? null).habits?.counts || {};
+    const yHabits = Object.values(yCounts).filter((v: any) => Number(v) > 0).length;
 
     // money this month
     const { data: inc } = await sb.from("income_entries").select("kind,amount").eq("user_id", USER).eq("month", monthKey).limit(1000);
@@ -74,7 +75,7 @@ Deno.serve(async (req) => {
     const html = `<div style="font-family:-apple-system,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #f0dcec;border-radius:16px;padding:22px;color:#4a3a4d">
       <div style="font-size:20px;font-weight:700;color:#db5e98;margin-bottom:6px">🐙 Eggie OS · morning briefing</div>
       ${sectionsHtml}
-      <div style="margin-top:18px;text-align:center"><a href="https://${(Deno.env.get("BRIEFING_LINK") || "eggie.github.io")}" style="color:#8d6fd1;font-size:12px">open Eggie OS →</a></div>
+      <div style="margin-top:18px;text-align:center"><a href="https://${(Deno.env.get("BRIEFING_LINK") || "eggieweggievt.github.io/Eggie-Personal-OS/")}" style="color:#8d6fd1;font-size:12px">open Eggie OS →</a></div>
     </div>`;
 
     const res = await fetch("https://api.resend.com/emails", {

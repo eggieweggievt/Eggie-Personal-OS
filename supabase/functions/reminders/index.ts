@@ -187,8 +187,29 @@ async function processUser(sb: any, user: string, today: string, hm: string) {
     if ((r as any)._postok) { o = { ...o, posted: true, done: true }; delete (o as any)._postok; }   // client-channel reminder fired once → done
     return o;
   });
+  // The Discord/email/push calls above can take several seconds, and the app may have saved the
+  // sentinel meanwhile — writing our STALE copy of the whole row would clobber her edits (the
+  // data-loss class this OS has been bitten by before). So: re-read the LIVE row and graft only
+  // our bookkeeping onto it (reminders by id, pruned pushSubs, the DM-fallback discordNotify).
+  let base: any = notes;
+  try {
+    const { data: liveRow } = await sb.from("daily_logs").select("notes").eq("user_id", user).eq("log_date", "2000-01-01").maybeSingle();
+    if (liveRow?.notes) base = JSON.parse(liveRow.notes);
+  } catch { base = notes; }
+  const upd = new Map((notes.reminders || []).map((r: any) => [r.id, r]));
+  base.reminders = (base.reminders || []).map((r: any) => {
+    const u: any = upd.get(r.id);
+    if (!u) return r;                                  // she added/edited it mid-run — keep hers
+    return { ...r,                                      // hers wins for text/date/time/etc.
+      emailed: r.emailed || u.emailed, dmed: r.dmed || u.dmed, posted: r.posted || u.posted,
+      done: r.done || u.done, notified: r.notified || u.notified,
+      pings: Math.max(Number(r.pings || 0), Number(u.pings || 0)),
+      lastPing: u.lastPing || r.lastPing };
+  });
+  base.pushSubs = notes.pushSubs;                       // pruned list — only this cron maintains it
+  if (notes.discordNotify) base.discordNotify = notes.discordNotify;  // incl. the bad-channel → DM fallback
   await sb.from("daily_logs").upsert(
-    { user_id: user, log_date: "2000-01-01", notes: JSON.stringify(notes), updated_at: new Date().toISOString() },
+    { user_id: user, log_date: "2000-01-01", notes: JSON.stringify(base), updated_at: new Date().toISOString() },
     { onConflict: "user_id,log_date" },
   );
   return { user, push: pushedDevices, email: emailId ? dueEmail.length : 0, dm: dmed };

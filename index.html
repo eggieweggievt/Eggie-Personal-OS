@@ -12,7 +12,6 @@
 <link rel="apple-touch-icon" href="pet-widget/Screenshot 2026-06-02 202234.png" />
 <title>Eggie OS 🐙</title>
 <link rel="icon" type="image/png" href="favicon.png" />
-<link rel="apple-touch-icon" href="favicon.png" />
 <!-- =========================================================================
   Eggie OS — a gentle VTuber content operating system, for Eggie 🐙
   Content pipeline (by format + pillar) · editable spoon-theory habits ·
@@ -405,7 +404,7 @@ const CONFIG = {
   descFooter: `🔗 Everywhere: https://eggieweggie.ca\n▸ Twitch: https://twitch.tv/eggieweggievt\n▸ Discord: https://discord.gg/suckegg\n▸ TikTok / IG / X: @eggieweggievt\n▸ Support: https://ko-fi.com/eggieweggievt · https://throne.com/eggieweggievt\n\n💜 Sponsors — code SUCKEGG for 10% off:\n▸ GamerSupps: https://gamersupps.gg\n▸ Stoneforged PCs: https://stoneforged.tech/SUCKEGG\n▸ Xepher Arcade: https://shop.xepherarcade.com/?cc=SUCKEGG`,
   // Your rate card — used by the Pitch Builder. Edit freely; 0 = "let's talk".
   rateCard: { "Sponsored short": 150, "Sponsored stream": 250, "Dedicated long-form video": 400, "Affiliate / code": 0 },
-  creator: { name:"Eggie", emoji:"🐙", handle:"@EggieWeggieVT", niche:"VTuber learning out loud", kofi:"https://ko-fi.com/eggieweggie", email:"you@example.com" },
+  creator: { name:"Eggie", emoji:"🐙", handle:"@EggieWeggieVT", niche:"VTuber learning out loud", kofi:"https://ko-fi.com/eggieweggie", email:"eggie@eggieweggie.ca" },
   platforms: { youtube:"YouTube", tiktok:"TikTok", instagram:"Instagram", twitter:"X", twitch:"Twitch", fansly:"Fansly" },
   // Default habit library — you can add/edit/delete these right in the 🌸 Habits tab.
   // energy: essential = always shows · normal = medium+ days · intensive = high / stream days
@@ -714,7 +713,10 @@ const DB = {
   localBackup(notes){
     try{
       const key="eggie-restore"; let list=[]; try{ list=JSON.parse(localStorage.getItem(key)||"[]"); }catch{}
-      const snap={ t:Date.now(), clients:(notes.clients||[]).length, inbox:(notes.inbox||[]).length, invoices:(notes.invoices||[]).length, data:notes };
+      // store ONLY what restore actually uses (clients/inbox/invoices) — the full sentinel row can
+      // carry mood-board images + avatars as data-URLs, and 30 full copies blows the ~5MB
+      // localStorage quota, which silently stopped restore points from saving at all.
+      const snap={ t:Date.now(), clients:(notes.clients||[]).length, inbox:(notes.inbox||[]).length, invoices:(notes.invoices||[]).length, data:{ clients:notes.clients||[], inbox:notes.inbox||[], invoices:notes.invoices||[] } };
       // skip if identical client/inbox/invoice counts AND <90s since last, to avoid spamming tiny edits
       const prev=list[0];
       if(prev && prev.clients===snap.clients && prev.inbox===snap.inbox && prev.invoices===snap.invoices && (snap.t-prev.t)<90000){ list[0]=snap; }
@@ -764,7 +766,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.2";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.3";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2098,8 +2100,6 @@ async function renderHealth(){
   const medRows=meds.length?meds.map(m=>`<button class="hbtn ${(h.meds&&h.meds[m.id])?'done':''}" data-act="medToggle" data-id="${m.id}" style="display:flex;align-items:center;gap:8px"><span class="check ${(h.meds&&h.meds[m.id])?'on':''}"></span><span class="grow" style="font-size:12.5px">${esc(m.name)}${m.dose?` <span class="muted">${esc(m.dose)}</span>`:""}</span>${m.time?`<span class="label">${esc(m.time)}</span>`:""}</button>`).join(""):`<div class="soft" style="font-size:12.5px">No meds added yet — tap “edit list”.</div>`;
   const heavy=(h.pain>=4)||(h.fatigue>=4);
   const hint=heavy?`<div class="soft-card" style="border-color:#ddcdf6;margin-bottom:6px"><div style="font-size:12.5px">Looks like a heavier day, ${CONFIG.creator.name}. 🌙 Be gentle — rest is productive too. <button class="btn" data-act="recoveryDay" style="margin-left:4px">set a recovery day</button></div></div>`:"";
-  const series=f=>rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-14).map(r=>(r.notes.health&&r.notes.health[f]!=null)?Number(r.notes.health[f]):null);
-  const spark=(f,max,shift)=>{const s=series(f);return `<div class="spark">${s.map(v=>{if(v==null)return `<span style="height:2px;opacity:.25"></span>`;const hh=4+(((v+(shift||0))/max)*28);return `<span style="height:${Math.max(2,hh)}px" title="${v}"></span>`;}).join("")}</div>`;};
   const flares=rows.filter(r=>r.notes.health&&r.notes.health.flare).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
   const HP={};
   HP.today=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💗 How are you today?</h2><span class="label">private · your own tracking 🌸</span></div>
@@ -2462,14 +2462,6 @@ function renderClientPage(c){
 }
 async function setClientTaskStatus(cid,tid,status){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,status,done:status==="done"}:t)}:c)})); }
 function parsePlatforms(text){ return String(text||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf("|"); return i>=0?{label:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:{label:l,url:""}; }); }
-
-/* ===================== ASK ===================== */
-function renderAsk(){
-  return `<div class="panel" style="max-width:720px;margin:0 auto"><h2 style="font-size:18px">🔮 Ask your OS</h2>
-    <p class="soft" style="font-size:12.5px;margin:6px 0 14px">Ask about your content or your VTuber brand — "what should I film this week?", "is my pillar mix healthy?", "give me 3 retention short ideas" — answered in your voice, learning from your own planner.${DEMO?` <b>(Deploy the analyze function + switch demo off for AI answers — right now this does a keyword search.)</b>`:""}</p>
-    <div style="display:flex;gap:8px"><input class="inp" id="askQ" placeholder="what should I film this week?" /><button class="btn btn-pink" data-act="ask">ask</button></div>
-    <div id="askResults" style="margin-top:14px"></div></div>`;
-}
 
 /* ===================== ART & CREATIVITY 🎨 ===================== */
 const ART_SUBJECTS=[
@@ -3222,21 +3214,7 @@ function openNote(id){ DB.captures().then(caps=>{ const c=caps.find(x=>x.id===id
   </div></div>`;
 }); }
 
-/* ===================== CONFIG EDITOR ===================== */
-function configModal(){ DB.daily(SENTINEL).then(()=>{ const c=CONFIG.creator;
-  const rc=Object.entries(CONFIG.rateCard).map(([k,v])=>`${k} = ${v}`).join("\n");
-  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:520px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">✏️ Your details & config</h3><button class="btn" data-act="closeModal">✕</button></div>
-    <p class="soft" style="font-size:12px;margin:0 0 10px">Change anything here instead of editing code — saves to your account. 🌸</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="grow" style="min-width:140px"><div class="label">Name</div><input class="inp" id="cf_name" value="${esc(c.name)}"/></div><div class="grow" style="min-width:140px"><div class="label">Handle</div><input class="inp" id="cf_handle" value="${esc(c.handle)}"/></div></div>
-    <div class="label" style="margin-top:8px">Niche (one sentence)</div><input class="inp" id="cf_niche" value="${esc(c.niche||"")}"/>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:140px"><div class="label">Email</div><input class="inp" id="cf_email" value="${esc(c.email||"")}"/></div><div style="width:100px"><div class="label">Region</div><input class="inp" id="cf_region" value="${esc(c.region||"")}"/></div></div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div style="width:80px"><div class="label">Tax %</div><input class="inp num" id="cf_tax" type="number" value="${Math.round((CONFIG.taxRate||0)*100)}"/></div><div class="grow" style="min-width:120px"><div class="label">Twitch handle</div><input class="inp" id="cf_twitch" value="${esc(CONFIG.twitchHandle||"")}"/></div><div class="grow" style="min-width:120px"><div class="label">Discord invite</div><input class="inp" id="cf_discord" value="${esc(CONFIG.discordInvite||"")}"/></div></div>
-    <div class="label" style="margin-top:8px">YouTube channel ID</div><input class="inp" id="cf_yt" value="${esc(CONFIG.youtubeChannelId||"")}"/>
-    <div class="label" style="margin-top:8px">Rate card (one per line: Name = price)</div><textarea class="inp mono" id="cf_rate" rows="4">${esc(rc)}</textarea>
-    <div class="label" style="margin-top:8px">Links / sponsor footer (used in descriptions)</div><textarea class="inp" id="cf_footer" rows="5">${esc(CONFIG.descFooter||"")}</textarea>
-    <button class="btn btn-pink" data-act="saveConfig" style="margin-top:14px">💾 save settings</button>
-  </div></div>`;
-}); }
+/* ===================== CONFIG EDITOR (saves to the sentinel row) ===================== */
 async function saveConfig(){
   const gv=id=>(document.getElementById(id)?.value||"").trim();
   const rate={}; (document.getElementById("cf_rate").value||"").split("\n").forEach(l=>{const i=l.lastIndexOf("=");if(i>0){const k=l.slice(0,i).trim();const v=parseFloat(l.slice(i+1));if(k)rate[k]=isNaN(v)?0:v;}});
@@ -3310,7 +3288,8 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${undoAct?`<button class="btn" data-act="${undoAct}">undo</button>`:""}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},4500);}
 
 /* ===================== EVENTS ===================== */
-const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","ask","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel"];
+const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","addSug","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel",
+  "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -3337,7 +3316,7 @@ document.addEventListener("click",async(e)=>{
   }
   if(act==="delCalEvent"){ const eid=el.dataset.eid; await DB.saveDaily(SENTINEL,n=>({...n,calendarEvents:(n.calendarEvents||[]).filter(x=>x.id!==eid)})); document.getElementById("modal").innerHTML=""; toast("Removed"); return render(); }
 
-  if(act==="capture"){ const i=document.getElementById("capInput"); if(i.value.trim()){await DB.addCapture(i.value.trim());i.value="";toast("Captured 🐙");} }
+  if(act==="capture"){ const i=document.getElementById("capInput"); if(i.value.trim()){await DB.addCapture(i.value.trim());i.value="";toast("Captured 🐙");render();} return; }
   if(act==="habit"){ await bumpHabit(id); render(); }
   if(act==="energy"){ await DB.saveDaily(TODAY,n=>({...n,energy:el.dataset.v})); render(); }
   if(act==="streamDay"){ await DB.saveDaily(TODAY,n=>({...n,streamDay:!n.streamDay})); render(); }
@@ -3448,7 +3427,6 @@ document.addEventListener("click",async(e)=>{
   if(act==="sponsorRemind"){ const fu=((document.getElementById("sp_follow")||{}).value)||TODAY; const br=((document.getElementById("sp_brand")||{}).value)||"sponsor";
     await DB.saveDaily(SENTINEL,n=>({...n,reminders:[...(n.reminders||[]),{id:uid(),text:"💌 follow up with "+br,date:fu,time:"10:00",email:true,done:false,notified:false,emailed:false,pings:0}]}));
     toast("⏰ follow-up reminder set for "+fu); return; }
-  if(act==="taskRemUnlink"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>!(r.taskId===id&&!r.done))})); document.getElementById("modal").innerHTML=""; toast("Reminder removed 🌸"); render(); return; }
   if(act==="delTask"){ await taskMut(t=>t.filter(x=>x.id!==id)); render(); return; }
   if(act==="focusTask"){ state.focusTask=id; render(); return; }
   if(act==="focusClear"){ state.focusTask=null; render(); return; }
@@ -3548,7 +3526,6 @@ document.addEventListener("click",async(e)=>{
   if(act==="copy"){ const t=document.getElementById(el.dataset.target); if(t){navigator.clipboard&&navigator.clipboard.writeText(t.value);toast("Copied 💗");} return; }
   if(act==="savePitch"){ const b=pitchVal("pBrand"); if(!b){toast("Add a brand name first 🌸");return;} await DB.addSponsor({brand:b,deal_type:pitchVal("pType"),stage:"draft",note:pitchVal("pAngle")||null}); toast("Saved to pipeline 💌"); return; }
   if(act==="settings")return settingsModal();
-  if(act==="editConfig")return configModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
   if(act==="restoreLocal"){ const bk=DB.listBackups(); const b=bk[parseInt(el.dataset.i)||0]; if(b)await restoreFrom(b.data, relTime(b.t)); return; }
@@ -3644,7 +3621,6 @@ document.addEventListener("click",async(e)=>{
   if(act==="checkThumb")return checkThumb();
   if(act==="copyText"){ if(navigator.clipboard)navigator.clipboard.writeText(el.dataset.t); toast("Copied 💗"); return; }
   if(act==="saveReview")return saveReview();
-  if(act==="ask")return ask();
 });
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
   if(e.target&&e.target.id==="cm_avatarFile"&&e.target.files&&e.target.files[0]){ const cid=e.target.dataset.id, file=e.target.files[0]; (async()=>{ try{ toast("resizing… 🖼️"); const url=await avatarToDataURL(file); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,avatar:url}:c)})); toast("Picture set 🌸"); clientModal(cid); render(); }catch(err){ toast("couldn't read that image 🌸"); } })(); }
@@ -3774,7 +3750,6 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="ideaText"){ const b=document.querySelector('[data-act="artIdeaAdd"]'); if(b)b.click(); }
   if(t.id==="inspoUrl"||t.id==="inspoNote"){ const b=document.querySelector('[data-act="artInspoAdd"]'); if(b)b.click(); }
   if(t.id==="smartQ")smart();
-  if(t.id==="askQ")ask();
   if(t.dataset&&t.dataset.act==="goalAdd"&&t.value.trim()){const sc=t.dataset.scope,tx=t.value.trim();t.value="";await goalMut(sc,g=>[...g,{id:uid(),text:tx,done:false}]);render();}
 });
 let dragId=null,dragType=null,_lastPtr="mouse";
@@ -3813,21 +3788,6 @@ async function editChannel(){ const day=await DB.daily(TODAY); const ch=day.chan
   document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">Channel pulse</h3><button class="btn" data-act="closeModal">✕</button></div>${CHANNEL_STATS.map(([k,l])=>`<div class="label" style="margin-top:8px">${l}</div><input class="inp num" id="ch_${k}" type="number" value="${ch[k]??""}" />`).join("")}<button class="btn btn-pink" data-act="saveChannel" style="margin-top:14px">💾 save</button></div></div>`; }
 async function saveChannel(){ const ch={}; CHANNEL_STATS.forEach(([k])=>{const v=document.getElementById("ch_"+k).value;if(v!=="")ch[k]=parseInt(v);}); await DB.saveDaily(TODAY,n=>({...n,channel:ch})); document.getElementById("modal").innerHTML=""; toast("Updated 🌸"); render(); }
 async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]").forEach(el=>data[el.dataset.rv]=el.value); await DB.saveDaily(SENTINEL,n=>({...n,review:data})); toast("Week sealed 🌷 proud of you"); }
-async function ask(){
-  const raw=(document.getElementById("askQ").value||"").trim(); const box=document.getElementById("askResults"); if(!raw){box.innerHTML="";return;}
-  if(!DEMO && SB){
-    box.innerHTML=`<div class="label">thinking… 🐙</div>`;
-    try{ const r=await aiCall("ask",{question:raw}); if(r&&r.error)throw new Error(r.error); box.innerHTML=`<div class="soft-card" style="white-space:pre-wrap;font-size:13px;line-height:1.6">${esc((r&&r.answer)||"(no answer)")}</div>`; }
-    catch(e){ box.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the assistant: ${esc(e.message||e)}. Showing a keyword search instead.</div>`; await keywordAsk(raw,box); }
-    return;
-  }
-  box.innerHTML=""; await keywordAsk(raw,box);
-}
-async function keywordAsk(raw,box){
-  const q=raw.toLowerCase(); const [content,caps]=await Promise.all([DB.content(),DB.captures()]);
-  const hits=[...content.filter(c=>(c.title+" "+(c.hook||"")+" "+(c.script||"")).toLowerCase().includes(q)).map(c=>({t:"🎬 "+stageShort(c.stage),x:c.title})),...caps.filter(c=>(c.raw_text||"").toLowerCase().includes(q)).map(c=>({t:"🐙 capture",x:c.raw_text}))];
-  box.insertAdjacentHTML("beforeend",hits.length?hits.map(h=>`<div class="citem" style="margin:8px 0 0;cursor:default"><div class="label">${h.t}</div><div style="font-size:13px;margin-top:3px">${esc(h.x)}</div></div>`).join(""):`<div class="soft" style="font-size:13px;margin-top:8px">No matches — try fewer words. 🌸</div>`);
-}
 
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }

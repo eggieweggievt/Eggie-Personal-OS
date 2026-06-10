@@ -90,9 +90,16 @@ create table if not exists sponsors (
   stage      text not null default 'draft',
   value      numeric,
   note       text,
+  contact    text,            -- name · email · @handle
+  links      text,            -- brief / contract / campaign page
+  follow_up  date,            -- powers the 💬 follow-up nudge pills
   updated_at timestamptz not null default now()
 );
 create index if not exists sponsors_user_stage_idx on sponsors (user_id, stage);
+-- added later than the original table — idempotent for existing databases:
+alter table sponsors add column if not exists contact   text;
+alter table sponsors add column if not exists links     text;
+alter table sponsors add column if not exists follow_up date;
 
 -- ---------------------------------------------------------------------------
 -- savings_goals — sinking funds you allot money toward.

@@ -137,6 +137,10 @@ async function execAction(userId: string, a: any): Promise<string> {
       if (!a.fact) return "";
       await saveSent(userId, (n) => { const f = (n.eugeneFacts || []).slice(); f.push(String(a.fact).slice(0, 300)); return { ...n, eugeneFacts: f.slice(-40) }; });
       return "🧠 got it — I'll remember that";
+    case "requestChange":
+      if (!a.title) return "";
+      await saveSent(userId, (n) => { const r = (n.osChangeRequests || []).slice(); r.push({ id: uid(), date: todayStr(), title: String(a.title).slice(0, 200), detail: String(a.detail || "").slice(0, 1200), area: String(a.area || "other").slice(0, 20), status: "new" }); return { ...n, osChangeRequests: r.slice(-100) }; });
+      return "🛠️ noted on the wishlist for Claude — it's saved in Settings → 🛠️ change requests";
     case "forgetFact": { let hit: any = null; await saveSent(userId, (n) => ({ ...n, eugeneFacts: (n.eugeneFacts || []).filter((x: string) => { if (!hit && fuzzy(x, a.hint)) { hit = x; return false; } return true; }) })); return hit ? "🧠 forgotten" : "no memory like that 🌸"; }
     case "addArtIdea":
       await saveSent(userId, (n) => ({ ...n, artIdeas: [...(n.artIdeas || []), { id: uid(), text: String(a.text || "").slice(0, 300), added: todayStr() }] }));
@@ -215,7 +219,10 @@ async function todayBrief(userId: string): Promise<string> {
   const s = await loadSent(userId);
   const today = todayStr();
   const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(new Date().toLocaleString("en-US", { timeZone: TZ })).getDay()];
-  const slot = (s.schedule || []).find((x: any) => (x.day || "").slice(0, 3) === wd);
+  // per-week schedule (schedWeeks[thisMonday]) with the legacy flat `schedule` as fallback — same as the app + briefing
+  const md = new Date(today + "T00:00"); md.setDate(md.getDate() - ((md.getDay() + 6) % 7));
+  const weekSched = (s.schedWeeks && s.schedWeeks[md.toLocaleDateString("en-CA")]) ? s.schedWeeks[md.toLocaleDateString("en-CA")] : (s.schedule || []);
+  const slot = weekSched.find((x: any) => (x.day || "").slice(0, 3) === wd);
   const evs = (s.calendarEvents || []).filter((e: any) => e.date === today || (e.endDate && e.date <= today && e.endDate >= today));
   const rems = (s.reminders || []).filter((r: any) => !r.done && r.date <= today);
   const tasks = (s.tasks || []).filter((t: any) => !t.done).length;

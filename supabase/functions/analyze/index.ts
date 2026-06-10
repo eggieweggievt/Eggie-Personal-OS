@@ -87,7 +87,8 @@ function stripCites(s: string): string {
   return String(s == null ? "" : s).replace(/<\/?cite[^>]*>/g, "").replace(/\s{2,}/g, " ").trim();
 }
 
-async function claudeWeb(system: string, user: string, maxTokens = 1800, maxSearches = 4): Promise<{ text: string; sources: { url: string; title: string }[] }> {
+// `user` may be a plain string OR an Anthropic content array (e.g. [image, text] for vision).
+async function claudeWeb(system: string, user: string | any[], maxTokens = 1800, maxSearches = 4): Promise<{ text: string; sources: { url: string; title: string }[] }> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY secret is not set");
   const messages: any[] = [{ role: "user", content: user }];
@@ -200,6 +201,10 @@ async function fullContext(userId: string, today: string): Promise<string> {
     }
     if (s.artBoard?.length || s.artResources?.length) lines.push(`ART STUDIO: mood board has ${s.artBoard?.length || 0} card(s); art library has ${s.artResources?.length || 0} saved link(s).`);
     if (s.eugeneFacts?.length) lines.push(`REMEMBERED FACTS (she told you to keep these): ${s.eugeneFacts.slice(-20).join(" | ")}`);
+    if (s.osChangeRequests?.length) {
+      const open = s.osChangeRequests.filter((r: any) => r.status !== "done");
+      lines.push(`OS CHANGE REQUESTS (the 🛠️ wishlist of app changes you logged for Claude the developer; don't re-log duplicates): ${open.length} open${open.length ? " — " + open.slice(-8).map((r: any) => `"${r.title}"${r.area ? " [" + r.area + "]" : ""} (${r.date || "?"})`).join("; ") : ""}; ${s.osChangeRequests.length - open.length} done.`);
+    }
     if (s.reminders?.length) {
       const up = s.reminders.filter((r: any) => !r.done).sort((a: any, b: any) => String(a.date + (a.time || "")).localeCompare(String(b.date + (b.time || "")))).slice(0, 6);
       if (up.length) lines.push(`REMINDERS PENDING: ${up.map((r: any) => `${r.date}${r.time ? " " + r.time : ""} — ${r.text}`).join("; ")}`);
@@ -231,7 +236,7 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (s.taxRate || s.setAside) { const _aside = (s.setAside || {})[today.slice(0, 7)]; lines.push(`TAX/SET-ASIDE: rate ${Math.round((s.taxRate || 0) * 100)}%${_aside != null ? `, set aside $${_aside} this month` : ""}.`); }
     if (s.gameEvents?.length) { const _up = s.gameEvents.filter((g: any) => g.date >= today).sort((a: any, b: any) => a.date.localeCompare(b.date)).slice(0, 6); if (_up.length) lines.push(`UPCOMING GAME DATES (for content planning): ${_up.map((g: any) => `${g.date}: ${g.title}`).join("; ")}.`); }
     if (s.artIdeas?.length || s.artInspo?.length) lines.push(`ART IDEAS/INSPO: ${s.artIdeas?.length || 0} parked idea(s); ${(s.artInspo || []).filter((x: any) => !x.done).length} inspiration item(s) to try.`);
-    if (s.creative?.project || s.creative?.step) lines.push(`CREATIVE FOCUS: ${s.creative.project || ""}${s.creative.step ? " — next tiny step: " + s.creative.step : ""}.`);
+    if (s.creativeFocus?.project || s.creativeFocus?.step) lines.push(`CREATIVE FOCUS: ${s.creativeFocus.project || ""}${s.creativeFocus.step ? " — next tiny step: " + s.creativeFocus.step : ""}.`);
     if (s.joyJar?.length) lines.push(`JOY JAR: ${s.joyJar.length} entr${s.joyJar.length === 1 ? "y" : "ies"} (recent: ${s.joyJar.slice(-3).join(", ")}).`);
     if (s.review && Object.keys(s.review).some((k) => s.review[k])) lines.push(`THIS WEEK'S REVIEW: ${["wins", "slipped", "loops", "followups", "notes", "top3"].map((k) => s.review[k] ? `${k}: ${String(s.review[k]).slice(0, 90)}` : "").filter(Boolean).join(" | ")}.`);
     if (captures?.data?.length) lines.push(`BRAIN DUMP (recent unsorted captures): ${captures.data.slice(0, 5).map((c: any) => String(c.raw_text || "").slice(0, 70)).join(" | ")}.`);
@@ -421,10 +426,12 @@ Max 12 events, future dates only.`,
     // --- agent: answer AND emit structured actions the front-end runs against the OS ---
     if (mode === "agent") {
       const q = (body.input?.question || "").toString().slice(0, 1000);
-      if (!q) return json({ error: "missing question" }, 400);
+      // optional attached photo: a data URL ("data:image/jpeg;base64,…") from the chat's 📷 button
+      const imgM = (body.input?.image || "").toString().match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!q && !imgM) return json({ error: "missing question" }, 400);
       const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
       const tz = (body.input?.tz || "America/New_York").toString();
-      const hist = Array.isArray(body.input?.history) ? body.input.history.slice(-10) : [];
+      const hist = Array.isArray(body.input?.history) ? body.input.history.slice(-16) : [];
       const convo = hist.length
         ? "Recent conversation (oldest first — use it to resolve follow-ups like \"yes\", \"the second one\", \"actually 5pm\"):\n" +
           hist.map((m: any) => ((m.role === "me" ? (userId === "eggie" ? "Her: " : "Them: ") : "You: ")) + String(m.text || "").slice(0, 300)).join("\n") + "\n\n"
@@ -459,6 +466,10 @@ WEB ACCESS: you have a real web_search tool. Use it (sparingly, only when the an
 
 VIDIQ: you do NOT have a direct VidIQ connection from here (VidIQ has no public API the OS can call). Do not pretend to pull live VidIQ data. You CAN still score titles/thumbnails with the built-in "poor-man's vidIQ" rubric above, and for real VidIQ numbers tell her to use the 🎯 Optimize tab or ask in Claude chat. If body.vidiq data was passed to you, you may use it.
 
+PHOTOS: she can attach a photo to a message (📷 in chat). When one is attached, actually LOOK at it and use it — read handwritten/whiteboard notes or a screenshot into tasks/captures/calendar events, read a schedule or receipt, describe her art warmly and give gentle concrete feedback, check a thumbnail against the thumbnail rubric, identify what's in the picture. If the photo alone is ambiguous, say what you see and ask. Photos are seen this message only (not stored), so capture anything worth keeping as an action right away. Never claim you can't see an attached image.
+
+THE OS ITSELF (its map — so you can answer "where do I find…" and route her with navigate): 🏠 Home (today at a glance), 🎬 Content (pipeline idea→scripting→recording→editing→thumbnail→scheduled→published), 🗒️ Planner (tasks/kanban + reminders), 📅 Calendar (events + 🎮 game-release layer), 🎯 Optimize (titles/descriptions/tags + thumbnail checker), ✍️ Script (script writer), 🌸 Habits (library + daily checks), 💗 Health (pain/fatigue/POTS/meds), 🫂 Care (emotions + executive function), 🎨 Art (timer, prompts, mood board, library), 💰 Money (ledger, invoices, savings, tax set-aside), 💌 Sponsors (pipeline + email writer), 🌸 Clients (Sakura Lightworks hub), 🌷 Review (weekly), 🐙 Ask Eugene (you), ⚙️ Settings (config, your remembered facts + voice examples, the 🛠️ change-request wishlist, notifications). The floating pet on every page is also you.
+
 ${nameLine}
 
 Return ONLY JSON, no prose around it:
@@ -476,7 +487,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
-- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"review"|"eugene"|"settings" }
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"income"|"pitch"|"clients"|"review"|"eugene"|"settings" }
 - logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
 - logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
 - setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
@@ -557,6 +568,7 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delReminder: { text (fuzzy) }       // cancel a reminder
 - doneReminder: { text (fuzzy) }      // mark a reminder handled
 - rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep
+- requestChange: { title, detail?, area?: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"money"|"sponsors"|"clients"|"review"|"eugene"|"pet"|"settings"|"backend"|"other" }   // she wants the OS APP ITSELF changed — a new feature, tweak, bug fix, or idea for the app or for you. You cannot edit the app's code; this logs it on the 🛠️ wishlist (Settings tab) as a record for Claude, the developer assistant who builds this OS with her, to implement next session. Use it whenever she says things like "request that…", "tell Claude…", "add to the wishlist", "it'd be nice if the app could…", "this looks broken, note it down". Title = crisp one-liner; detail = everything Claude needs to build it WITHOUT her re-explaining (what, where in the app, why, any specifics she gave — and if a photo showed the issue, describe exactly what you saw). Confirm in reply it's noted for Claude; NEVER pretend the change is already live. Check OS CHANGE REQUESTS in the snapshot first and don't duplicate an open one.
 - forgetFact: { hint }                // remove a remembered fact matching the hint
 - optimizeTitle: { title, topic?, format?: "short"|"long", platform? }   // "score/optimize this title: …" — runs her real optimizer and returns the score + better titles in chat
 - setDiscordDelivery: { mode: "dm"|"channel", channelId? (numeric, required for channel) }   // "send my Discord pings to #reminders" / "DM me instead" — where reminder pings go on Discord
@@ -598,9 +610,13 @@ Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" a
           .replace(/\bShe\b/g, "They").replace(/\bshe\b/g, "they");
       }
       const userMsg = userId === "eggie"
-        ? `${convo}Her recent content (newest first):\n${history}\n\nShe says: "${q}"\n\nReturn ONLY the JSON object.`
-        : `${convo}They say: "${q}"\n\nReturn ONLY the JSON object.`;
-      const { text: raw, sources } = await claudeWeb(sys, userMsg, 4000);
+        ? `${convo}Her recent content (newest first):\n${history}\n\n${imgM ? "She attached the photo above and says" : "She says"}: "${q || "(no words — just the photo)"}"\n\nReturn ONLY the JSON object.`
+        : `${convo}${imgM ? "They attached the photo above and say" : "They say"}: "${q || "(no words — just the photo)"}"\n\nReturn ONLY the JSON object.`;
+      // with a photo attached, send a vision content array; otherwise the plain string
+      const userContent: string | any[] = imgM
+        ? [{ type: "image", source: { type: "base64", media_type: imgM[1], data: imgM[2] } }, { type: "text", text: userMsg }]
+        : userMsg;
+      const { text: raw, sources } = await claudeWeb(sys, userContent, 4000);
       const parsed = parseJSON(raw);
       // Never leak the model's raw reasoning / a truncated JSON blob into her chat.
       // If parsing failed, salvage a clean "reply" string if we can find one, else say so plainly.
