@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.15";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.16";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.16: YOUR BRAIN GOT A RESEARCH-GROUNDED UPGRADE 🧠 — you now have real long-term memory (a rolling summary, open loops, episode digests + auto-learned facts, built quietly after chats; health is NEVER auto-learned). She can see/edit/pause it all in the 🧠 panel (chat header) and chat incognito with 🕶. Replies are guaranteed-valid JSON (structured outputs), the big prompt is cached (~90% cheaper), adaptive thinking is on, and Settings has a model picker (Sonnet default · Haiku · Opus · Fable 5). Micro-tools (breakdown/tone/rephrase/compile + NEW ⏱ honest estimator in Tools) run on fast cheap Haiku",
   "2026-06-10.15: chatting with you (Eugene) got comfier — the message box is bigger, grows as she types, and Shift+Enter makes a new line (Enter still sends); same in the floating pet bubble",
   "2026-06-10.14: fixed the optimizer 'r.tags.forEach is not a function' crash — results now render even when the AI returns lists as comma-strings (optimizer + thumbnail check)",
   "2026-06-10.13: Clients tab streamlined — now modular cards you can reorder/hide like Home (fixed: ☀️ today's three had silently vanished), 🔍 live search across clients AND needs, tap-the-pill to move a need along (no dragging), 🧹 sweep done piles, 📣 message-many broadcasts one note to every checked client channel ({name} personalizes), inbox senders are clickable",
@@ -1884,6 +1885,13 @@ async function renderTools(){
       <div id="gobOutFree" style="margin-top:10px"></div>
     </div>
 
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏱ Honest estimator</h2><span class="label">how long will it ACTUALLY take?</span></div>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">Time blindness first-aid: real-life minutes including setup, transitions, and decision pauses — never productivity-guru optimism. 💗</p>
+      <input class="inp" id="est_task" placeholder="e.g. record and edit this week's short…"/>
+      <button class="btn btn-pink" data-act="estRun" style="margin-top:8px">⏱ be honest with me</button>
+      <div id="estOut" style="margin-top:10px"></div>
+    </div>
+
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">🗂 Brain-dump compiler</h2><span class="pill pill-lav">${caps.length} capture${caps.length===1?"":"s"} waiting</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 8px">AI proposes a home for every captured thought at once — task, content idea, sticky, or let-go — and you just approve.</p>
       <div style="display:flex;gap:8px"><button class="btn btn-pink" data-act="compile">🪄 compile them all</button><button class="btn" data-act="triage">📥 or one at a time</button></div>
@@ -2862,9 +2870,18 @@ async function renderSettings(){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="chiptog ${speak?'on':''}" data-act="euSpeak"><span class="check ${speak?'on':''}"></span>🔊 read replies aloud</button>
         <button class="btn" data-act="eugeneClear">🧹 clear conversation memory</button>
+        <button class="btn" data-act="memOpen">🧠 his long-term memory</button>
       </div>
-      <div class="label" style="margin:12px 0 6px">🧠 remembered facts</div>
-      ${facts.length?facts.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(f)}</span><button class="ft-ic" data-act="factDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">Nothing yet — tell Eugene "remember that…" and it'll live here.</p>`}
+      <div class="label" style="margin:12px 0 6px">🧬 his brain (model)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select class="inp" id="eu_model" style="max-width:330px">
+          ${[["","🌸 Sonnet 4.6 — balanced (default)"],["claude-haiku-4-5","⚡ Haiku 4.5 — fastest & cheapest (~3x less)"],["claude-opus-4-8","🧠 Opus 4.8 — deeper thinker (~1.7x cost)"],["claude-fable-5","🌌 Fable 5 — maximum brain (~3x cost)"]].map(([v,l])=>`<option value="${v}" ${(c.assistantModel||"")===v?"selected":""}>${l}</option>`).join("")}
+        </select>
+        <button class="btn btn-pink" data-act="eugeneModelSave" ${RO?"disabled":""}>💾 save</button>
+      </div>
+      <p class="soft" style="font-size:11px;margin:6px 0 0">Applies to Eugene's chat brain only (micro-tools already run on the cheap fast one). Costs come from your Anthropic key. 💗</p>
+      <div class="label" style="margin:12px 0 6px">🧠 remembered facts <span class="muted">· full memory panel has more</span></div>
+      ${facts.length?facts.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(typeof f==="string"?f:(f.text||""))}</span><button class="ft-ic" data-act="factDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">Nothing yet — tell Eugene "remember that…" and it'll live here.</p>`}
       <div class="label" style="margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center">🎓 voice examples <button class="btn" data-act="teachAdd" data-kind="any" style="padding:2px 9px">＋ add</button></div>
       <p class="soft" style="font-size:11.5px;margin:0 0 6px">Real posts/scripts/emails you've written (or corrections). Eugene matches these when he writes for you.</p>
       ${(sent.eqVoice||[]).length?(sent.eqVoice||[]).slice().reverse().map(v=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><span class="pill pill-lav" style="flex:0 0 auto">${v.kind==="any"?"🌸":v.kind==="twitter"?"🐦":v.kind==="script"?"🎬":v.kind==="email"?"✉️":"🎯"}</span><div class="grow" style="min-width:0"><div style="font-size:12px;white-space:pre-wrap;max-height:60px;overflow:hidden">${esc(v.example)}</div>${v.note?`<div class="soft" style="font-size:11px;margin-top:2px">↳ ${esc(v.note)}</div>`:""}</div><button class="ft-ic" data-act="teachDel" data-id="${v.id}" style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">None yet — hit 🎓 teach Eugene on any output, or ＋ add a real example.</p>`}
@@ -3474,13 +3491,38 @@ const EUGENE_ASKS=[
   "What's on my calendar coming up?",
   "What's on my OS wishlist for Claude?"
 ];
+/* 🧠 Eugene's memory panel — the trust layer: see, edit, delete, or pause everything he holds */
+async function memoryModal(){
+  try{ delete DB._c.daily[SENTINEL]; }catch(e){}
+  const sent=await DB.daily(SENTINEL); SENT=sent;
+  const mem=sent.eugeneMemory||{}; const facts=(sent.eugeneFacts||[]); const eps=(sent.eugeneEpisodes||[]).slice(-5).reverse();
+  const fTxt=f=>typeof f==="string"?f:(f.text||"");
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:17px">🧠 Eugene's memory</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 10px">Everything Eugene carries between chats lives here — yours to edit, delete, or pause. Health stuff is never auto-learned; it stays in your Health logs. 💗</p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer"><input type="checkbox" id="mem_pause" ${mem.paused?"checked":""} data-act="memPause"/><span style="font-size:13px;font-weight:700">⏸ pause memory</span><span class="soft" style="font-size:11.5px">— he keeps what he has but stops learning or using it</span></label>
+    <div class="label" style="margin-bottom:4px">📖 rolling summary <span class="muted">· auto-updates after chats${mem.updatedAt?` · last ${esc(String(mem.updatedAt).slice(0,10))}`:""}</span></div>
+    <textarea class="inp" id="mem_summary" rows="6" placeholder="(nothing yet — it builds itself as you two talk)">${esc(mem.summary||"")}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn btn-pink" data-act="memSumSave">💾 save my edits</button></div>
+    <div class="label" style="margin:14px 0 4px">🧵 open loops <span class="muted">· threads he may gently offer to pick up</span></div>
+    ${(mem.openLoops||[]).length?(mem.openLoops||[]).map((l,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(l)}</span><button class="ft-ic" data-act="memLoopDel" data-idx="${i}" style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">none right now 🌸</p>`}
+    <div class="label" style="margin:14px 0 4px">📌 facts <span class="muted">· ${facts.length} kept (✨ = learned on his own, always undoable)</span></div>
+    ${facts.length?facts.slice().reverse().map((f,ri)=>{const i=facts.length-1-ri; return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)">${(typeof f!=="string"&&f.source==="auto")?`<span title="he noticed this himself">✨</span>`:`<span title="you told him">💬</span>`}<span class="grow" style="font-size:12.5px">${esc(fTxt(f))}</span><button class="ft-ic" data-act="memFactDel" data-idx="${i}" style="color:var(--rose)">🗑</button></div>`;}).join(""):`<p class="soft" style="font-size:12px;margin:0">none yet — tell him "remember that…" any time 🌸</p>`}
+    <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="mem_newfact" placeholder="add a fact he should keep…" style="flex:1"/><button class="btn" data-act="memFactAdd">＋</button></div>
+    <div class="label" style="margin:14px 0 4px">🗓 recent conversations <span class="muted">· what you two covered</span></div>
+    ${eps.length?eps.map(e2=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)"><b>${esc(e2.date||"")}</b> · ${esc((e2.topics||[]).join(", "))}${e2.decisions?`<span class="soft"> — ${esc(e2.decisions)}</span>`:""}</div>`).join(""):`<p class="soft" style="font-size:12px;margin:0">no episodes yet</p>`}
+    <p class="soft" style="font-size:11px;margin:12px 0 0">🕶 the incognito button in the chat header keeps a whole conversation out of memory. "forget what I said about X" works in chat too.</p>
+  </div></div>`;
+}
 async function renderEugene(){
   if(state.eugeneLog==null){ try{ state.eugeneLog=JSON.parse(localStorage.getItem("eugene-log")||"[]"); }catch(e){ state.eugeneLog=[]; } }
   const log=state.eugeneLog||[];
   const max=!!state.eugeneMax;
+  /* 🧠 continuity greeting: when there's an open loop from a past chat, the empty state offers ONE gentle thread */
+  const loop0=(SENT&&SENT.eugeneMemory&&!SENT.eugeneMemory.paused&&(SENT.eugeneMemory.openLoops||[])[0])||"";
   const logHtml = log.length
     ? log.map(m=>`<div class="eu-msg ${m.role==="me"?"me":"pet"}">${m.img?`<img src="${m.img}" alt="photo" style="display:block;max-width:180px;max-height:140px;border-radius:10px;margin:0 0 6px"/>`:""}${esc(m.text)}${m.retryQ?`<div style="margin-top:7px"><button class="eu-chip" data-act="eugeneAsk" data-q="${esc(m.retryQ)}">↻ try that again</button></div>`:""}</div>`).join("")
-    : `<div class="eu-msg pet">Hi, I'm Eugene! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. You can also 📷 show me a photo, or ask me to note a change request for Claude. Tap an example below to start. 🌸</div>`;
+    : `<div class="eu-msg pet">Hi, I'm Eugene! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. You can also 📷 show me a photo, or ask me to note a change request for Claude.${loop0?`\n\nLast time we left a thread hanging: "${esc(loop0)}" — want to pick it up? Totally fine to ignore it too. 💗`:" Tap an example below to start. 🌸"}</div>`;
   const busyHtml = state.eugeneBusy ? `<div class="eu-msg pet">…thinking 🐙</div>` : "";
   /* E1 + E2: the first chips mirror TODAY — overdue things, unread client notes, low spoons — then evergreen ones */
   let dyn=["☀️ brief me on today"];
@@ -3497,6 +3539,8 @@ async function renderEugene(){
       <div class="eu-head">
         <div class="eu-av"></div>
         <div style="flex:1"><div style="font-family:var(--display);font-size:17px">Eugene</div><div class="label" style="margin-top:1px">your octopus helper · web-connected 🌐</div></div>
+        <button class="btn" data-act="memOpen" title="Eugene's memory — what he knows, edit or pause it">🧠</button>
+        <button class="btn ${state.euIncognito?'btn-pink':''}" data-act="euIncognito" title="${state.euIncognito?'incognito ON — this chat won’t be remembered':'incognito — chat without it entering memory'}">🕶</button>
         <button class="btn" data-act="euSpeak" title="read replies aloud">${(function(){try{return localStorage.getItem("eugene-speak")==="1"}catch(e){return false}})()?'🔊':'🔇'}</button>
         <button class="btn" data-act="eugeneAsksToggle" title="example questions">💡</button>
         <button class="btn" data-act="eugeneClear" title="clear chat">🧹</button>
@@ -4027,7 +4071,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4329,6 +4373,25 @@ document.addEventListener("click",async(e)=>{
   if(act==="euPhotoClear"){ state.euImage=null; render(); return; }
   if(act==="euMic"){ euMicToggle(); return; }
   if(act==="euSpeak"){ let on=false; try{ on=localStorage.getItem("eugene-speak")==="1"; localStorage.setItem("eugene-speak",on?"0":"1"); }catch(e){} if(!on){ try{ const u=new SpeechSynthesisUtterance("Hi! I'll read my replies out loud now."); u.pitch=1.1; speechSynthesis.speak(u); }catch(e){} } else { try{speechSynthesis.cancel();}catch(e){} } render(); return; }
+  if(act==="memOpen"){ memoryModal(); return; }
+  if(act==="euIncognito"){ state.euIncognito=!state.euIncognito; toast(state.euIncognito?"🕶 incognito — this chat stays out of Eugene's memory":"memory back on 🧠"); render(); return; }
+  if(act==="memPause"){ const on=!!(document.getElementById("mem_pause")||{}).checked; await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),paused:on}})); toast(on?"⏸ memory paused — he keeps what he has, learns nothing new":"▶ memory back on 🧠"); return; }
+  if(act==="memSumSave"){ const v=((document.getElementById("mem_summary")||{}).value||"").slice(0,2400); await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),summary:v,updatedAt:new Date().toISOString()}})); toast("🧠 summary saved — he'll use your version 💗"); return; }
+  if(act==="memLoopDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),openLoops:((n.eugeneMemory||{}).openLoops||[]).filter((_,i2)=>i2!==ix)}})); memoryModal(); return; }
+  if(act==="memFactDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:(n.eugeneFacts||[]).filter((_,i2)=>i2!==ix)})); memoryModal(); return; }
+  if(act==="memFactAdd"){ const v=((document.getElementById("mem_newfact")||{}).value||"").trim(); if(!v){toast("Write the fact first 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:[...(n.eugeneFacts||[]),{id:"f"+uid().slice(0,8),text:v.slice(0,240),source:"user",learnedAt:TODAY}].slice(-60)})); memoryModal(); return; }
+  if(act==="estRun"){ const out=document.getElementById("estOut"); if(!out)return;
+    if(DEMO||!SB){ out.innerHTML=`<div class="soft" style="font-size:12.5px">✨ runs once the analyze function is deployed + demo is off 🐙</div>`; return; }
+    const tx=((document.getElementById("est_task")||{}).value||"").trim(); if(!tx){toast("What's the thing? 🌸");return;}
+    out.innerHTML=`<div class="label">consulting the honest clock… ⏱</div>`;
+    try{ const r=await aiCall("goblin",{kind:"estimate",task:tx});
+      if(r&&r.error){ out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px">${esc(r.error)}</div>`; return; }
+      out.innerHTML=`<div class="soft-card"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="num" style="font-size:24px;font-family:var(--display);color:var(--pink-deep)">${esc(r.likely||"?")}</span>${r.bestCase?`<span class="label">best case ${esc(r.bestCase)}</span>`:""}</div>
+        ${r.why?`<p class="soft" style="font-size:12.5px;margin:6px 0 0">${esc(r.why)}</p>`:""}
+        ${(r.parts&&r.parts.length)?`<div style="margin-top:8px">${r.parts.map(p=>`<div style="display:flex;gap:8px;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--line)"><span class="grow">${esc(p.text)}</span><span class="pill pill-gray">~${p.min}m</span></div>`).join("")}</div>`:""}</div>`;
+    }catch(e){ out.innerHTML=`<div class="soft" style="color:var(--rose);font-size:12.5px">${esc(e.message||e)}</div>`; }
+    return; }
+  if(act==="eugeneModelSave"){ const v=((document.getElementById("eu_model")||{}).value||"").trim(); await DB.saveDaily(SENTINEL,n=>({...n,appConfig:{...(n.appConfig||{}),assistantModel:v||undefined}})); toast(v?"🐙 Eugene's brain switched — takes effect next message":"back to the default brain 🌸"); return; }
   if(act==="eugeneSend"||act==="eugeneAsk"){
     if(state.eugeneBusy) return;
     if(euRecOn) euMicToggle();
@@ -5473,7 +5536,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       }
       case "rememberFact":
         if(!a.fact) return "";
-        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push(String(a.fact).slice(0,300)); if(f.length>40)f=f.slice(-40); return Object.assign({},n,{eugeneFacts:f}); });
+        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push({id:"f"+Date.now().toString(36),text:String(a.fact).slice(0,300),source:"user",learnedAt:TODAY}); if(f.length>60)f=f.slice(-60); return Object.assign({},n,{eugeneFacts:f}); });
         return "🧠 got it — I'll remember that";
       case "requestChange":
         if(!a.title) return "";
@@ -5481,7 +5544,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
         return "🛠️ noted on the wishlist for Claude: “"+String(a.title).slice(0,120)+"” (Settings → 🛠️ change requests)";
       case "forgetFact": {
         var nm=(a.hint||"").toLowerCase(); var hit=null;
-        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).filter(function(x){ if(!hit&&String(x).toLowerCase().indexOf(nm)>=0){hit=x;return false;} return true; }); return Object.assign({},n,{eugeneFacts:f}); });
+        await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).filter(function(x){ var tx=typeof x==="string"?x:String(x&&x.text||""); if(!hit&&tx.toLowerCase().indexOf(nm)>=0){hit=tx;return false;} return true; }); return Object.assign({},n,{eugeneFacts:f}); });
         return hit? "🧠 forgotten" : "I don't have a memory like that 🌸";
       }
       case "optimizeTitle": {
@@ -5525,7 +5588,8 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
   window.runClientRelay=runClientRelay;
   async function runAgent(q,img){
     var hist=window.EUGENE_HIST.slice(-16);
-    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist,image:img||undefined,appBuild:APP_BUILD,news:OS_NEWS});
+    var mdl; try{ mdl=(SENT&&SENT.appConfig&&SENT.appConfig.assistantModel)||undefined; }catch(e){}
+    var r = await aiCall("agent",{question:q,today:TODAY,tz:CAL_TZ_TARGET,history:hist,image:img||undefined,appBuild:APP_BUILD,news:OS_NEWS,model:mdl});
     if(r && r._needsBackend) return "I can actually run things once the analyze function is deployed + demo mode is off 🐙 — redeploy and I'll be your hands! 🌸";
     if(r && r.error) throw new Error(r.error);
     var acts = Array.isArray(r.actions)? r.actions : [];
@@ -5538,7 +5602,28 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     if(window.EUGENE_HIST.length>32) window.EUGENE_HIST=window.EUGENE_HIST.slice(-32);
     try{ localStorage.setItem("eugene-hist",JSON.stringify(window.EUGENE_HIST)); }catch(e){}
     eugeneSpeak(reply);
+    try{ memorizeSoon(); }catch(e){}   // 🧠 quiet background memory pass — never blocks the reply
     return reply;
+  }
+  /* 🧠 long-term memory: after a couple of exchanges, quietly ask the brain to consolidate.
+     Debounced 25s so it fires once per "sitting", skipped in 🕶 incognito or when memory is paused. */
+  function memorizeSoon(){
+    window._memN=(window._memN||0)+1;
+    if(window._memN<2) return;                                     // wait for a real exchange, not a one-liner
+    clearTimeout(window._memT);
+    window._memT=setTimeout(async function(){
+      try{
+        if(state.euIncognito) return;
+        var sentM=await DB.daily(SENTINEL);
+        if(sentM&&sentM.eugeneMemory&&sentM.eugeneMemory.paused) return;
+        var r=await aiCall("memorize",{history:window.EUGENE_HIST.slice(-14),today:TODAY});
+        if(r&&r.ok){
+          window._memN=0;
+          try{ delete DB._c.daily[SENTINEL]; }catch(e){}           // server wrote the sentinel — drop the stale cache
+          if(r.learned&&r.learned.length) toast("🧠 Eugene noted: "+r.learned[0]+(r.learned.length>1?" (+"+(r.learned.length-1)+" more)":""),{act:"memOpen",label:"see memory",ms:7000});
+        }
+      }catch(e){ /* memory is a bonus, never an error she has to see */ }
+    },25000);
   }
   window.eugeneAsk = function(q,img){ return runAgent(q,img); };   // lets the 🐙 Ask Eugene tab share the same brain (img = optional photo dataURL)
   var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
