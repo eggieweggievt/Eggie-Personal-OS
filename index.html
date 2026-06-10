@@ -829,7 +829,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.6";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.7";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -1377,7 +1377,7 @@ async function renderContent(){
     ${pillarMeter(parents)}
     <div class="panel">
       <div class="card-head"><span class="label">Content pipeline 🎬 · ${shown.length}${state.fmt!=="all"?" "+FORMATS[state.fmt]:""} items ${wip}</span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${viewSeg}${simpleSeg}${capsN?`<button class="btn" data-act="triage" title="sort your brain-dump captures, one at a time">📥 triage ${capsN}</button>`:""}<a class="btn" href="https://metricool.com" target="_blank" rel="noopener" title="Open Metricool in a new tab">📊 Metricool</a>${fmtSeg}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${viewSeg}${simpleSeg}${capsN?`<button class="btn" data-act="triage" title="sort your brain-dump captures, one at a time">📥 triage ${capsN}</button><button class="btn" data-act="compile" title="🪄 AI sorts ALL captures at once — you just approve">🪄 compile</button>`:""}<a class="btn" href="https://metricool.com" target="_blank" rel="noopener" title="Open Metricool in a new tab">📊 Metricool</a>${fmtSeg}
           <input class="inp" id="smartQ" placeholder="search…" style="width:140px" /><button class="btn" data-act="smart">🔍</button>${state.smartIds?`<button class="btn" data-act="smartClear">clear</button>`:""}
           <input class="inp" id="newContent" placeholder="New ${state.fmt==='all'?'idea':FORMATS[state.fmt].toLowerCase()}…" style="width:150px" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="addContent" ${RO?"disabled":""}>+ add</button>
         </div></div>
@@ -1386,6 +1386,27 @@ async function renderContent(){
       <div class="label" style="margin-top:10px">Drag cards across stages · click a card to open its brief · click the title to select for bulk · + sub to nest a to-do.${simple?" · 🌿 cards keep their exact stage (shown on each card) — dropping into a column lands on its first stage":""}</div>`}
     </div>
   </div>`;
+}
+/* 🪄 compiler: AI proposes a home for EVERY capture at once; she just approves (turbo triage) */
+function compilePaint(){
+  const items=state._compile||[];
+  const box=document.getElementById("compOut"); if(!box)return;
+  if(!items.length){ document.getElementById("modal").innerHTML=""; toast("📥 inbox zero — every thought has a home 🎉"); render(); return; }
+  const KICON={task:"🗒️ task",content:"🎬 content",sticky:"📌 sticky",drop:"🗑 let go"};
+  box.innerHTML=`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn btn-pink" data-act="compileApplyAll">✨ apply all ${items.length}</button></div>`+
+    items.map(it=>`<div class="soft-card" style="margin-top:6px"><div style="display:flex;gap:8px;align-items:center">
+      <span class="pill ${it.kind==="drop"?"pill-gray":it.kind==="content"?"pill-pink":it.kind==="sticky"?"pill-peach":"pill-lav"}">${KICON[it.kind]||it.kind}</span>
+      <span class="grow" style="font-size:12.5px">${esc(it.kind==="content"?(it.title||it.text):it.text)}</span>
+      ${it.kind==="task"?`<span class="pill ${spoonPill(it.spoon)}">${spoonShort(it.spoon)}</span><span class="label">${esc(it.bucket||"personal")}</span>`:""}
+      <button class="btn" data-act="compileApply" data-id="${esc(it.id)}" style="padding:3px 10px">✓</button>
+      <button class="ft-ic" data-act="compileSkip" data-id="${esc(it.id)}" title="leave it in the brain dump">skip</button>
+    </div></div>`).join("");
+}
+async function compileApplyOne(it){
+  if(it.kind==="task") await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:(it.text||"").slice(0,300),bucket:it.bucket||"personal",spoon:it.spoon||"some",done:false,sub:[],created_at:new Date().toISOString()}]);
+  else if(it.kind==="content") await DB.addContent({title:(it.title||it.text||"").slice(0,160),stage:"idea",priority:60});
+  else if(it.kind==="sticky") addSticky(it.text||"");
+  await DB.delCapture(it.id);
 }
 /* CT5: capture-triage ritual — one capture at a time, four big honest buttons. Inbox zero as a game. */
 async function triageModal(){
@@ -1660,8 +1681,10 @@ function taskRow(t){
       ${state.tuck&&!t.done&&t.bucket!=="someday"?`<button class="btn" data-act="tuckTask" data-id="${t.id}" title="tuck into Someday — no pressure, no loss" style="padding:2px 9px">🌙 tuck</button>`:""}
       <button class="ft-ic" data-act="taskToday" data-id="${t.id}" ${RO?"disabled":""} title="${starOn?"on today's plate — tap to take it off":"put it on today's plate"}" style="${starOn?'opacity:1':''}">${starOn?"☀️":"☀"}</button>
       <button class="ft-ic" data-act="taskRem" data-id="${t.id}" title="${lr?`reminder ${lr.date}${lr.time?" "+lr.time:""} — tap to change`:"due date + reminder"}" style="${lr?'color:var(--pink-deep);opacity:1':''}">⏰${lr?`<span class="label num" style="margin-left:2px;color:var(--pink-deep)">${esc((lr.date===TODAY?"":lr.date.slice(5)+" ")+(lr.time||""))}</span>`:""}</button>
+      ${t.est?`<span class="label num" title="magic estimate">~${t.est}m</span>`:""}
       <span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span>
       <button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="Focus on just this one">◎</button>
+      <button class="ft-ic" data-act="goblinBreak" data-id="${t.id}" title="🪄 magic break-it-down — tiny steps + honest time estimates" ${RO?"disabled":""}>🪄</button>
       <button class="ft-ic" data-act="addSubtask" data-id="${t.id}" title="Break into a step" ${RO?"disabled":""}>＋</button>
       <button class="ft-ic" data-act="delTask" data-id="${t.id}" title="Remove" ${RO?"disabled":""} style="color:var(--rose)">🗑</button>
     </div>
@@ -1737,6 +1760,51 @@ async function taskRemModal(taskId){
     <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="trDate" type="date" value="${esc(r?r.date:(t.due||TODAY))}" style="width:auto"/><input class="inp" id="trTime" type="time" value="${esc(r?(r.time||"09:00"):"09:00")}" style="width:auto"/></div>
     <div style="display:flex;justify-content:space-between;margin-top:14px"><button class="btn" data-act="taskEditDel" data-id="${taskId}" style="color:var(--rose)">🗑 delete task</button><button class="btn btn-pink" data-act="taskRemSave" data-id="${taskId}">💾 save</button></div>
   </div></div>`;
+}
+/* ===================== 🪄 GOBLIN TOOLS (goblin.tools-inspired, running on her own AI) ===================== */
+/* Magic break-it-down: spice = how tiny the steps get. Steps land as normal subtasks. */
+async function goblinBreakModal(id){
+  const sent=await DB.daily(SENTINEL); const t=(sent.tasks||[]).find(x=>x.id===id); if(!t)return;
+  const sp=state.goblinSpice||3;
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:460px;width:100%;max-height:92vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">🪄 break it down</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div class="soft-card" style="font-size:13px">${esc(t.text)}</div>
+    <div class="label" style="margin:12px 0 5px">how tiny should the steps be? <span class="muted">· more 🌶 = smaller bites</span></div>
+    <div class="seg">${[1,2,3,4,5].map(v=>`<button data-act="goblinSpice" data-v="${v}" class="${sp===v?'on':''}">${"🌶".repeat(v)}</button>`).join("")}</div>
+    <button class="btn btn-pink" data-act="goblinRun" data-id="${t.id}" style="margin-top:12px;width:100%">✨ break it down</button>
+    <div id="gobOut" style="margin-top:10px"></div>
+  </div></div>`;
+}
+function goblinStepsHTML(r,id){
+  const steps=(r&&r.steps)||[];
+  if(!steps.length)return `<div class="soft" style="font-size:12.5px">hmm, nothing came back — try rewording the task? 🌸</div>`;
+  return `<div class="label" style="margin-bottom:6px">untick any you don't need · ~${r.totalMin||"?"} min all-in</div>
+    ${steps.map((s,i)=>`<label class="hbtn" style="display:flex;gap:9px;align-items:center;width:100%;margin-top:6px;cursor:pointer"><input type="checkbox" class="gob-step" data-i="${i}" checked style="accent-color:var(--pink)"/><span class="grow" style="font-size:12.5px;text-align:left">${esc(s.text)}</span><span class="label num">~${Number(s.min)||"?"}m</span></label>`).join("")}
+    <button class="btn btn-pink" data-act="goblinApplySubs" data-id="${id}" style="margin-top:10px;width:100%">＋ add the ticked steps</button>`;
+}
+/* Tone judge: honest read of a received message — RSD first-aid */
+function toneModalHTML(r){
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${(r.vibe||[]).map(v=>`<span class="pill pill-lav">${esc(v)}</span>`).join("")}</div>
+    <div style="font-size:13px;line-height:1.6">${esc(r.read||"")}</div>
+    ${r.notSaying?`<div class="soft-card" style="margin-top:10px;font-size:12.5px;line-height:1.55"><b class="pink">what it's NOT saying:</b> ${esc(r.notSaying)}</div>`:""}
+    ${r.respond?`<div class="label" style="margin-top:10px">easiest healthy reply</div><div class="soft" style="font-size:12.5px">${esc(r.respond)}</div>`:""}`;
+}
+async function toneJudgeRun(text){
+  if(!String(text||"").trim()){ toast("paste the message first 🌸"); return; }
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:460px;width:100%;max-height:92vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">⚖️ how does it actually read?</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div id="toneOut"><div class="label">reading the room… 🐙</div></div></div></div>`;
+  try{ const r=await aiCall("goblin",{kind:"tone",text:String(text).slice(0,4000)});
+    const out=document.getElementById("toneOut"); if(!out)return;
+    if(r&&r._needsBackend){ out.innerHTML=`<div class="soft" style="font-size:12.5px">needs the backend deployed + demo off 🌸</div>`; return; }
+    if(r&&r.error){ out.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+    out.innerHTML=toneModalHTML(r||{});
+  }catch(e){ const out=document.getElementById("toneOut"); if(out)out.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc(e.message||e)}</div>`; }
+}
+/* Formalizer: rewrite-in-place chips for any textarea */
+function rephraseRow(targetId){
+  const styles=[["professional","💼 professional"],["softer","🌸 softer"],["shorter","✂️ shorter"],["warmer","💗 warmer"],["mine","🐙 more me"]];
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><span class="label" style="align-self:center">🎭 make it</span>${styles.map(([v,l])=>`<button class="chiptog" data-act="goblinRephrase" data-style="${v}" data-target="${targetId}" style="font-size:11px;padding:4px 10px">${l}</button>`).join("")}</div>`;
 }
 async function renderPlanner(){
   const sent=await DB.daily(SENTINEL); const tasks=sent.tasks||[];
@@ -2213,8 +2281,9 @@ async function renderPitch(){
       <div style="display:flex;justify-content:space-between;align-items:center"><span class="label">subject</span><button class="btn" data-act="copyText" data-t="${esc(em.out.subject||"")}" style="padding:2px 8px">copy</button></div>
       <input class="inp" value="${esc(em.out.subject||"")}" readonly style="margin-top:3px"/>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><span class="label">email</span><button class="btn" data-act="copyText" data-t="${esc(em.out.body||"")}" style="padding:2px 8px">copy</button></div>
-      <textarea class="inp" rows="12" style="margin-top:3px">${esc(em.out.body||"")}</textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" data-act="emailAttach" title="append this draft to that brand's notes so it never evaporates">📎 save to ${esc(em.brand||"the sponsor")}'s notes</button></div>
+      <textarea class="inp" id="em_body" rows="12" style="margin-top:3px">${esc(em.out.body||"")}</textarea>
+      ${rephraseRow("em_body")}
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-act="emailAttach" title="append this draft to that brand's notes so it never evaporates">📎 save to ${esc(em.brand||"the sponsor")}'s notes</button></div>
     </div>`:"";
   PP.email=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">✉️ Email writer</h2><span class="label">drafts in your voice</span></div>
     <p class="soft" style="font-size:12px;margin:0 0 10px">Pick the kind of email, drop in a couple of notes (and their message if you're replying), and I'll draft it grounded in your real numbers + rate card. 💌</p>
@@ -2225,7 +2294,7 @@ async function renderPitch(){
     </div>
     <div class="label" style="margin:10px 0 4px">Notes — what to say <span class="muted">· bullet points are fine</span></div>
     <textarea class="inp" id="em_notes" rows="3" placeholder="e.g. propose a sponsored stream, my rate is \$X, can do the week of the 15th">${esc(em.notes||"")}</textarea>
-    <div class="label" style="margin:10px 0 4px">Their email <span class="muted">· paste it if you're replying</span></div>
+    <div class="label" style="margin:10px 0 4px;display:flex;align-items:center;justify-content:space-between">Their email <span class="muted">· paste it if you're replying</span><button class="btn" data-act="toneJudge" data-src="em_their" style="padding:2px 9px" title="⚖️ honest tone read — are they actually annoyed, or just busy?">⚖️ read their tone</button></div>
     <textarea class="inp" id="em_their" rows="3" placeholder="paste their message here (optional)">${esc(em.their||"")}</textarea>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-pink" data-act="genEmail">✨ ${em.out?"rewrite":"write it"}</button>${em.out?`<button class="btn" data-act="genEmail" data-v="again">🎲 another version</button><button class="btn" data-act="teach" data-kind="email" title="teach Eugene your email voice">🎓 teach</button>`:""}</div>
     <div id="emailOut">${emOut}</div></div>`;
@@ -2631,7 +2700,7 @@ async function renderClients(){
   }
   const inbox=(sent.inbox||[]); const unread=inbox.filter(m=>!m.read).length;
   const inboxPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:18px">📨 Inbox${unread?` <span class="pill pill-pink">${unread} new</span>`:""}</h2>${inbox.some(m=>m.read)?`<button class="btn" data-act="inboxClearRead">clear read</button>`:""}</div>
-    ${inbox.length?`<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto">${inbox.slice().reverse().map(m=>{ const d=new Date(m.date); const when=isNaN(d)?"":d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); return `<div class="soft-card" style="padding:9px 11px;${m.read?'opacity:.62':'border-color:#f0c6dc'}"><div style="display:flex;align-items:center;gap:8px"><span class="pill pill-lav">${esc(m.from||m.who||"someone")}</span><span class="label">${esc(when)}</span><div style="flex:1"></div>${!m.read?`<button class="ft-ic" data-act="inboxRead" data-id="${m.id}" title="mark read">✓</button>`:""}${m.clientId?`<button class="ft-ic" data-act="inboxToNeed" data-id="${m.id}" title="turn into a client need">➕</button><button class="ft-ic" data-act="inboxReply" data-id="${m.id}" title="reply to their channel">↩</button>`:""}<button class="ft-ic" data-act="inboxDel" data-id="${m.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word">${esc(m.text)}</div></div>`; }).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">Nothing here yet. Clients drop a note with <b>/sakura</b> in their linked channel and it lands here — tag it to their needs or reply straight to their channel. 🌸</p>`}
+    ${inbox.length?`<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto">${inbox.slice().reverse().map(m=>{ const d=new Date(m.date); const when=isNaN(d)?"":d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); return `<div class="soft-card" style="padding:9px 11px;${m.read?'opacity:.62':'border-color:#f0c6dc'}"><div style="display:flex;align-items:center;gap:8px"><span class="pill pill-lav">${esc(m.from||m.who||"someone")}</span><span class="label">${esc(when)}</span><div style="flex:1"></div><button class="ft-ic" data-act="toneJudge" data-id="${m.id}" title="⚖️ how does this actually read?">⚖️</button>${!m.read?`<button class="ft-ic" data-act="inboxRead" data-id="${m.id}" title="mark read">✓</button>`:""}${m.clientId?`<button class="ft-ic" data-act="inboxToNeed" data-id="${m.id}" title="turn into a client need">➕</button><button class="ft-ic" data-act="inboxReply" data-id="${m.id}" title="reply to their channel">↩</button>`:""}<button class="ft-ic" data-act="inboxDel" data-id="${m.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word">${esc(m.text)}</div></div>`; }).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">Nothing here yet. Clients drop a note with <b>/sakura</b> in their linked channel and it lands here — tag it to their needs or reply straight to their channel. 🌸</p>`}
   </div>`;
   return `<div style="max-width:960px;margin:0 auto">${inboxPanel}${glance}${bar}${body}</div>`;
 }
@@ -2642,8 +2711,8 @@ const CLIENT_SNIPPETS=[
   ["💗 gentle check-in","hey {name} 🌸 just checking in — how are things feeling this week? anything you need from me?"],
 ];
 function snipChips(targetId,firstName){ return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">${CLIENT_SNIPPETS.map(([l,t])=>`<button class="chiptog" data-act="clientSnip" data-target="${targetId}" data-t="${esc(t.replace(/\{name\}/gi,firstName||"there"))}" style="font-size:11px;padding:4px 10px">${l}</button>`).join("")}</div>`; }
-function inboxReplyModal(id,firstName){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%"><div class="card-head"><h3 style="font-size:16px">↩ Reply to their channel</h3><button class="btn" data-act="closeModal">✕</button></div><p class="soft" style="font-size:12px;margin:0 0 8px">This posts straight into their Discord channel via Eugene. 💬</p>${snipChips("irp_text",firstName)}<textarea class="inp" id="irp_text" rows="4" placeholder="your reply…"></textarea><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="inboxReplySend" data-id="${id}">💬 send</button></div></div></div>`; }
-function clientMsgModal(c){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%"><div class="card-head"><h3 style="font-size:16px">📨 Message ${esc(c.name)}</h3><button class="btn" data-act="closeModal">✕</button></div><p class="soft" style="font-size:12px;margin:0 0 8px">Posts into their Discord channel via Eugene — tap a snippet or write your own. 💬</p>${snipChips("cmsg_text",(c.name||"").split(/\s+/)[0])}<textarea class="inp" id="cmsg_text" rows="4" placeholder="your message…"></textarea><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="clientMsgSend" data-id="${c.id}">💬 send</button></div></div></div>`; }
+function inboxReplyModal(id,firstName){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%"><div class="card-head"><h3 style="font-size:16px">↩ Reply to their channel</h3><button class="btn" data-act="closeModal">✕</button></div><p class="soft" style="font-size:12px;margin:0 0 8px">This posts straight into their Discord channel via Eugene. 💬</p>${snipChips("irp_text",firstName)}<textarea class="inp" id="irp_text" rows="4" placeholder="your reply…"></textarea>${rephraseRow("irp_text")}<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn btn-pink" data-act="inboxReplySend" data-id="${id}">💬 send</button></div></div></div>`; }
+function clientMsgModal(c){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:430px;width:100%"><div class="card-head"><h3 style="font-size:16px">📨 Message ${esc(c.name)}</h3><button class="btn" data-act="closeModal">✕</button></div><p class="soft" style="font-size:12px;margin:0 0 8px">Posts into their Discord channel via Eugene — tap a snippet or write your own. 💬</p>${snipChips("cmsg_text",(c.name||"").split(/\s+/)[0])}<textarea class="inp" id="cmsg_text" rows="4" placeholder="your message…"></textarea>${rephraseRow("cmsg_text")}<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn btn-pink" data-act="clientMsgSend" data-id="${c.id}">💬 send</button></div></div></div>`; }
 async function clientModal(id){
   const sent=await DB.daily(SENTINEL); const c=(sent.clients||[]).find(x=>x.id===id); if(!c)return;
   const needs=(c.tasks||[]);
@@ -3048,14 +3117,14 @@ function artTick(){ const t=state.art&&state.art.timer; if(!t||!t.on||state.tab!
 
 /* ===================== ASK EUGENE (full-page chat) ===================== */
 const EUGENE_ASKS=[
+  "I'm feeling aimless — pick ONE thing for me 🧭",
+  "Break down my scariest task into tiny steps 🪄",
   "What's trending for VTuber shorts right now?",
-  "Look up when Path of Exile 2 fully releases",
   "How much money did I make this month?",
   "How has my energy been the last 2 weeks?",
   "Give me 3 cozy short ideas for this week",
   "Add a stream this Friday at 4pm",
   "What's on my calendar coming up?",
-  "Score this title for me: I tried VTubing on $0",
   "What's on my OS wishlist for Claude?"
 ];
 async function renderEugene(){
@@ -3606,7 +3675,8 @@ function toast(msg,extra){const el=document.getElementById("toast");
 /* ===================== EVENTS ===================== */
 const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","addSug","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
-  "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone"];
+  "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
+  "goblinApplySubs","compileApply","compileApplyAll"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -3665,6 +3735,20 @@ document.addEventListener("click",async(e)=>{
   if(act==="smartClear"){ state.smartIds=null; render(); }
   if(act==="contentSimple"){ try{localStorage.setItem("eggie-content-simple",localStorage.getItem("eggie-content-simple")==="1"?"0":"1");}catch(e){} return render(); }
   if(act==="triage")return triageModal();
+  if(act==="compile"){
+    if(DEMO||!SB){ toast("🪄 needs the backend + demo off 🌸"); return; }
+    const caps=await DB.captures(); if(!caps.length){ toast("nothing to compile — inbox zero 🎉"); return; }
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:520px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🪄 compiling your brain dump</h3><button class="btn" data-act="closeModal">✕</button></div><div id="compOut"><div class="label">sorting ${Math.min(caps.length,20)} thoughts… 🐙</div></div></div></div>`;
+    try{ const r=await aiCall("goblin",{kind:"compile",captures:caps.slice(0,20).map(c=>({id:c.id,text:c.raw_text||""}))});
+      const valid=new Set(caps.map(c=>c.id));
+      state._compile=((r&&r.items)||[]).filter(it=>valid.has(it.id));
+      if(!state._compile.length){ const box=document.getElementById("compOut"); if(box)box.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc((r&&r.error)||"hmm, nothing came back — try 📥 triage instead 🌸")}</div>`; return; }
+      compilePaint();
+    }catch(e){ const box=document.getElementById("compOut"); if(box)box.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc(e.message||e)}</div>`; }
+    return; }
+  if(act==="compileApply"){ const it=(state._compile||[]).find(x=>x.id===id); if(!it)return; await compileApplyOne(it); state._compile=state._compile.filter(x=>x.id!==id); toast(it.kind==="drop"?"🗑 released":"✓ sorted"); compilePaint(); return; }
+  if(act==="compileSkip"){ state._compile=(state._compile||[]).filter(x=>x.id!==id); compilePaint(); return; }
+  if(act==="compileApplyAll"){ const items=(state._compile||[]).slice(); for(const it of items){ try{ await compileApplyOne(it); }catch(e){} } state._compile=[]; compilePaint(); render(); return; }
   if(act==="triageContent"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){ await DB.addContent({title:(c.raw_text||"").slice(0,120),stage:"idea",priority:60}); await DB.delCapture(id); toast("🎬 it's a content idea now"); } return triageModal(); }
   if(act==="triageTask"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){ await taskMut(t=>[...t,{id:"t"+uid().slice(0,8),text:(c.raw_text||"").slice(0,300),bucket:"personal",spoon:"some",done:false,sub:[],created_at:new Date().toISOString()}]); await DB.delCapture(id); toast("🗒️ parked in the Planner"); } return triageModal(); }
   if(act==="triageSticky"){ const caps=await DB.captures(); const c=caps.find(x=>x.id===id); if(c){ addSticky(c.raw_text||""); await DB.delCapture(id); toast("📌 stuck up where you'll see it"); } return triageModal(); }
@@ -3873,6 +3957,39 @@ document.addEventListener("click",async(e)=>{
   if(act==="taskTodayLens"){ state.taskToday=!state.taskToday; try{localStorage.setItem("eggie-task-today",state.taskToday?"1":"0");}catch(e){} render(); return; }
   if(act==="tuckMode"){ state.tuck=!state.tuck; render(); return; }
   if(act==="tuckTask"){ await taskMut(t=>t.map(x=>x.id===id?{...x,bucket:"someday",today:null}:x)); toast("tucked into Someday — still yours, just resting 🌙"); render(); return; }
+  /* 🪄 goblin tools */
+  if(act==="goblinBreak")return goblinBreakModal(id);
+  if(act==="goblinSpice"){ state.goblinSpice=parseInt(el.dataset.v)||3; document.querySelectorAll('[data-act="goblinSpice"]').forEach(b=>b.classList.toggle("on",b.dataset.v===el.dataset.v)); return; }
+  if(act==="goblinRun"){ const out=document.getElementById("gobOut"); if(!out)return;
+    if(DEMO||!SB){ out.innerHTML=`<div class="soft" style="font-size:12.5px">✨ runs once the analyze function is deployed + demo is off 🐙</div>`; return; }
+    const sent2=await DB.daily(SENTINEL); const t=(sent2.tasks||[]).find(x=>x.id===id); if(!t)return;
+    out.innerHTML=`<div class="label">snapping it into pieces… 🪄</div>`;
+    try{ const r=await aiCall("goblin",{kind:"breakdown",task:t.text,spice:state.goblinSpice||3});
+      if(r&&r.error){ out.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc(r.error)}</div>`; return; }
+      state._gobSteps=(r&&r.steps)||[]; state._gobTotal=(r&&r.totalMin)||0; out.innerHTML=goblinStepsHTML(r,id);
+    }catch(e){ out.innerHTML=`<div class="soft" style="font-size:12.5px;color:var(--rose)">${esc(e.message||e)}</div>`; }
+    return; }
+  if(act==="goblinApplySubs"){ const picks=[...document.querySelectorAll(".gob-step:checked")].map(b=>state._gobSteps[parseInt(b.dataset.i)]).filter(Boolean);
+    if(!picks.length){ toast("tick at least one step 🌸"); return; }
+    const est=picks.reduce((a,s)=>a+(Number(s.min)||0),0);
+    await taskMut(t=>t.map(x=>x.id===id?{...x,est:est||x.est,sub:[...(x.sub||[]),...picks.map(s=>({id:"s"+uid().slice(0,6),text:s.text+(s.min?" · ~"+s.min+"m":""),done:false}))]}:x));
+    document.getElementById("modal").innerHTML=""; toast("🪄 "+picks.length+" tiny steps added — start with the first one 💗"); render(); return; }
+  if(act==="toneJudge"){ let txt="";
+    if(el.dataset.src){ const ta=document.getElementById(el.dataset.src); txt=ta?ta.value:""; }
+    else { const s3=await DB.daily(SENTINEL); const m3=(s3.inbox||[]).find(x=>x.id===id); txt=m3?m3.text:""; }
+    return toneJudgeRun(txt); }
+  if(act==="goblinRephrase"){ const ta=document.getElementById(el.dataset.target); if(!ta)return;
+    const cur=(ta.value||"").trim(); if(!cur){ toast("nothing to rewrite yet 🌸"); return; }
+    if(DEMO||!SB){ toast("✨ needs the backend + demo off 🌸"); return; }
+    const was=el.textContent; el.textContent="…✨"; el.disabled=true;
+    try{ const r=await aiCall("goblin",{kind:"rephrase",text:cur,style:el.dataset.style});
+      if(r&&r.text){ state._rephrasePrev={target:el.dataset.target,text:cur}; ta.value=r.text;
+        if(el.dataset.target==="em_body"&&state.email&&state.email.out)state.email.out.body=r.text;
+        toast("🎭 rewritten",{act:"rephraseUndo",label:"↩ undo",ms:9000}); }
+      else toast((r&&r.error)||"hmm, nothing came back 🌸");
+    }catch(e){ toast("couldn't rewrite: "+(e.message||e)); }
+    el.textContent=was; el.disabled=false; return; }
+  if(act==="rephraseUndo"){ const p=state._rephrasePrev; if(!p)return; const ta=document.getElementById(p.target); if(ta)ta.value=p.text; if(p.target==="em_body"&&state.email&&state.email.out)state.email.out.body=p.text; state._rephrasePrev=null; toast("↩ back to your version 💗"); return; }
   if(act==="subDone"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:x)); render(); return; }
   if(act==="delSub"){ const sid=el.dataset.sid; await taskMut(t=>t.map(x=>x.id===id?{...x,sub:(x.sub||[]).filter(s=>s.id!==sid)}:x)); render(); return; }
 
@@ -4627,6 +4744,25 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
         await taskMut(function(t){ return t.map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; return Object.assign({},x,{sub:(x.sub||[]).concat([{id:"s"+uid().slice(0,8),text:a.text||"step",done:false}])}); } return x; }); });
         return hit? "🪜 added a step to “"+hit.text+"”" : "couldn't find a task like “"+(a.task||"")+"” 🌸";
       }
+      case "breakdownTask": {
+        var nm=(a.name||"").toLowerCase();
+        var sx2=await DB.daily(SENTINEL);
+        var tk2=(sx2.tasks||[]).find(function(x){ return !x.done&&(x.text||"").toLowerCase().indexOf(nm)>=0; });
+        if(!tk2) return "couldn't find a task like “"+(a.name||"")+"” 🌸";
+        var rb=await aiCall("goblin",{kind:"breakdown",task:tk2.text,spice:Math.max(1,Math.min(5,Number(a.spice)||3))});
+        if(rb&&rb._needsBackend) return "the magic wand needs the backend deployed 🌸";
+        var stps=(rb&&rb.steps)||[]; if(!stps.length) return "hmm, couldn't break that one down — try rewording it? 🌸";
+        await taskMut(function(t){ return t.map(function(x){ return x.id===tk2.id?Object.assign({},x,{est:(rb.totalMin||undefined),sub:(x.sub||[]).concat(stps.map(function(s){ return {id:"s"+uid().slice(0,6),text:s.text+(s.min?" · ~"+s.min+"m":""),done:false}; }))}):x; }); });
+        return "🪄 broke “"+tk2.text+"” into "+stps.length+" tiny steps (~"+(rb.totalMin||"?")+" min total) — the first one is the way in 💗";
+      }
+      case "focusTask": {
+        var nm=(a.name||"").toLowerCase();
+        var sx3=await DB.daily(SENTINEL);
+        var tk3=(sx3.tasks||[]).find(function(x){ return !x.done&&(x.text||"").toLowerCase().indexOf(nm)>=0; });
+        if(!tk3) return "couldn't find a task like “"+(a.name||"")+"” 🌸";
+        state.focusTask=tk3.id; setTab("planner");
+        return "◎ it's just you and “"+tk3.text+"” now — everything else is hidden";
+      }
       case "setTask": {
         var nm=(a.name||"").toLowerCase(); var hit=null;
         await DB.saveDaily(SENTINEL,function(n){ var ts=(n.tasks||[]).map(function(x){ if(!hit&&(x.text||"").toLowerCase().indexOf(nm)>=0){ hit=x; var o=Object.assign({},x); if(a.text)o.text=String(a.text).slice(0,300); if(a.bucket)o.bucket=a.bucket; if(a.spoon)o.spoon=a.spoon; if(a.due!==undefined)o.due=a.due||undefined; return o; } return x; }); var rs=n.reminders||[]; if(hit&&a.text) rs=rs.map(function(r){ return (r.taskId===hit.id&&!r.done)?Object.assign({},r,{text:String(a.text).slice(0,300)}):r; }); return Object.assign({},n,{tasks:ts,reminders:rs}); });
@@ -4881,10 +5017,10 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     font:"inherit",
     greetings:["pspsps… try \"add stream Friday 4pm\" 🐙","ask me to look something up on the web 🌐","tell me to add a task or event 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
     suggestions:[
+      "I'm feeling aimless — pick ONE thing for me 🧭",
+      "Break down my scariest task into tiny steps 🪄",
       "What's trending for VTuber shorts right now?",
-      "Look up when Path of Exile 2 fully releases",
       "How much money did I make this month?",
-      "How has my energy been the last 2 weeks?",
       "Give me 3 cozy short ideas for this week",
       "Add a stream this Friday at 4pm",
       "What's on my calendar coming up?"

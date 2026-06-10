@@ -160,7 +160,7 @@ async function fullContext(userId: string, today: string): Promise<string> {
     }
     // tasks
     const tasks = (s.tasks || s.planner || []).filter((t: any) => t && !t.done).slice(0, 12);
-    if (tasks.length) lines.push(`OPEN TASKS: ${tasks.map((t: any) => `${t.text}${t.bucket ? " [" + t.bucket + "]" : ""}${t.due ? " due:" + t.due : ""}`).join("; ")}`);
+    if (tasks.length) lines.push(`OPEN TASKS (☀=she starred it for today; ~Xm=magic estimate): ${tasks.map((t: any) => `${t.today === today ? "☀" : ""}${t.text}${t.bucket ? " [" + t.bucket + "]" : ""}${t.spoon ? " {" + t.spoon + "-spoon}" : ""}${t.due ? " due:" + t.due : ""}${t.est ? " ~" + t.est + "m" : ""}`).join("; ")}`);
     // schedule (per-week: this week's plan from schedWeeks, legacy `schedule` as fallback) + goals
     const _mon = new Date(today + "T00:00"); _mon.setDate(_mon.getDate() - ((_mon.getDay() + 6) % 7)); const _monISO = _mon.toLocaleDateString("en-CA");
     const wkSched = (s.schedWeeks && s.schedWeeks[_monISO]) ? s.schedWeeks[_monISO] : (s.schedule || []);
@@ -456,7 +456,18 @@ VIDIQ: you do NOT have a direct VidIQ connection from here (VidIQ has no public 
 
 PHOTOS: she can attach a photo to a message (📷 in chat). When one is attached, actually LOOK at it and use it — read handwritten/whiteboard notes or a screenshot into tasks/captures/calendar events, read a schedule or receipt, describe her art warmly and give gentle concrete feedback, check a thumbnail against the thumbnail rubric, identify what's in the picture. If the photo alone is ambiguous, say what you see and ask. Photos are seen this message only (not stored), so capture anything worth keeping as an action right away. Never claim you can't see an attached image.
 
-THE OS ITSELF (its map — so you can answer "where do I find…" and route her with navigate): 🏠 Home (today at a glance), 🎬 Content (pipeline idea→scripting→recording→editing→thumbnail→scheduled→published), 🗒️ Planner (tasks/kanban + reminders), 📅 Calendar (events + 🎮 game-release layer), 🎯 Optimize (titles/descriptions/tags + thumbnail checker), ✍️ Script (script writer), 🌸 Habits (library + daily checks), 💗 Health (pain/fatigue/POTS/meds), 🫂 Care (emotions + executive function), 🎨 Art (timer, prompts, mood board, library), 💰 Money (ledger, invoices, savings, tax set-aside), 💌 Sponsors (pipeline + email writer), 🌸 Clients (Sakura Lightworks hub), 🌷 Review (weekly), 🐙 Ask Eugene (you), ⚙️ Settings (config, your remembered facts + voice examples, the 🛠️ change-request wishlist, notifications). The floating pet on every page is also you.
+THE OS ITSELF (its map — so you can answer "where do I find…", walk her through anything step by step, and route her with navigate). You know EVERY feature, including the 2026-06-10 ADHD upgrade (build .7) marked ✦:
+- 🏠 Home: today-at-a-glance card (energy picker, events, reminders), content mission control, art corner, goals, money pulse, channel pulse, brain-dump card ✦with its own capture box. ✦"🌙 just today" chip = focus mode. ✦On low-energy days the page softens itself (mission shows 2 items; money/channel tuck away behind "👀 peek").
+- 🎬 Content: 7-stage pipeline board. ✦"🌿 simple" folds it to 3 columns (Brewing/Making/Out). ✦Due pills on cards. ✦"📥 triage" = sort brain-dump captures one at a time; ✦"🪄 compile" = you (AI) sort ALL captures at once and she approves. ✦Gentle nudge when 5+ items are mid-flight. Pillar mix lives in a collapsed accordion.
+- 🗒️ Planner: buckets + spoons + due dates + reminders. ✦"📅 Today" lens (due/overdue + today's reminders + anything she stars with ☀). ✦☀ star = "on today's plate". ✦🪄 on any task = magic break-it-down (spice 1-5 = step size) with honest minute estimates (~Xm pills). ◎ = focus-one-thing view. ✦Done tasks collapse. ✦15+ open tasks offers gentle "tuck into Someday".
+- 📅 Calendar: ✦opens as a 7-day week agenda (month grid one tap away). ✦Quick-add box understands "thu 4pm collab with momo". ✦Colours mean: 🔴 stream 💜 collab 🩺 appt ⏰ deadline 🌸 fun. ✦Event modal has "remind me morning-of". 🎮 game-release layer.
+- 🎯 Optimize (titles/tags/thumbnail checker) · ✍️ Script (talk-it-out script writer + teleprompter) · 🌸 Habits (spoon-aware library) · 💗 Health (pain/fatigue/POTS/meds/trends) · 🫂 Care (emotion + executive-function check-ins, DBT decks, breathing bubble, joy jar).
+- 🎨 Art: challenges, ideas dump, inspo vault (✦"✨ pick for me" = random untried spark), minutes log (✦the practice timer offers to log its minutes when stopped), prompts (✦sometimes pulled from her own ideas), palette/guides, mood board. ✦"⛶ focus" or "make art now" = art focus mode (timer + prompt only).
+- 💰 Money: ledger (✦one-tap source presets; ✦"↻ monthly" auto-logs recurring expenses on the 1st), invoices (✦⏰ nudge reminders), tax set-aside (✦"remind me on the 1st" ritual), savings goals, sponsor pipeline.
+- 💌 Sponsors: pipeline (✦dragging to Sent offers a 5-day follow-up reminder; ✦marking Passed asks one optional why-chip; ✦"$ in play · $ signed" strip), email writer (✦⚖️ "read their tone" on pasted emails — honest RSD-aware tone reads; ✦🎭 rewrite chips: professional/softer/shorter/warmer/more-me), pitch builder, rate card.
+- 🌸 Clients (Sakura Lightworks): ✦"☀️ today's three" most-urgent needs checklist, inbox (✦⚖️ tone read per message; ✦replying offers to mark the related need done), roster (✦💬 last-touched / 🌫 quiet-14d markers), per-client pages, ✦message snippets, ✦weekly deliverables auto-spawn needs every Monday.
+- 🌷 Review (weekly) · ⚙️ Settings (config, comfort modes, your remembered facts + voice examples, 🛠️ change-request wishlist, notifications, restore points). The floating pet on every page is also you.
+WALKTHROUGHS: when she asks how to do something, give the exact taps from the map above ("Planner → 🪄 on the task → pick 🌶🌶🌶 → ✨"), keep it to 2-3 steps at a time, and emit navigate to take her to the right tab yourself.
 
 ${nameLine}
 
@@ -525,6 +536,8 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - delContent: { name (fuzzy) }       // delete a piece of content from the pipeline — confirm in reply if her phrasing was vague
 - setContentDeadline: { name (fuzzy), date: "YYYY-MM-DD" }   // set/change a content brief's deadline
 - addSubtask: { task (fuzzy), text }  // break a planner task into a small step
+- breakdownTask: { name (fuzzy-matched to a planner task), spice?: 1-5 (1 = a few chunky steps · 5 = tiny micro-steps; default 3) }   // "break down the thumbnail task", "make <task> less scary" — magically splits it into small doable steps (with honest time estimates) and attaches them as subtasks
+- focusTask: { name (fuzzy-matched to a planner task) }   // opens the ◎ focus-one-thing view on that task — the screen shows ONLY it. Use when you've picked her next action so the choice is made AND the distractions are gone.
 - setTask: { name (fuzzy — matches the CURRENT wording), text? (the new wording — rename), bucket?: "personal"|"content"|"hobbies"|"health"|"others"|"someday", spoon?: "low"|"some"|"full", due?: "YYYY-MM-DD" or "" to clear }   // edit a task: rename, re-bucket, change spoons, set/clear due. Renaming also renames its linked reminder.
 - delHabit: { name (fuzzy) }          // remove a habit from her library
 - delMed: { name (fuzzy) }            // remove a medication from her list
@@ -588,7 +601,15 @@ Stream schedule vs. event — keep these straight:
 - "schedule a stream this Friday", "I'm streaming on the 14th", "collab stream next Tuesday at 4pm", a one-time/dated stream = a ONE-OFF → addCalendarEvent (a specific date). A dated one-time stream is an EVENT, not a schedule slot.
 - If she says "stream" + a weekday with no specific date and it sounds routine → schedule slot. If she says "stream" + a specific/relative date ("this/next Friday", "the 14th", "tomorrow") → calendar event. If genuinely unsure which she means, ask in "reply" instead of guessing.
 
-Rules: only emit actions she clearly asked for. If she's vague, ask in "reply" and emit no actions. Never invent data (amounts, dates) she didn't give — ask instead. You may emit multiple actions in one go (e.g. add an event AND navigate to the calendar).`;
+WHEN SHE'S AIMLESS / STUCK / CAN'T DECIDE — this is one of your most important jobs. Indecisiveness is a real executive-function struggle for her, so when she says anything like "I'm feeling aimless/listless", "I don't know what to do", "help me out", "I can't pick", "everything feels like too much", "what should I do right now":
+1. DO NOT list her options — a menu is the problem, not the answer. Decide FOR her.
+2. Look at the snapshot and weigh: her energy/spoons today → overdue reminders → today's ☀-starred and due tasks → client needs (overdue first) → stream-day prep → content with near deadlines → time of day (late evening = wind-down, not a big start). On LOW energy days only suggest low-spoon things — or rest, framed as a real choice.
+3. Reply with ONE specific next action, stated warmly and decisively, with the 2-minute way in ("just open the file"). At most ONE gentle alternative ("or, if that feels heavy: …"). Never three options. Never "you could also…" lists.
+4. BACK THE CHOICE WITH ACTIONS so it's already in motion: focusTask (the screen shows only that one thing), or breakdownTask first if the thing is big/scary, or navigate to where the action lives, or setEnergy/recoveryDay if what she actually needs is rest. Making it start is the kindest thing you can do.
+5. If she pushes back ("not that"), pick the alternative immediately — don't reopen the menu. If she rejects twice, suggest the joy jar or a 5-minute art timer and mean it: rest and play are valid courses of action.
+6. If she sounds emotionally flooded rather than just unfocused (panicky, spiraling, "everything is wrong"), gently steer to the 🫂 Care tab first (breathing bubble, grounding) — regulation before tasks, always. Navigate her there.
+
+Rules: only emit actions she clearly asked for (the stuck-mode above counts as asking — deciding for her IS what she asked for). If she's vague about a concrete detail (an amount, a date), ask in "reply" and emit no actions. Never invent data she didn't give. You may emit multiple actions in one go (e.g. breakdownTask AND focusTask, or add an event AND navigate to the calendar).`;
       // non-eggie users: de-Eggify the shared instruction text (their persona is already in `sys`)
       if (userId !== "eggie") {
         sys = sys
@@ -677,6 +698,72 @@ ${common}`
 ${common}`;
       const out = await claude(BRAND, prompt + (await voiceFor(userId, "script")), 2400);
       return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
+    }
+
+    // --- goblin: ADHD micro-tools (goblin.tools-inspired, native): breakdown / tone / rephrase / compile ---
+    if (mode === "goblin") {
+      const i = body.input || {};
+      const kind = (i.kind || "").toString();
+      if (kind === "breakdown") {
+        const task = (i.task || "").toString().slice(0, 300);
+        if (!task) return json({ error: "missing task" }, 400);
+        const spice = Math.max(1, Math.min(5, Number(i.spice) || 3));
+        const gran = ["2-3 chunky steps", "3-4 steps", "4-6 clear steps", "6-9 small steps", "8-12 tiny micro-steps (each almost laughably small — opening the file counts as a step)"][spice - 1];
+        const raw = await claude(BRAND, `Break this task into ${gran} for someone with ADHD + chronic fatigue. Return ONLY JSON:
+{ "steps": [ { "text": string, "min": number } ], "totalMin": number }
+- Each step starts with a verb, is concrete and physically doable in one sitting, in plain everyday words (no corporate speak).
+- The FIRST step must be the lowest-activation-energy way in (the "2-minute version").
+- "min" = honest minutes for HER (chronic fatigue pacing — pad transitions a little, never optimistic).
+- No motivational filler inside steps; just the actions.
+The task: "${task}"${i.context ? `\nContext she added: ${String(i.context).slice(0, 300)}` : ""}`, 900);
+        return json(parseJSON(raw) || { steps: [], totalMin: 0 });
+      }
+      if (kind === "tone") {
+        const text = (i.text || "").toString().slice(0, 4000);
+        if (!text) return json({ error: "missing text" }, 400);
+        const raw = await claude(
+          `You read the emotional tone of messages for someone with ADHD + rejection-sensitive dysphoria (RSD). She often reads neutral or busy messages as anger or rejection. Be honest — never fake-positive — but precise about what the words actually support. Warm, plain language.`,
+          `Read this message she received and return ONLY JSON:
+{ "vibe": string[] (2-4 short tone chips, e.g. "friendly", "busy-not-mad", "formal but warm", "genuinely annoyed"),
+  "read": string (2-3 plain sentences: what this message is actually saying and the most likely intent),
+  "notSaying": string (1-2 sentences naming the things an RSD spiral might add that the words do NOT support — or, if the message genuinely IS cold/negative, say so honestly and note it kindly),
+  "respond": string (one short suggestion for the easiest healthy response, e.g. "a one-line 'sounds good!' is plenty — no essay needed") }
+The message:\n"""${text}"""`,
+          800,
+        );
+        return json(parseJSON(raw) || { vibe: [], read: raw, notSaying: "", respond: "" });
+      }
+      if (kind === "rephrase") {
+        const text = (i.text || "").toString().slice(0, 3000);
+        if (!text) return json({ error: "missing text" }, 400);
+        const style = (i.style || "professional").toString();
+        const STYLES: Record<string, string> = {
+          professional: "more professional and polished — business-appropriate but still human, never stiff or corporate-robotic",
+          softer: "softer and gentler — keep every point but lower the temperature, kind and easy to receive",
+          shorter: "much shorter — keep the essential meaning and warmth, cut everything else (aim for half the length or less)",
+          warmer: "warmer and friendlier — add genuine warmth without becoming gushy or unprofessional",
+          mine: "rewritten in HER OWN voice (see her real voice examples below) — her phrasing, energy, kaomoji habits",
+        };
+        const voice = style === "mine" ? await voiceFor(userId, "any") : "";
+        const raw = await claude(BRAND, `Rewrite the following text ${STYLES[style] || STYLES.professional}. Keep the same language, keep all concrete facts (names, dates, amounts) EXACTLY. Return ONLY JSON: { "text": string }.
+The text:\n"""${text}"""${voice}`, 1000);
+        return json(parseJSON(raw) || { text: raw });
+      }
+      if (kind === "compile") {
+        const caps = Array.isArray(i.captures) ? i.captures.slice(0, 20) : [];
+        if (!caps.length) return json({ error: "no captures" }, 400);
+        const raw = await claude(BRAND, `She brain-dumped these unsorted thoughts. Sort EVERY one into its best home. Return ONLY JSON:
+{ "items": [ { "id": string (echo the id EXACTLY), "kind": "task"|"content"|"sticky"|"drop",
+  "text": string (the thought, lightly cleaned — fix typos, keep her words),
+  "bucket": "personal"|"content"|"hobbies"|"health"|"others"|"someday" (tasks only),
+  "spoon": "low"|"some"|"full" (tasks only — honest effort guess),
+  "title": string (content only — a working title in her TITLE-ENGINE style) } ] }
+Rules: "task" = something to DO; "content" = a video/short/post idea; "sticky" = a note to keep seeing (codes, reminders-to-self, quotes); "drop" = no longer useful (be conservative — only true junk).
+Her captures:\n${caps.map((c: any) => `[${c.id}] ${String(c.text || "").slice(0, 280)}`).join("\n")}`, 1600);
+        const parsed = parseJSON(raw);
+        return json(parsed && Array.isArray(parsed.items) ? parsed : { items: [] });
+      }
+      return json({ error: "unknown goblin kind" }, 400);
     }
 
     if (mode === "thumbnail") {
