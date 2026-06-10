@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.10";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.11";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.11: Care + Health rebuilt on the research — Care: front-door weather check-in routes to ONE thing, 📈 bipolar mood chart (elevation −4..+4 + irritability), 🕰️ rhythm anchors, ✨ one-good-thing (rated), 🚸 early-warning signature, 🛟 WRAP-lite plan + 9-8-8 crisis card, breathing presets; Health: 🌅 morning check sets the day's spoons, 🎯 clinician-agreed water/salt targets + 🥵 heat + 🌺 period flags, 🩹 skin-picking companion (urge surf, strategy shelf, healing days, zero shame), 🛁 tiered hygiene care-menu (wipes count like showers), ↩ same-as-yesterday, 🩺 90-day doctor export",
   "2026-06-10.10: you (Eugene) now receive this live changelog with every message — you are never out of date",
   "2026-06-10.9: Home rebuilt — 💗 body & brain card first (spoons/mood/meds/insight), ☀️ today's plate, clients' three; Health + Care moved onto the MAIN tab bar",
   "2026-06-10.8: 🛠 Tools hub tab (tone judge, formalizer, break-it-down, compiler + links); Planner board = full parity with list (✓/☀/🪄/＋/subs/tuck); simple-mode columns renameable via ✎; taps now give instant feedback",
@@ -2026,6 +2027,27 @@ function dbtCard(s){
   </div></div>`;
 }
 function cScale(field,cur,leftLbl,rightLbl){ let b=""; for(let i=0;i<=5;i++)b+=`<button data-act="careEF" data-f="${field}" data-v="${i}" class="${(cur??-1)===i?'on':''}" ${RO?"disabled":""}>${i}</button>`; return `<div style="margin:9px 0"><div class="label" style="margin-bottom:4px">${leftLbl} <span class="muted">→ ${rightLbl}</span></div><div class="scale">${b}</div></div>`; }
+/* defaults for the rebuilt Care tab (research 2026-06-10) — all editable, stored on the sentinel */
+const WARN_DEFAULT={up:["needing way less sleep","starting lots of projects at once","spending more than usual","talking / typing much faster","everyone feels slow or annoying"],down:["everything feels heavy","cancelling things I usually like","sleeping lots, still tired","going quiet in chats","food feels like a chore"]};
+const BREATH_PRESETS={calm:[["Breathe in…",4000,1.7],["Hold",2000,1.7],["Breathe out…",6000,1.0]],box:[["Breathe in…",4000,1.7],["Hold",4000,1.7],["Breathe out…",4000,1.0],["Hold",4000,1.0]],sleepy:[["Breathe in…",4000,1.7],["Hold",7000,1.7],["Breathe out…",8000,1.0]]};
+/* M1: the clinical layer under the weather check-in — dual-axis chart (elevation line + irritability dots) */
+function careMoodChart(rows,days){
+  const sorted=rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-days);
+  const W=680,H=170,padL=30,padR=12,padT=14,padB=22,n=sorted.length,innerW=W-padL-padR,innerH=H-padT-padB;
+  const X=i=>padL+(n<=1?innerW/2:i*innerW/(n-1)), Y=v=>padT+innerH*(1-Math.max(0,Math.min(1,(v+4)/8)));   // −4..+4
+  let grid=""; [[-4,"−4"],[0,"0"],[4,"+4"]].forEach(([v,l])=>{ const yy=Y(v); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="${v===0?"#dcc8ef":"#efe6f2"}" stroke-width="${v===0?1.6:1}"/><text x="${padL-5}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#b3a6c0">${l}</text>`; });
+  let line="",dots="",irr="",seg=[];
+  const flush=()=>{ if(seg.length>1){ line+=`<path d="${seg.map((p,i)=>(i?"L":"M")+X(p.i).toFixed(1)+" "+Y(p.v).toFixed(1)).join(" ")}" fill="none" stroke="#a98fe0" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`; } seg=[]; };
+  sorted.forEach((r,i)=>{ const b=(r.notes&&r.notes.care&&r.notes.care.bip)||{}; const e=b.elev;
+    if(e==null||e===""){flush();return;} seg.push({i,v:Number(e)});
+    dots+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(Number(e)).toFixed(1)}" r="3" fill="#fff" stroke="#a98fe0" stroke-width="1.8"><title>${r.date} · elevation ${e>0?"+"+e:e}${b.irrit?` · irritability ${b.irrit}`:""}${b.note?` — ${esc(b.note)}`:""}</title></circle>`;
+    if(b.irrit)irr+=`<rect x="${(X(i)-3).toFixed(1)}" y="${(H-padB-Number(b.irrit)*9).toFixed(1)}" width="6" height="${Number(b.irrit)*9}" rx="2" fill="#f3a978" opacity=".7"><title>${r.date} · irritability ${b.irrit}/3</title></rect>`; });
+  flush();
+  const dl=ds=>{const p=ds.split("-");return p[1]+"/"+p[2];};
+  const xl=n?`<text x="${X(0).toFixed(1)}" y="${H-6}" font-size="9" fill="#b3a6c0">${dl(sorted[0].date)}</text><text x="${(W-padR).toFixed(1)}" y="${H-6}" text-anchor="end" font-size="9" fill="#b3a6c0">${dl(sorted[n-1].date)}</text>`:"";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;height:auto;display:block">${grid}${irr}${line}${dots}${xl}</svg>
+    <div class="label" style="text-align:center;margin-top:4px"><span style="color:#8d6fd1">― elevation (−4 deep low · +4 very high)</span> · <span style="color:#cc7a3e">▮ irritability</span></div>`;
+}
 async function renderCare(){
   const sent=await DB.daily(SENTINEL); const day=await DB.daily(TODAY); const rows=await DB.dailyRange(30);
   const joy=(sent.joyJar&&sent.joyJar.length)?sent.joyJar:DEFAULT_JOY.slice();
@@ -2036,21 +2058,101 @@ async function renderCare(){
   const slip=PERMISSION_SLIPS[new Date().getDate()%PERMISSION_SLIPS.length];
   const jarBubs=[["#ec7faf",42,70,0],["#a98fe0",62,84,.6],["#f3a978",54,100,1.2],["#5cc6a3",74,64,1.8],["#db5e98",48,52,2.4]]
     .map(([c,x,y,d])=>`<circle class="jar-bub" cx="${x}" cy="${y}" r="6.5" fill="${c}" opacity=".85" style="animation-delay:${d}s"/>`).join("");
+  /* ---- CA1: front door — one question, then ONE suggested next thing (menus are the barrier) ---- */
+  const m=care.mood;
+  const door=m==null?"":(m<=2
+    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><span class="soft" style="font-size:12.5px">rough weather 💜 one gentle thing:</span><button class="btn btn-pink" data-act="doorGo" data-v="breath">🫧 60 seconds of breathing</button><button class="btn" data-act="doorGo" data-v="wrap">🛟 my plan</button><button class="btn" data-act="rsdCheck" title="a message stinging? get an honest read">⚖️ a message stung</button></div>`
+    : m===3
+    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><span class="soft" style="font-size:12.5px">middling — that's okay. smallest good move:</span><button class="btn btn-pink" data-act="doorGo" data-v="valued">✨ one tiny good thing</button><button class="btn" data-act="doorGo" data-v="ef">🚀 un-stick a start</button></div>`
+    : `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><span class="soft" style="font-size:12.5px">good sky 🌞 protect it:</span><button class="btn btn-pink" data-act="doorGo" data-v="valued">✨ bank a good thing</button><button class="btn" data-act="joyPull">🫙 pull a joy</button></div>`);
+  /* M6: sleep-dip whisper — two short nights vs her own median = extra gentleness, never an alarm */
+  const sleeps=rows.map(r=>(r.notes.health&&r.notes.health.sleepH!=null)?Number(r.notes.health.sleepH):null).filter(v=>v!=null);
+  const sMed=median(sleeps);
+  const recent2=rows.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,2).map(r=>(r.notes.health&&r.notes.health.sleepH!=null)?Number(r.notes.health.sleepH):null);
+  const dip=(sMed!=null&&recent2.length===2&&recent2.every(v=>v!=null&&v<=sMed-2));
+  const whisper=dip?`<p class="soft" style="font-size:11.5px;margin:9px 0 0">🌙 two short nights in a row (vs your usual ~${sMed}h). just information, held kindly — maybe a peek at your plan, and extra gentleness today 💗</p>`:"";
+  const frontDoor=`<div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);margin-bottom:14px">
+    <div class="card-head"><span class="label">🌈 how's the weather inside?</span><span class="label">one tap · the page meets you there</span></div>
+    <div class="scale">${["🌧️","🌥️","⛅","🌤️","🌞"].map((e,i)=>`<button data-act="careMood" data-v="${i+1}" class="${care.mood===i+1?'on':''}" ${RO?"disabled":""} style="font-size:18px">${e}</button>`).join("")}</div>
+    ${door}${whisper}
+    <details style="margin-top:10px"><summary class="label" style="cursor:pointer;list-style:none">🛟 crisis card — always here, never judging</summary>
+      <div class="soft-card" style="margin-top:6px;font-size:12.5px;line-height:1.6">${esc(((sent.wrapPlan||{}).contacts)||"")||"Add your people in 🛟 My plan → ✎"}<br>📞 <b>Canada: call or text 9-8-8</b> (suicide crisis helpline, 24/7) · you deserve human help, not just an octopus 💗</div>
+    </details>
+  </div>`;
   const CP={};
+  /* ---- M1: mood & rhythm (the chart that can actually see hypomania) ---- */
+  const bip=care.bip||{};
+  const elevBtns=[-4,-3,-2,-1,0,1,2,3,4].map(v=>`<button data-act="bipElev" data-v="${v}" class="${bip.elev===v?'on':''}" ${RO?"disabled":""}>${v>0?"+"+v:v}</button>`).join("");
+  CP.mood=`<div class="panel"><div class="card-head"><span class="label">📈 mood chart</span><span class="label">30 seconds, once a day — best near bedtime</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">The weather above is the feel; this is the medical-grade layer (a happy-sad slider can't see hypomania). <b>Elevation:</b> −4 deepest low · 0 steady · +4 very high/fast.</p>
+    <div class="label" style="margin-bottom:4px">elevation today</div><div class="scale">${elevBtns}</div>
+    <div class="label" style="margin:10px 0 4px">irritability</div><div class="scale">${[0,1,2,3].map(v=>`<button data-act="bipIrrit" data-v="${v}" class="${(bip.irrit||0)===v?'on':''}" ${RO?"disabled":""}>${v}</button>`).join("")}</div>
+    <div class="label" style="margin:10px 0 4px">one line about today <span class="muted">· optional</span></div>
+    <input class="inp" id="bipNote" value="${esc(bip.note||"")}" placeholder="slept badly · big launch day · started new med…" ${RO?"disabled":""}/>
+    <div style="background:linear-gradient(135deg,#fef5fb,#f4eefc);border:1px solid #f0e4f3;border-radius:16px;padding:12px 10px 6px;margin-top:12px">${careMoodChart(rows,30)}</div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">sleep + meds ride along automatically from your Health log. your data, your care team's interpretation — never an app's 💗</p>
+  </div>`;
+  /* ---- M2: rhythm anchors (IPSRT-lite) — regularity vs YOUR OWN median, not an imposed ideal ---- */
+  const rhy=care.rhythm||{};
+  const ANCHORS=[["wake","🌅 woke up"],["contact","💬 first hello"],["meal","🍙 main meal"],["wind","🌙 wind-down"]];
+  const med14=k=>{ const v=rows.map(r=>r.notes.care&&r.notes.care.rhythm&&r.notes.care.rhythm[k]).filter(Boolean).map(t=>{const[p,q]=t.split(":");return(+p)*60+(+q);}); if(!v.length)return null; v.sort((a,b)=>a-b); const mm=v[Math.floor(v.length/2)]; return ("0"+Math.floor(mm/60)).slice(-2)+":"+("0"+(mm%60)).slice(-2); };
+  CP.rhythm=`<div class="panel"><div class="card-head"><span class="label">🕰️ rhythm anchors</span><span class="label">steady rhythms steady the mood</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">Four little timestamps. The win isn't a "right" time — it's being near <i>your usual</i>. (This is the IPSRT idea bipolar research keeps validating.)</p>
+    ${ANCHORS.map(([k,l])=>{const md=med14(k);return `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${l}</span>${md?`<span class="label" title="your 30-day usual">usual ~${md}</span>`:""}<input class="inp" type="time" data-rhy="${k}" value="${esc(rhy[k]||"")}" style="width:auto;padding:5px 8px" ${RO?"disabled":""}/><button class="btn" data-act="rhythmNow" data-k="${k}" ${RO?"disabled":""} style="padding:4px 10px">now</button></div>`;}).join("")}
+  </div>`;
+  /* ---- M5: one valued thing (behavioral activation — the whole evidence-based loop) ---- */
+  const va=care.va||{};
+  const hobbyTasks=(sent.tasks||[]).filter(t=>!t.done&&t.bucket==="hobbies").map(t=>t.text);
+  const vaPool=[...joy,...hobbyTasks];
+  CP.valued=`<div class="panel"><div class="card-head"><span class="label">✨ one good thing</span><span class="label">doing → feeling (not the other way)</span></div>
+    ${va.text?`<div class="soft-card" style="font-size:13px">${esc(va.text)}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap">
+        <button class="chiptog ${va.done?'on':''}" data-act="valuedDone" ${RO?"disabled":""}>${va.done?"💗 did it":"I did it"}</button>
+        ${va.done?`<span class="label">how was it?</span><div class="scale">${[1,2,3,4,5].map(v=>`<button data-act="valuedRate" data-v="${v}" class="${va.rating===v?'on':''}" ${RO?"disabled":""}>${v}</button>`).join("")}</div>`:""}
+        <button class="ft-ic" data-act="valuedPick" title="different one">↻</button></div>`
+    :`<p class="soft" style="font-size:12.5px;margin:0 0 10px">Pick one small thing you'd <i>value</i> doing today — joy counts, rest counts. Rating it afterward teaches your brain that doing helps.</p>
+      <button class="btn btn-pink" data-act="valuedPick" ${RO?"disabled":""}>✨ pick one for me</button>`}
+  </div>`;
+  /* ---- M3: early-warning signs — your own signature, reviewed gently ---- */
+  const warns=Object.assign({},WARN_DEFAULT,sent.warningSigns||{});
+  const ticked=care.signs||[];
+  const signChips=(list,pole)=>list.map(s=>`<button class="chiptog ${ticked.includes(pole+":"+s)?'on':''}" data-act="signToggle" data-v="${esc(pole+":"+s)}" ${RO?"disabled":""} style="font-size:11.5px">${esc(s)}</button>`).join("");
+  const upN=ticked.filter(s=>s.startsWith("up:")).length, downN=ticked.filter(s=>s.startsWith("down:")).length;
+  CP.signs=`<div class="panel"><div class="card-head"><span class="label">🚸 my early-warning signs</span><button class="btn" data-act="warnEdit" ${RO?"disabled":""} style="padding:2px 9px">✎ my signs</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">Nobody catches their own weather turning — but a list you wrote on a clear day can. Tap any that feel true lately.</p>
+    <div class="label" style="margin-bottom:4px">⬆ up-swing signs</div><div style="display:flex;gap:6px;flex-wrap:wrap">${signChips(warns.up,"up")}</div>
+    <div class="label" style="margin:10px 0 4px">⬇ down-swing signs</div><div style="display:flex;gap:6px;flex-wrap:wrap">${signChips(warns.down,"down")}</div>
+    ${(upN>=3||downN>=3)?`<div class="soft-card" style="margin-top:10px;font-size:12.5px;border-color:#ddcdf6">💜 ${upN>=3?upN+" up-swing":downN+" down-swing"} signs are ticked. That's your own list talking — worth opening 🛟 your plan and maybe a message to your care team. Not an emergency, just an early light. <button class="btn" data-act="doorGo" data-v="wrap" style="margin-left:4px">open my plan</button></div>`:""}
+  </div>`;
+  /* ---- M4: WRAP-lite — wellness toolbox + plan + crisis card, editable ---- */
+  const wrap=sent.wrapPlan||{};
+  CP.wrap=`<div class="panel"><div class="card-head"><span class="label">🛟 my plan</span><button class="btn" data-act="wrapEdit" ${RO?"disabled":""} style="padding:2px 9px">✎ edit</button></div>
+    <div class="label" style="margin-bottom:5px">🧰 my toolbox</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="chiptog" data-act="doorGo" data-v="breath">🫧 breathing</button><button class="chiptog" data-act="joyPull">🫙 joy jar</button><button class="chiptog" data-act="goTab" data-tab="art">🎨 art break</button><button class="chiptog" data-act="rsdCheck">⚖️ tone judge</button>
+      ${(wrap.toolbox||[]).map(t=>`<span class="chiptog" style="cursor:default">${esc(t)}</span>`).join("")}
+    </div>
+    ${(wrap.daily&&wrap.daily.length)?`<div class="label" style="margin:10px 0 4px">🌅 keeps-me-steady list</div><div class="soft" style="font-size:12.5px;line-height:1.7">${wrap.daily.map(d=>"• "+esc(d)).join("<br>")}</div>`:""}
+    ${(wrap.triggers&&wrap.triggers.length)?`<div class="label" style="margin:10px 0 4px">⚡ things that wobble me</div><div class="soft" style="font-size:12.5px;line-height:1.7">${wrap.triggers.map(d=>"• "+esc(d)).join("<br>")}</div>`:""}
+    <div class="label" style="margin:10px 0 4px">📞 my people + crisis line</div>
+    <div class="soft-card" style="font-size:12.5px;line-height:1.6">${esc(wrap.contacts||"")||"✎ add your people — partner, bestie, care team"}<br><b>Canada: call/text 9-8-8 · 24/7</b></div>
+  </div>`;
   CP.slip=`<div class="panel" style="text-align:center;background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
       <div class="label">today's permission slip 🐙</div>
       <div id="slipText" style="font-family:var(--display);font-size:19px;margin:12px 0 14px;color:var(--pink-deep)">${esc(slip)}</div>
       <button class="chiptog ${care.joy?'on':''}" data-act="careJoy" ${RO?"disabled":""}>${care.joy?'💗 you did something for you today':'I did something just for me today'}</button>
       <div><button class="btn" data-act="slipNext" style="margin-top:10px">↻ another reminder</button></div>
     </div>`;
+  const bpre=state.breathPreset||"calm";
   CP.breath=`<div class="panel" style="text-align:center">
       <div class="card-head" style="justify-content:center"><span class="label">🫧 breathing bubble</span></div>
+      <div class="seg" style="margin:0 auto 4px">${[["calm","4·2·6 calm"],["box","box 4·4·4·4"],["sleepy","4·7·8 sleepy"]].map(([k,l])=>`<button data-act="breathPreset" data-v="${k}" class="${bpre===k?'on':''}">${l}</button>`).join("")}</div>
       <div class="breath-wrap"><div id="breathBubble" class="breath-bubble"></div><div id="breathLabel" class="breath-label">tap start</div></div>
       <button class="btn btn-pink" id="breathBtn" data-act="breathToggle" style="margin-top:8px">▶ start</button>
-      <p class="soft" style="font-size:11.5px;margin:10px auto 0;max-width:340px">4 in · 2 hold · 6 out. A longer out-breath gently tells your body you're safe.</p>
+      <p class="soft" style="font-size:11.5px;margin:10px auto 0;max-width:340px">${bpre==="box"?"even square breaths — steady focus.":bpre==="sleepy"?"4 in · 7 hold · 8 out — the wind-down one.":"4 in · 2 hold · 6 out. A longer out-breath gently tells your body you're safe."}</p>
     </div>`;
   CP.skills=`<div class="panel">
-    <div style="margin-bottom:8px"><span class="label">🧰 skills & tools — tap a header to open, tap a card to flip</span></div>
+    <div class="card-head"><span class="label">🧰 skills & tools — tap a header to open, tap a card to flip</span><button class="chiptog ${care.skill?'on':''}" data-act="careSkill" ${RO?"disabled":""} style="font-size:11px;padding:4px 10px">${care.skill?'🧰 used one today 💗':'I used a skill today'}</button></div>
     <details class="acc" open><summary>🧰 DBT skills</summary><div class="acc-body">${flipDeck(DBT_SKILLS)}</div></details>
     <details class="acc"><summary>🆘 Emotion first-aid</summary><div class="acc-body">${flipDeck(EMOTION_FIRSTAID)}</div></details>
     <details class="acc"><summary>🚀 Executive-function helpers</summary><div class="acc-body">${flipDeck(EXEC_HELPERS)}</div></details>
@@ -2077,17 +2179,13 @@ async function renderCare(){
           ${jarBubs}
         </svg>
         <div id="joyPick" class="joy-pick"></div>
+        <div id="joyDid" style="display:none;margin-top:4px"><button class="chiptog" data-act="careJoy" ${RO?"disabled":""}>that counts — I did it 💗</button></div>
       </div>
       <p class="soft" style="font-size:12px;margin:6px 0 0">Stuck on what to do for fun? Pull one — or add your own little joys.</p>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${joy.map((j,i)=>`<span class="note" style="cursor:default">${esc(j)} <button class="ft-ic" data-act="joyDel" data-idx="${i}" ${RO?"disabled":""} style="color:var(--rose);font-size:12px;padding:0 2px">×</button></span>`).join("")}</div>
       <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="joyInput" placeholder="add a little joy…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="joyAdd" ${RO?"disabled":""}>+ add</button></div>
     </div>`;
-  CP.checkin=`<div class="panel">
-      <div class="card-head"><span class="label">🌈 gentle check-in</span></div>
-      <div class="soft" style="font-size:12.5px;margin-bottom:8px">How's the weather inside today? There's no wrong answer.</div>
-      <div class="scale">${["🌧️","🌥️","⛅","🌤️","🌞"].map((e,i)=>`<button data-act="careMood" data-v="${i+1}" class="${care.mood===i+1?'on':''}" ${RO?"disabled":""} style="font-size:18px">${e}</button>`).join("")}</div>
-      <button class="chiptog ${care.skill?'on':''}" data-act="careSkill" style="margin-top:12px" ${RO?"disabled":""}>${care.skill?'🧰 used a skill today — proud of you':'I used a DBT skill today'}</button>
-    </div>`;
+  /* (the old "gentle check-in" card grew up into the front-door banner; the skill chip lives on the skills panel now) */
   CP.emotion=`<div class="panel">
       <div class="card-head"><span class="label">🩷 emotion check-in</span><span class="label">naming it = calming it</span></div>
       <p class="soft" style="font-size:12px;margin:0 0 8px">Putting a <b>precise</b> word to a feeling actually helps your brain settle it (that's "name it to tame it"). Tap what fits — a couple is plenty.</p>
@@ -2132,7 +2230,7 @@ async function renderCare(){
           ? `<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px">${cpat.items.map(t=>`<li style="font-size:12.5px;line-height:1.55">${t}</li>`).join("")}</ul><p class="soft" style="font-size:11px;margin:12px 0 0">Gentle observations from your own check-ins — patterns, not proof. 💗</p>`
           : `<p class="soft" style="font-size:12.5px;margin:0">Nothing jumping out yet — I'll keep quietly watching as you log. 💗</p>`)}
     </div>`;
-  return modularPage("care",{slip:"Permission slip",breath:"Breathing bubble",skills:"Skills & tools",creative:"Creative goals",joy:"Joy jar",checkin:"Gentle check-in",emotion:"Emotion check-in",ef:"Getting-started",patterns:"Gentle patterns"},[["slip",CP.slip],["breath",CP.breath],["skills",CP.skills],["creative",CP.creative],["joy",CP.joy],["checkin",CP.checkin],["emotion",CP.emotion],["ef",CP.ef],["patterns",CP.patterns]],6);
+  return frontDoor+modularPage("care",{mood:"Mood chart 📈",rhythm:"Rhythm anchors 🕰️",valued:"One good thing ✨",signs:"Early-warning signs 🚸",wrap:"My plan 🛟",slip:"Permission slip",breath:"Breathing bubble",skills:"Skills & tools",creative:"Creative goals",joy:"Joy jar",emotion:"Emotion check-in",ef:"Getting-started",patterns:"Gentle patterns"},[["mood",CP.mood],["rhythm",CP.rhythm],["valued",CP.valued],["signs",CP.signs],["wrap",CP.wrap],["slip",CP.slip],["breath",CP.breath],["skills",CP.skills],["creative",CP.creative],["joy",CP.joy],["emotion",CP.emotion],["ef",CP.ef],["patterns",CP.patterns]],6);
 }
 /* gentle, non-punitive pattern spotter for the Care center (emotion + executive function) */
 function carePatterns(rows){
@@ -2148,7 +2246,10 @@ function carePatterns(rows){
   { const cc=cmp(c=>!!c.joy,c=>c.mood); if(cc&&cc.t-cc.f>=0.5) out.push("💗 Days you <b>did something just for you</b> leaned brighter. Joy counts."); }
   const namedN=recs.filter(c=>c.feelings&&c.feelings.length).length;
   if(days>=5&&namedN>=3) out.push(`🔖 You named what you felt on ${namedN} of the last ${days} check-ins — that naming is regulation in action.`);
-  return { days, items: out.slice(0,5) };
+  { const cc=cmp(c=>!!(c.va&&c.va.done),c=>c.mood); if(cc&&cc.t-cc.f>=0.5) out.push("✨ Days you did <b>one valued thing</b> read brighter — doing → feeling, working as advertised."); }
+  const rhyN=recs.filter(c=>c.rhythm&&Object.keys(c.rhythm).length>=2).length;
+  if(days>=7&&rhyN>=4) out.push(`🕰️ You anchored your rhythm on ${rhyN} of the last ${days} days — that steadiness is quiet mood medicine.`);
+  return { days, items: out.slice(0,6) };
 }
 
 /* ===================== INCOME + SPONSORS ===================== */
@@ -2473,12 +2574,15 @@ function healthPatterns(rows){
   { const c=cmp(h=>!!h.paced,"fatigue"); if(c&&c.f-c.t>=0.7) out.push("🐢 On days you <b>paced yourself</b>, fatigue ran lower — pacing seems to pay off for you."); }
   { const c=cmp(h=>!!h.movement,"pain"); if(c&&c.f-c.t>=0.7) out.push("🧘 Gentle-movement days had <b>slightly lower pain</b> on average."); }
   { const c=cmp(h=>Number(h.anxiety)>=3,"mood"); if(c&&c.t-c.f<=-0.8) out.push("🌧️ Your mood tends to <b>dip on higher-anxiety days</b> — those days may deserve extra gentleness."); }
+  { const c=cmp(h=>!!h.hot,"dizziness"); if(c&&c.t-c.f>=0.7) out.push("🥵 Heat days ran noticeably <b>dizzier</b> — cooling first (fan, cool shower, cold drink) is real POTS care."); }
+  { const c=cmp(h=>!!h.cycle,"pain"); if(c&&c.t-c.f>=0.7) out.push("🌺 Period days carried <b>more pain</b> — pre-planning gentle days around your cycle is medicine, not weakness."); }
+  { const c=cmp(h=>Number(h.anxiety)>=3,"urgeN"); if(c&&c.t-c.f>=0.8) out.push("🌊 Picking urges cluster on <b>higher-anxiety days</b> — a minute with the bubble before mirror-time may catch the wave early."); }
   const joyN=recs.filter(r=>r.c&&r.c.joy).length;
   if(days>=5&&joyN>=1) out.push(`💗 You did something <b>just for you</b> on ${joyN} of the last ${days} tracked days. That counts.`);
   return { days, items:out.slice(0,5) };
 }
 /* metrics for the Trends graph: [key,label,max,offset,emoji,colour] (offset shifts e.g. mood -3..3 → 0..6) */
-const HMETRICS=[["mood","Mood",6,3,"🌈","#a98fe0"],["pain","Pain",5,0,"🩹","#ec7faf"],["fatigue","Fatigue",5,0,"🔋","#f3a978"],["fog","Brain fog",5,0,"🌫️","#8fb8f0"],["anxiety","Anxiety",5,0,"🌧️","#b58fe0"],["focus","Focus",5,0,"🎯","#5cc6a3"],["lighthead","Lightheaded",5,0,"🫧","#8fb8f0"],["palp","Palpitations",5,0,"🫀","#ec7faf"],["dizziness","Dizziness",5,0,"💫","#a98fe0"],["water","Water",12,0,"💧","#5cc6a3"],["salt","Salt",6,0,"🧂","#f3a978"],["slips","Joint slips",6,0,"🦴","#ec7faf"],["sleepH","Sleep hrs",12,0,"🌙","#a98fe0"],["sleepQ","Sleep quality",5,0,"😴","#8fb8f0"]];
+const HMETRICS=[["mood","Mood",6,3,"🌈","#a98fe0"],["pain","Pain",5,0,"🩹","#ec7faf"],["fatigue","Fatigue",5,0,"🔋","#f3a978"],["fog","Brain fog",5,0,"🌫️","#8fb8f0"],["anxiety","Anxiety",5,0,"🌧️","#b58fe0"],["focus","Focus",5,0,"🎯","#5cc6a3"],["lighthead","Lightheaded",5,0,"🫧","#8fb8f0"],["palp","Palpitations",5,0,"🫀","#ec7faf"],["dizziness","Dizziness",5,0,"💫","#a98fe0"],["water","Water",12,0,"💧","#5cc6a3"],["salt","Salt",6,0,"🧂","#f3a978"],["slips","Joint slips",6,0,"🦴","#ec7faf"],["sleepH","Sleep hrs",12,0,"🌙","#a98fe0"],["sleepQ","Sleep quality",5,0,"😴","#8fb8f0"],["urgeN","Urges ridden",8,0,"🌊","#5cc6a3"],["pickN","Picked",8,0,"🩹","#db5e98"]];
 function healthChartSVG(rows,key,max,offset,color,days){
   const sorted=rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-days);
   const pts=sorted.map(r=>{ const hv=(r.notes&&r.notes.health)||{}; let raw=hv[key]; const has=raw!=null&&raw!==""; return {date:r.date, raw:has?Number(raw):null, v:has?Number(raw)+(offset||0):null}; });
@@ -2533,10 +2637,17 @@ function healthInsight(rows){
   if(!msgs.length) return "Every check-in is just one dot 🌷 — the pattern across the weeks is what tells your story, never any single day.";
   return msgs[parseInt(TODAY.replace(/-/g,""),10)%msgs.length];
 }
+/* defaults for the rebuilt Health tab (research 2026-06-10) */
+const HYG_TASKS=[["teeth","🦷 teeth",["electric brush","soft brush","mini-brush","mouthwash"]],["face","🧼 face",["full wash","face wipe"]],["hair","💇 hair",["wash","dry shampoo","brush / detangle"]],["body","🛁 body",["shower","bath","sink wash","wipes"]]];
+const BFRB_WHERE=["face","scalp","arms","fingers","legs","back","other"];
+const BFRB_FEEL=["anxious","bored","focused","tired","idle hands","mirror moment"];
+const BFRB_STRATS=["fidget stationed where I pick","hydrocolloid patches on healing spots","gloves / finger covers in danger hours","keep nails short & smooth","dim the bathroom light","mirror time-limit","moisturise so there's less to find","tools out of reach (tweezers etc.)","sit on hands / clench fists 60s","putty / squishy on the desk"];
 async function renderHealth(){
   const [day,rows]=await Promise.all([DB.daily(TODAY),DB.dailyRange(30)]);
+  const sentH=await DB.daily(SENTINEL);
   const pat=healthPatterns(rows);
   const h=day.health||{}; const meds=await loadMeds(); const joints=h.joints||[];
+  const targets=Object.assign({water:8,salt:3},sentH.healthTargets||{});
   let selKeys=(state.healthMetrics&&state.healthMetrics.length)?state.healthMetrics:(state.healthMetric?[state.healthMetric]:["mood"]); state.healthMetrics=selKeys;
   const selMetrics=selKeys.map(k=>HMETRICS.find(m=>m[0]===k)).filter(Boolean);
   const moodBtns=[-3,-2,-1,0,1,2,3].map(i=>`<button data-act="healthSet" data-f="mood" data-v="${i}" class="${h.mood===i?'on':''}">${i>0?"+"+i:i}</button>`).join("");
@@ -2561,15 +2672,18 @@ async function renderHealth(){
         <div><div class="label" style="margin-bottom:4px">Sleep quality</div><div class="scale">${[1,2,3,4,5].map(i=>`<button data-act="healthSet" data-f="sleepQ" data-v="${i}" class="${h.sleepQ===i?'on':''}">${i}</button>`).join("")}</div></div>
       </div>
     </div>`;
-  HP.pots=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🫀 POTS care today</h2><span class="label">hydrate · salt · compress</span></div>
-      <p class="soft" style="font-size:12px;margin:0 0 10px">Little things that help blood volume and standing. Tap as you go — no targets to fail, just a gentle count. 💧</p>
+  HP.pots=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🫀 POTS care today</h2><button class="btn" data-act="targetsEdit" ${RO?"disabled":""} style="padding:2px 9px" title="set YOUR clinician-agreed numbers">🎯 my targets</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Tap as you go. Targets are <b>your care-team's numbers</b>, not the app's — and missing one is information, never a fail. 💧</p>
       <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
-        ${hcounter("💧 Water","water",h.water,"cups · many aim ~8–12")}
-        ${hcounter("🧂 Salt / electrolytes","salt",h.salt,"servings")}
+        ${hcounter("💧 Water","water",h.water,`cups · my target ${targets.water}`)}
+        ${hcounter("🧂 Salt / electrolytes","salt",h.salt,`servings · my target ${targets.salt}`)}
       </div>
+      ${(Number(h.water)||0)>=targets.water?`<div class="label" style="margin-top:6px">💧 target met — future standing-up-you says thanks ✨</div>`:""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
         <button class="chiptog ${h.compression?'on':''}" data-act="healthToggle" data-f="compression"><span class="check ${h.compression?'on':''}"></span>🧦 Wore compression</button>
         <button class="chiptog ${h.legsup?'on':''}" data-act="healthToggle" data-f="legsup"><span class="check ${h.legsup?'on':''}"></span>🦵 Legs-up / reclined break</button>
+        <button class="chiptog ${h.hot?'on':''}" data-act="healthToggle" data-f="hot" title="heat is a top POTS trigger — flag it so patterns can see it"><span class="check ${h.hot?'on':''}"></span>🥵 Hot day / heat exposure</button>
+        <button class="chiptog ${h.cycle?'on':''}" data-act="healthToggle" data-f="cycle" title="cycle days change POTS + pain for many people — one optional tap"><span class="check ${h.cycle?'on':''}"></span>🌺 Period day</button>
       </div>
       ${hscale("Lightheaded on standing","lighthead",h.lighthead,"0 fine → 5 nearly fainted")}
       ${hscale("Heart racing / palpitations","palp",h.palp)}
@@ -2596,15 +2710,57 @@ async function renderHealth(){
         <span class="pink">Mind the boom-bust trap:</span> a good day tempts you to do everything, then you pay for it for days. Staying inside your energy envelope keeps more good days in the month. 🥄
       </div></details>
     </div>`;
-  HP.meds=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💊 Meds today</h2><button class="btn" data-act="editMeds">edit list</button></div>
+  HP.meds=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">💊 Meds today</h2><div style="display:flex;gap:6px"><button class="btn" data-act="sameYesterday" ${RO?"disabled":""} title="copy yesterday's meds, water, salt + care toggles into today">↩ same as yesterday</button><button class="btn" data-act="editMeds">edit list</button></div></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${medRows}</div></div>`;
+  /* ---- SP1-SP4: skin-picking companion (HRT/ComB) — redirects are the bigger win, shame is the enemy ---- */
+  const bfrb=h.bfrb||[];
+  const strat=Object.assign({using:[],try:BFRB_STRATS.slice(0,4)},sentH.bfrbStrategies||{});
+  const lastPickRow=rows.slice().sort((a,b)=>b.date.localeCompare(a.date)).find(r=>((r.notes.health||{}).pickN||0)>0);
+  const healDays=lastPickRow?Math.max(0,Math.floor((new Date(TODAY+"T00:00")-new Date(lastPickRow.date+"T00:00"))/86400000)):null;
+  HP.bfrb=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🩹 Skin care companion</h2><span class="label">BFRB support · zero shame here</span></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Picking is a nervous-system habit, not a character flaw. Logging an urge — especially one you rode out — measurably shrinks the habit over time. Slips are <b>data</b>, never failures. 💗</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-pink" data-act="bfrbLog" data-v="urge" ${RO?"disabled":""}>🌊 urge — I rode it</button>
+        <button class="btn" data-act="bfrbLog" data-v="pick" ${RO?"disabled":""}>🩹 picked — it's data</button>
+        <button class="btn" data-act="surf60" title="60 seconds of fists/putty while the urge crests — most urges pass">⏱ 60-second surf</button>
+      </div>
+      <div id="surfBox" style="display:none;text-align:center;margin-top:12px"><div class="art-tim" id="surfTime" style="font-size:34px">1:00</div><div class="soft" style="font-size:12px">fists clenched · or squish the putty · the wave is already cresting 🌊</div></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">
+        <div class="soft-card grow" style="text-align:center"><div class="num" style="font-size:20px;font-family:var(--display);color:var(--mint)">${(h.urgeN||0)}</div><div class="label">urges ridden today 🌊</div></div>
+        <div class="soft-card grow" style="text-align:center"><div class="num" style="font-size:20px;font-family:var(--display)">${(h.pickN||0)}</div><div class="label">picked — gently noted</div></div>
+        ${healDays!=null?`<div class="soft-card grow" style="text-align:center"><div class="num" style="font-size:20px;font-family:var(--display);color:var(--pink-deep)">${healDays}</div><div class="label">day${healDays===1?"":"s"} of healing 💗</div></div>`:""}
+      </div>
+      <details class="acc" style="margin-top:12px"><summary>🧰 my strategy shelf</summary><div class="acc-body">
+        <div class="label" style="margin-bottom:4px">using ✓</div><div style="display:flex;gap:6px;flex-wrap:wrap">${(strat.using||[]).map(s=>`<button class="chiptog on" data-act="stratToggle" data-v="${esc(s)}" ${RO?"disabled":""}>${esc(s)}</button>`).join("")||`<span class="soft" style="font-size:12px">tap one below to move it up here</span>`}</div>
+        <div class="label" style="margin:10px 0 4px">could try</div><div style="display:flex;gap:6px;flex-wrap:wrap">${BFRB_STRATS.filter(s=>!(strat.using||[]).includes(s)).map(s=>`<button class="chiptog" data-act="stratToggle" data-v="${esc(s)}" ${RO?"disabled":""}>${esc(s)}</button>`).join("")}</div>
+        <p class="soft" style="font-size:11px;margin:8px 0 0">stimulus control 101: make picking harder to start, make fiddling easier to reach. see a doctor for any spot that's spreading, warm, or angry — that's body stuff, not willpower stuff 💗</p>
+      </div></details>
+    </div>`;
+  /* ---- HY1: the care menu — every tier counts the same; skip days are invisible ---- */
+  const hyg=day.hygiene||{};
+  const hygNotes=sentH.hygieneNotes||{};
+  const hygDots=(()=>{ const ds=[]; for(let i=6;i>=0;i--){ const d=new Date(TODAY+"T00:00"); d.setDate(d.getDate()-i); const k=d.toLocaleDateString("en-CA"); const rec=k===TODAY?hyg:((rows.find(r=>r.date===k)||{}).notes||{}).hygiene||{}; ds.push(Object.keys(rec).length); } return ds; })();
+  HP.hygiene=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🛁 Care menu</h2><span class="label">care tasks are morally neutral</span></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Pick whatever tier today's body can do — <b>a wipe counts exactly as much as a shower</b>. This list serves your comfort, not a standard. 💗</p>
+      ${HYG_TASKS.map(([k,label,tiers])=>`<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;min-width:74px">${label}</span>
+          <div style="display:flex;gap:5px;flex-wrap:wrap" class="grow">${tiers.map(t=>`<button class="chiptog ${hyg[k]===t?'on':''}" data-act="hygTier" data-k="${k}" data-v="${esc(t)}" ${RO?"disabled":""} style="font-size:11px;padding:4px 10px">${esc(t)}</button>`).join("")}</div>
+          ${hyg[k]?`<span class="pill pill-mint">✓</span>`:""}</div>
+        ${hygNotes[k]?`<div class="soft" style="font-size:10.5px;margin-top:3px;padding-left:82px">${esc(hygNotes[k])}</div>`:""}
+      </div>`).join("")}
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:4px;align-items:center">${hygDots.map((n,i)=>`<span title="${n} care task${n===1?"":"s"}" style="width:11px;height:11px;border-radius:99px;background:${n?"linear-gradient(135deg,#ec7faf,#a98fe0)":"var(--line)"};opacity:${n?1:.5};${i===6?"outline:2px solid rgba(236,127,175,.35);outline-offset:1px;":""}"></span>`).join("")}<span class="label" style="margin-left:4px">last 7 days · dots, never streaks</span></div>
+        <button class="btn" data-act="hygNotesEdit" ${RO?"disabled":""} style="padding:2px 9px">✎ my sensory notes</button>
+      </div>
+      <p class="soft" style="font-size:11px;margin:8px 0 0">🚿 POTS shower safety: lukewarm-cool water, a stool to sit on, fan after, and sit down the moment the room hums. A sink wash on dizzy days is the <i>smart</i> choice 🪑</p>
+    </div>`;
   HP.flare=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">🌶️ Flare + notes</h2></div>
       <button class="hbtn ${h.flare?'done':''}" data-act="healthFlare" style="display:inline-flex;gap:8px;align-items:center"><span class="check ${h.flare?'on':''}"></span>I'm in a flare today</button>
       <div class="label" style="margin:10px 0 4px">Possible triggers</div><input class="inp" id="hTriggers" value="${esc(h.triggers||"")}" placeholder="weather, overdid it, stress, missed meds…" />
       <div class="label" style="margin:10px 0 4px">Notes</div><textarea class="inp" id="hNote" rows="2">${esc(h.note||"")}</textarea>
       <button class="btn btn-pink" data-act="saveHealthNotes" style="margin-top:10px">💾 save notes + sleep</button>
     </div>`;
-  HP.trends=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div>
+  HP.trends=`<div class="panel"><div class="card-head"><h2 style="font-size:18px">📈 Trends</h2><div style="display:flex;gap:6px;align-items:center"><button class="btn" data-act="exportHealth" title="90-day CSV for appointments — symptoms, sleep, meds, flares, cycle, mood">🩺 doctor export</button><div class="seg">${[[14,"14d"],[30,"30d"]].map(([v,l])=>`<button data-act="healthRange" data-v="${v}" class="${(state.healthRange||14)===v?'on':''}">${l}</button>`).join("")}</div></div></div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">${HMETRICS.map(m=>`<button class="chiptog ${selKeys.includes(m[0])?'on':''}" data-act="healthMetric" data-f="${m[0]}" style="font-size:11px">${m[4]} ${m[1]}</button>`).join("")}</div>
       <p class="soft" style="font-size:11px;margin:0 0 8px">tap to add or remove metrics — overlay a few to cross-reference your feelings + symptoms 🌸</p>
       <div style="background:linear-gradient(135deg,#fef5fb,#f4eefc);border:1px solid #f0e4f3;border-radius:16px;padding:12px 10px 6px">
@@ -2622,9 +2778,21 @@ async function renderHealth(){
           : `<p class="soft" style="font-size:12.5px;margin:0">Nothing's jumping out across your recent days — which is honestly a fine thing. I'll keep quietly watching as you log. 💗</p>`)}
     </div>`;
   const insight=healthInsight(rows);
+  /* N2: morning stability check — three taps in, the whole OS adapts to today's body */
+  const mc=state._mc||{};
+  const mScale=(f,cur,lbl,lo,hi)=>`<div style="min-width:170px"><div class="label" style="margin-bottom:3px">${lbl} <span class="muted">· ${lo} → ${hi}</span></div><div class="scale">${[0,1,2,3,4,5].map(v=>`<button data-act="mcSet" data-f="${f}" data-v="${v}" class="${cur===v?'on':''}">${v}</button>`).join("")}</div></div>`;
+  const morning=(!day.energy&&!RO)?`<div class="panel" style="background:linear-gradient(135deg,#fef5fb,#f4eefc);margin-bottom:14px">
+    <div class="card-head"><span class="label">🌅 morning check — 3 taps and the whole OS sets itself to today's body</span></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      ${mScale("stand",mc.stand,"🧍 standing feels","steady","room swims")}
+      ${mScale("fat",mc.fat,"🔋 body battery","rested","wiped")}
+      <div><div class="label" style="margin-bottom:3px">🌙 sleep hours</div><input class="inp num" id="mcSleep" type="number" step="0.5" value="${mc.sleep??(h.sleepH??"")}" style="width:84px"/></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap"><button class="btn btn-pink" data-act="mcGo">🥄 suggest my spoons</button><span class="soft" style="font-size:11.5px">saves these three + sets your energy — overridable any time</span></div>
+  </div>`:"";
   const banner=insight?`<div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);max-width:none;margin-bottom:14px"><div style="display:flex;gap:11px;align-items:flex-start"><span style="font-size:24px;flex:0 0 auto">🐙</span><p style="font-size:13px;line-height:1.55;margin:0">${insight}</p></div></div>`:"";
-  const grid=modularPage("health",{today:"How are you today",pots:"POTS care",joints:"Joints & pacing",meds:"Meds today",flare:"Flare + notes",trends:"Trends",patterns:"Gentle patterns"},[["today",HP.today],["pots",HP.pots],["joints",HP.joints],["meds",HP.meds],["flare",HP.flare],["trends",HP.trends],["patterns",HP.patterns]],6);
-  return banner+grid;
+  const grid=modularPage("health",{today:"How are you today",pots:"POTS care",bfrb:"Skin care companion 🩹",hygiene:"Care menu 🛁",joints:"Joints & pacing",meds:"Meds today",flare:"Flare + notes",trends:"Trends",patterns:"Gentle patterns"},[["today",HP.today],["pots",HP.pots],["bfrb",HP.bfrb],["hygiene",HP.hygiene],["joints",HP.joints],["meds",HP.meds],["flare",HP.flare],["trends",HP.trends],["patterns",HP.patterns]],6);
+  return morning+banner+grid;
 }
 async function medsModal(){
   const meds=await loadMeds();
@@ -3798,14 +3966,15 @@ function sponsorPill(s){return {draft:"pill-gray",sent:"pill-lav",responded:"pil
 function toast(msg,extra){const el=document.getElementById("toast");
   let btn="",ms=4500;
   if(typeof extra==="string")btn=`<button class="btn" data-act="${extra}">undo</button>`;
-  else if(extra&&extra.act){btn=`<button class="btn btn-pink" data-act="${esc(extra.act)}" ${extra.id?`data-id="${esc(extra.id)}"`:""} ${extra.tab?`data-tab="${esc(extra.tab)}"`:""}>${esc(extra.label||"do it")}</button>`;ms=extra.ms||8000;}
+  else if(extra&&extra.act){btn=`<button class="btn btn-pink" data-act="${esc(extra.act)}" ${extra.id?`data-id="${esc(extra.id)}"`:""} ${extra.tab?`data-tab="${esc(extra.tab)}"`:""} ${extra.v?`data-v="${esc(extra.v)}"`:""}>${esc(extra.label||"do it")}</button>`;ms=extra.ms||8000;}
   el.innerHTML=`<div class="panel toast" style="display:flex;gap:12px;align-items:center;padding:10px 16px"><span style="font-size:13px">${esc(msg)}</span>${btn}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>{el.innerHTML="";},ms);}
 
 /* ===================== EVENTS ===================== */
 const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","addSug","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
-  "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset"];
+  "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4174,8 +4343,46 @@ document.addEventListener("click",async(e)=>{
   if(act==="careEmoSkill"){ const f=el.dataset.f; await careMut(c=>{const a=(c.emoSkills||[]).slice();const i=a.indexOf(f);i>=0?a.splice(i,1):a.push(f);return {...c,emoSkills:a};}); render(); return; }
   if(act==="careSupport"){ const f=el.dataset.f; await careMut(c=>{const a=(c.efSupports||[]).slice();const i=a.indexOf(f);i>=0?a.splice(i,1):a.push(f);return {...c,efSupports:a};}); render(); return; }
   if(act==="careEF"){ const f=el.dataset.f,v=Number(el.dataset.v); await careMut(c=>({...c,[f]:v})); render(); return; }
+  /* ---- rebuilt Care tab (research 2026-06-10) ---- */
+  if(act==="bipElev"){ const v=parseInt(el.dataset.v); await careMut(c=>({...c,bip:{...(c.bip||{}),elev:v}})); render(); return; }
+  if(act==="bipIrrit"){ const v=parseInt(el.dataset.v); await careMut(c=>({...c,bip:{...(c.bip||{}),irrit:v}})); render(); return; }
+  if(act==="rhythmNow"){ const k=el.dataset.k; const now=new Date(); const t=("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2); await careMut(c=>({...c,rhythm:{...(c.rhythm||{}),[k]:t}})); render(); return; }
+  if(act==="valuedPick"){ const sent2=await DB.daily(SENTINEL); const joy2=(sent2.joyJar&&sent2.joyJar.length)?sent2.joyJar:DEFAULT_JOY.slice(); const hob=(sent2.tasks||[]).filter(t=>!t.done&&t.bucket==="hobbies").map(t=>t.text); const pool=[...joy2,...hob]; const cur=((await DB.daily(TODAY)).care||{}).va||{}; let pick; do{ pick=pool[Math.floor(Math.random()*pool.length)]; }while(pool.length>1&&pick===cur.text); await careMut(c=>({...c,va:{text:pick,done:false,rating:null}})); render(); return; }
+  if(act==="valuedDone"){ await careMut(c=>({...c,va:{...(c.va||{}),done:!(c.va&&c.va.done)},joy:true})); render(); return; }
+  if(act==="valuedRate"){ const v=parseInt(el.dataset.v); await careMut(c=>({...c,va:{...(c.va||{}),rating:v}})); toast(v>=4?"and your brain just took the note 💗":"logged — doing it still counts, whatever it felt like 🌸"); render(); return; }
+  if(act==="signToggle"){ const v=el.dataset.v; await careMut(c=>{const a=(c.signs||[]).slice();const i=a.indexOf(v);i>=0?a.splice(i,1):a.push(v);return {...c,signs:a};}); render(); return; }
+  if(act==="warnEdit"){ const sent2=await DB.daily(SENTINEL); const w=Object.assign({},WARN_DEFAULT,sent2.warningSigns||{});
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%;max-height:90vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🚸 my early-warning signs</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">Write them on a clear day, in your own words — one per line. Future-you will recognise them faster than future-you recognises the mood itself.</p>
+      <div class="label">⬆ up-swing signs (hypomania-ish)</div><textarea class="inp" id="wn_up" rows="5">${esc(w.up.join("\n"))}</textarea>
+      <div class="label" style="margin-top:8px">⬇ down-swing signs (depression-ish)</div><textarea class="inp" id="wn_down" rows="5">${esc(w.down.join("\n"))}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="warnSave">💾 save</button></div></div></div>`; return; }
+  if(act==="warnSave"){ const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean).slice(0,12);
+    await DB.saveDaily(SENTINEL,n=>({...n,warningSigns:{up:lines((document.getElementById("wn_up")||{}).value),down:lines((document.getElementById("wn_down")||{}).value)}}));
+    document.getElementById("modal").innerHTML=""; toast("your signature is saved 🚸💗"); render(); return; }
+  if(act==="wrapEdit"){ const sent2=await DB.daily(SENTINEL); const w=sent2.wrapPlan||{};
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:460px;width:100%;max-height:92vh;overflow:auto"><div class="card-head"><h3 style="font-size:16px">🛟 my plan</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">A WRAP-style plan in your own words. The built-in tools are always in your toolbox; add your own below — one per line everywhere.</p>
+      <div class="label">extra toolbox things <span class="muted">(blanket burrito, call mom, specific playlist…)</span></div><textarea class="inp" id="wr_tool" rows="3">${esc((w.toolbox||[]).join("\n"))}</textarea>
+      <div class="label" style="margin-top:8px">keeps-me-steady daily list</div><textarea class="inp" id="wr_daily" rows="3">${esc((w.daily||["meds","water","one gentle thing"]).join("\n"))}</textarea>
+      <div class="label" style="margin-top:8px">things that wobble me</div><textarea class="inp" id="wr_trig" rows="3">${esc((w.triggers||[]).join("\n"))}</textarea>
+      <div class="label" style="margin-top:8px">my people <span class="muted">· names + how to reach them</span></div><textarea class="inp" id="wr_who" rows="3" placeholder="partner: … · bestie: … · care team: …">${esc(w.contacts||"")}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="wrapSave">💾 save plan</button></div></div></div>`; return; }
+  if(act==="wrapSave"){ const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean).slice(0,15);
+    await DB.saveDaily(SENTINEL,n=>({...n,wrapPlan:{toolbox:lines((document.getElementById("wr_tool")||{}).value),daily:lines((document.getElementById("wr_daily")||{}).value),triggers:lines((document.getElementById("wr_trig")||{}).value),contacts:((document.getElementById("wr_who")||{}).value||"").slice(0,600)}}));
+    document.getElementById("modal").innerHTML=""; toast("🛟 plan saved — hopefully boring, always there 💗"); render(); return; }
+  if(act==="breathPreset"){ state.breathPreset=el.dataset.v; render(); return; }
+  if(act==="doorGo"){ const v=el.dataset.v; const target={breath:"breath",wrap:"wrap",valued:"valued",ef:"ef"}[v]; const cardEl=target?document.querySelector(`.home-widget[data-w="${target}"]`):null;
+    if(cardEl)try{cardEl.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}
+    if(v==="breath")setTimeout(()=>{try{if(!breathTimer)toggleBreath();}catch(e){}},650);
+    if(v==="valued"){ const day2=await DB.daily(TODAY); if(!((day2.care||{}).va||{}).text){ const b=document.querySelector('[data-act="valuedPick"]'); if(b)b.click(); } }
+    return; }
+  if(act==="rsdCheck"){ document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:440px;width:100%"><div class="card-head"><h3 style="font-size:16px">⚖️ what does it actually say?</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">RSD adds words that aren't there. Paste the message — get the honest read, including what it's NOT saying.</p>
+    <textarea class="inp" id="rsd_text" rows="5" placeholder="paste the message that stung…"></textarea>
+    <button class="btn btn-pink" data-act="toneJudge" data-src="rsd_text" style="margin-top:10px;width:100%">⚖️ read it for me</button></div></div>`; return; }
   if(act==="saveCareLog"){ const trig=document.getElementById("careTrigger").value, step=document.getElementById("efStep").value; await careMut(c=>({...c,emoTrigger:trig,efStep:step})); toast("Saved 💗 one gentle step"); return; }
-  if(act==="joyPull"){ const box=document.getElementById("joyPick"); if(box){ const list=state.joy||[]; box.textContent=list.length?("🐙 "+list[Math.floor(Math.random()*list.length)]):"add some joys first 🌸"; box.classList.remove("pop"); void box.offsetWidth; box.classList.add("pop"); } return; }
+  if(act==="joyPull"){ const box=document.getElementById("joyPick"); if(box){ const list=state.joy||[]; box.textContent=list.length?("🐙 "+list[Math.floor(Math.random()*list.length)]):"add some joys first 🌸"; box.classList.remove("pop"); void box.offsetWidth; box.classList.add("pop"); const did=document.getElementById("joyDid"); if(did&&list.length)did.style.display=""; } return; }
   if(act==="joyAdd"){ const i=document.getElementById("joyInput"); const tx=(i.value||"").trim(); if(tx){ await joyMut(j=>[...j,tx]); render(); } return; }
   if(act==="joyDel"){ const idx=parseInt(el.dataset.idx); await joyMut(j=>j.filter((_,k)=>k!==idx)); render(); return; }
 
@@ -4294,6 +4501,68 @@ document.addEventListener("click",async(e)=>{
   if(act==="healthToggle"){ const f=el.dataset.f; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); h[f]=!h[f]; return {...n,health:h};}); render(); }
   if(act==="healthMetric"){ const f=el.dataset.f; let s=(state.healthMetrics||[]).slice(); const i=s.indexOf(f); if(i>=0){ if(s.length>1)s.splice(i,1); } else s.push(f); state.healthMetrics=s; return render(); }
   if(act==="healthRange"){ state.healthRange=Number(el.dataset.v); return render(); }
+  /* ---- rebuilt Health tab (research 2026-06-10) ---- */
+  if(act==="mcSet"){ state._mc=state._mc||{}; state._mc[el.dataset.f]=Number(el.dataset.v); document.querySelectorAll(`[data-act="mcSet"][data-f="${el.dataset.f}"]`).forEach(b=>b.classList.toggle("on",b.dataset.v===el.dataset.v)); return; }
+  if(act==="mcGo"){ const mc=state._mc||{}; const sl=parseFloat((document.getElementById("mcSleep")||{}).value);
+    const sym=((mc.stand??2)+(mc.fat??2))/2 + ((!isNaN(sl)&&sl<6)?1:0);
+    const lvl=sym>=3?"low":sym>=1.8?"medium":"high";
+    await DB.saveDaily(TODAY,n=>{ const h2=grabHealthInputs(n.health); if(mc.stand!=null)h2.lighthead=mc.stand; if(mc.fat!=null)h2.fatigue=mc.fat; if(!isNaN(sl))h2.sleepH=sl; return {...n,energy:lvl,health:h2}; });
+    state._mc={}; toast(lvl==="low"?"🌙 a low-spoon day — the whole OS just went gentle for you 💗":lvl==="medium"?"🌤 a medium day — pace it kindly 💗":"🌞 spoons look good — enjoy it (boom-bust says: still pace 🐢)"); render(); return; }
+  if(act==="targetsEdit"){ const sent2=await DB.daily(SENTINEL); const t=Object.assign({water:8,salt:3},sent2.healthTargets||{});
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">🎯 my care-team targets</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 10px">Salt and fluid needs are genuinely individual in POTS — set the numbers <b>you and your clinician</b> agreed on, and the counters will aim there.</p>
+      <div class="row2" style="display:flex;gap:10px"><div style="flex:1"><div class="label">💧 water (cups/day)</div><input class="inp num" id="tg_water" type="number" min="1" max="20" value="${t.water}"/></div><div style="flex:1"><div class="label">🧂 salt (servings/day)</div><input class="inp num" id="tg_salt" type="number" min="0" max="12" value="${t.salt}"/></div></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="targetsSave">💾 save</button></div></div></div>`; return; }
+  if(act==="targetsSave"){ const w=Math.max(1,Math.min(20,parseInt((document.getElementById("tg_water")||{}).value)||8)), s2=Math.max(0,Math.min(12,parseInt((document.getElementById("tg_salt")||{}).value)||3));
+    await DB.saveDaily(SENTINEL,n=>({...n,healthTargets:{water:w,salt:s2}})); document.getElementById("modal").innerHTML=""; toast("🎯 targets saved — your numbers, not the app's"); render(); return; }
+  if(act==="sameYesterday"){ const y=await DB.daily(dayAgo(-1)); const yh=y.health||{};
+    if(!Object.keys(yh).length){ toast("yesterday has no log to copy 🌸"); return; }
+    await DB.saveDaily(TODAY,n=>{ const h2=grabHealthInputs(n.health);
+      ["water","salt","compression","legsup","paced","movement","bracing"].forEach(k=>{ if(yh[k]!=null&&h2[k]==null)h2[k]=yh[k]; });
+      if(yh.meds){ h2.meds={...(yh.meds||{}),...(h2.meds||{})}; }
+      return {...n,health:h2}; });
+    toast("↩ copied yesterday's stable bits — tweak anything that's different 💗"); render(); return; }
+  if(act==="bfrbLog"){ const kind=el.dataset.v;
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%"><div class="card-head"><h3 style="font-size:16px">${kind==="urge"?"🌊 urge — and you rode it":"🩹 picked — gently noted"}</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">${kind==="urge"?"That redirect is the actual skill. Two optional taps for the pattern-spotter:":"Zero judgment — where/when is just data that helps us find the pattern:"}</p>
+      <div class="label" style="margin-bottom:4px">where</div><div style="display:flex;gap:6px;flex-wrap:wrap">${BFRB_WHERE.map(w=>`<button class="chiptog bfrb-w" data-v="${esc(w)}" onclick="this.classList.toggle('on')">${esc(w)}</button>`).join("")}</div>
+      <div class="label" style="margin:10px 0 4px">what was happening</div><div style="display:flex;gap:6px;flex-wrap:wrap">${BFRB_FEEL.map(w=>`<button class="chiptog bfrb-f" data-v="${esc(w)}" onclick="this.classList.toggle('on')">${esc(w)}</button>`).join("")}</div>
+      <button class="btn btn-pink" data-act="bfrbSave" data-v="${kind}" style="margin-top:12px;width:100%">${kind==="urge"?"log the win 🌊":"log it 💗"}</button>
+    </div></div>`; return; }
+  if(act==="bfrbSave"){ const kind=el.dataset.v;
+    const where=[...document.querySelectorAll(".bfrb-w.on")].map(b=>b.dataset.v), feel=[...document.querySelectorAll(".bfrb-f.on")].map(b=>b.dataset.v);
+    await DB.saveDaily(TODAY,n=>{ const h2=grabHealthInputs(n.health);
+      h2[kind==="urge"?"urgeN":"pickN"]=(Number(h2[kind==="urge"?"urgeN":"pickN"])||0)+1;
+      h2.bfrb=[...(h2.bfrb||[]),{t:new Date().toTimeString().slice(0,5),k:kind,where,feel}].slice(-30);
+      return {...n,health:h2}; });
+    document.getElementById("modal").innerHTML="";
+    toast(kind==="urge"?"🌊 ridden — that's the muscle growing 💗":"noted with zero shame — the gap before the next one is the progress 💗"); render(); return; }
+  if(act==="surf60"){ const box=document.getElementById("surfBox"); if(!box)return; box.style.display=""; let left=60;
+    if(state._surfInt)clearInterval(state._surfInt);
+    const paint=()=>{ const t=document.getElementById("surfTime"); if(t)t.textContent=Math.floor(left/60)+":"+("0"+(left%60)).slice(-2); };
+    paint();
+    state._surfInt=setInterval(()=>{ left--; if(left<0){ clearInterval(state._surfInt); state._surfInt=null; const t=document.getElementById("surfTime"); if(t)t.textContent="🌊 cresting over"; toast("60 seconds ridden — log it as a win? 💗",{act:"bfrbLog",v:"urge",label:"🌊 log the win",ms:9000}); const bx=document.getElementById("surfBox"); if(bx)setTimeout(()=>{bx.style.display="none";},4000); return; } paint(); },1000);
+    return; }
+  if(act==="stratToggle"){ const v=el.dataset.v; await DB.saveDaily(SENTINEL,n=>{ const st=Object.assign({using:[]},n.bfrbStrategies||{}); const u=(st.using||[]).slice(); const i=u.indexOf(v); i>=0?u.splice(i,1):u.push(v); return {...n,bfrbStrategies:{using:u}}; }); render(); return; }
+  if(act==="hygTier"){ const k=el.dataset.k, v=el.dataset.v; await DB.saveDaily(TODAY,n=>{ const hg={...(n.hygiene||{})}; if(hg[k]===v)delete hg[k]; else hg[k]=v; return {...n,hygiene:hg}; }); render(); return; }
+  if(act==="hygNotesEdit"){ const sent2=await DB.daily(SENTINEL); const notes2=sent2.hygieneNotes||{};
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:420px;width:100%"><div class="card-head"><h3 style="font-size:16px">✎ my sensory notes</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">What makes each one doable for YOUR body — products, temperatures, the goblin-kit shortcuts.</p>
+      ${HYG_TASKS.map(([k,label])=>`<div class="label" style="margin-top:8px">${label}</div><input class="inp hyg-note" data-k="${k}" value="${esc(notes2[k]||"")}" placeholder="${k==="teeth"?"e.g. non-mint paste · electric on low":k==="body"?"e.g. cool water + 🪑 stool · wipes in nightstand":k==="hair"?"e.g. dry shampoo on desk":"e.g. micellar wipes by the bed"}"/>`).join("")}
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-pink" data-act="hygNotesSave">💾 save</button></div></div></div>`; return; }
+  if(act==="hygNotesSave"){ const out2={}; document.querySelectorAll(".hyg-note").forEach(i2=>{ const v=(i2.value||"").trim(); if(v)out2[i2.dataset.k]=v.slice(0,120); });
+    await DB.saveDaily(SENTINEL,n=>({...n,hygieneNotes:out2})); document.getElementById("modal").innerHTML=""; toast("✎ saved — accommodations are competence 💗"); render(); return; }
+  if(act==="exportHealth"){ toast("packing 90 days for the doctor… 🩺");
+    const rows90=await DB.dailyRange(90);
+    const cols=["date","pain","fatigue","fog","dizziness","lighthead","palp","anxiety","mood","focus","sleepH","sleepQ","water","salt","slips","compression","paced","movement","flare","hot","cycle","urgeN","pickN","triggers","note","elev","irrit","medsTaken"];
+    const lines=[cols.join(",")];
+    rows90.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{ const hh=r.notes.health||{}, cc=(r.notes.care||{}).bip||{};
+      const medsN=hh.meds?Object.values(hh.meds).filter(Boolean).length:"";
+      const q=v=>{ if(v==null)return ""; const s=String(v===true?1:v===false?0:v).replace(/"/g,'""'); return /[",\n]/.test(s)?'"'+s+'"':s; };
+      lines.push([r.date,hh.pain,hh.fatigue,hh.fog,hh.dizziness,hh.lighthead,hh.palp,hh.anxiety,hh.mood,hh.focus,hh.sleepH,hh.sleepQ,hh.water,hh.salt,hh.slips,hh.compression,hh.paced,hh.movement,hh.flare,hh.hot,hh.cycle,hh.urgeN,hh.pickN,hh.triggers,hh.note,cc.elev,cc.irrit,medsN].map(q).join(",")); });
+    const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`health-90d-${TODAY}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1200);
+    toast("🩺 90-day summary downloaded — appointments without the memory tax 💗"); return; }
   if(act==="saveCreative"){ const project=document.getElementById("cfProject").value.trim(), step=document.getElementById("cfStep").value.trim(); await DB.saveDaily(SENTINEL,n=>({...n,creativeFocus:{project,step}})); toast("Saved 🎨 one tiny step at a time"); render(); return; }
   if(act==="healthJoint"){ const j=el.dataset.j; await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); const cur=h.joints||[]; h.joints=cur.includes(j)?cur.filter(x=>x!==j):[...cur,j]; return {...n,health:h};}); render(); }
   if(act==="medToggle"){ await DB.saveDaily(TODAY,n=>{const h=grabHealthInputs(n.health); const meds={...(h.meds||{})}; meds[id]=!meds[id]; h.meds=meds; return {...n,health:h};}); render(); }
@@ -4336,6 +4605,8 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.id==="f_uploadFile"&&e.target.files&&e.target.files[0]){ const file=e.target.files[0], url=URL.createObjectURL(file), up=document.getElementById("f_upload"), prev=document.getElementById("f_uploadPrev"); if(up&&!up.value.trim())up.value=file.name; if(prev)prev.innerHTML=(file.type.indexOf("video")===0?`<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`:`<img src="${url}" style="max-width:170px;border-radius:10px" />`)+`<div class="soft" style="font-size:11px;margin-top:4px">preview only — paste a link above to keep it with the brief 🌸</div>`; }
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
+  if(e.target&&!RO&&e.target.id==="bipNote"){ const v=e.target.value.slice(0,200); DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),bip:{...((n.care||{}).bip||{}),note:v}}})).catch(()=>{}); }
+  if(e.target&&!RO&&e.target.dataset&&e.target.dataset.rhy){ const k=e.target.dataset.rhy, v=e.target.value; DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),rhythm:{...((n.care||{}).rhythm||{}),[k]:v}}})).catch(()=>{}); }
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
   if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
   if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
@@ -4493,7 +4764,7 @@ function toggleBreath(){
   if(!bub||!lab)return;
   if(breathTimer){ clearTimeout(breathTimer); breathTimer=null; bub.style.transition="transform 1.2s ease"; bub.style.transform="scale(1)"; lab.textContent="tap start"; if(btn)btn.textContent="▶ start"; return; }
   if(btn)btn.textContent="⏸ stop";
-  const phases=[["Breathe in…",4000,1.7],["Hold",2000,1.7],["Breathe out…",6000,1.0]]; let i=0;
+  const phases=(BREATH_PRESETS[state.breathPreset||"calm"]||BREATH_PRESETS.calm).filter(p=>p[1]>0); let i=0;   // CA3: 4·2·6 / box / 4·7·8
   (function step(){ const b=document.getElementById("breathBubble"), l=document.getElementById("breathLabel"); if(!b||!l){breathTimer=null;return;} const [label,dur,to]=phases[i]; l.textContent=label; b.style.transition=`transform ${dur}ms ease-in-out`; b.style.transform=`scale(${to})`; i=(i+1)%phases.length; breathTimer=setTimeout(step,dur); })();
 }
 function smart(){ const q=(document.getElementById("smartQ").value||"").toLowerCase().trim(); if(!q){state.smartIds=null;return render();} state.smartIds=(state._content||[]).filter(c=>(c.title+" "+(c.hook||"")+" "+(c.hashtags||[]).join(" ")).toLowerCase().includes(q)).map(c=>c.id); render(); }
@@ -4762,6 +5033,30 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       case "setFlare":
         await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); h.flare=(a.on!==false); return Object.assign({},n,{health:h}); });
         return (a.on!==false)? "🌶️ marked a flare day — be gentle 🌙" : "cleared today's flare flag";
+      case "logBip":
+        await careMut(function(c){ var b=Object.assign({},c.bip||{}); if(a.elevation!=null)b.elev=Math.max(-4,Math.min(4,Number(a.elevation))); if(a.irritability!=null)b.irrit=Math.max(0,Math.min(3,Number(a.irritability))); if(a.note)b.note=String(a.note).slice(0,200); return Object.assign({},c,{bip:b}); });
+        return "📈 mood chart updated"+(a.elevation!=null?" — elevation "+(a.elevation>0?"+"+a.elevation:a.elevation):"");
+      case "logRhythm": {
+        var ok2={wake:1,contact:1,meal:1,wind:1}; if(!ok2[a.anchor]) return "which anchor — wake, contact, meal, or wind? 🌸";
+        var tt=a.time||new Date().toTimeString().slice(0,5);
+        await careMut(function(c){ return Object.assign({},c,{rhythm:Object.assign({},c.rhythm||{},Object.fromEntries([[a.anchor,tt]]))}); });
+        return "🕰️ anchored "+a.anchor+" at "+tt;
+      }
+      case "logUrge": {
+        var picked=(a.picked===true);
+        await DB.saveDaily(TODAY,function(n){ var h=Object.assign({},n.health||{}); var k=picked?"pickN":"urgeN"; h[k]=(Number(h[k])||0)+1; h.bfrb=((h.bfrb||[]).concat([{t:new Date().toTimeString().slice(0,5),k:picked?"pick":"urge",where:a.where?[a.where]:[],feel:a.feeling?[a.feeling]:[]}])).slice(-30); return Object.assign({},n,{health:h}); });
+        return picked? "🩹 noted with zero shame — the gap before the next one is the progress 💗" : "🌊 logged a ridden urge — that's the muscle growing 💗";
+      }
+      case "logHygiene": {
+        var okT={teeth:1,face:1,hair:1,body:1}; if(!okT[a.task]) return "which one — teeth, face, hair, or body? 🌸";
+        await DB.saveDaily(TODAY,function(n){ var hg=Object.assign({},n.hygiene||{}); hg[a.task]=String(a.tier||"done").slice(0,40); return Object.assign({},n,{hygiene:hg}); });
+        return "🛁 "+a.task+" — counted, whatever the tier. care is care 💗";
+      }
+      case "valuedThing": {
+        if(a.text) await careMut(function(c){ return Object.assign({},c,{va:{text:String(a.text).slice(0,200),done:!!a.done,rating:a.rating!=null?Number(a.rating):null}}); });
+        else await careMut(function(c){ var v=Object.assign({},c.va||{}); if(a.done!=null)v.done=!!a.done; if(a.rating!=null)v.rating=Number(a.rating); return Object.assign({},c,{va:v}); });
+        return "✨ your one good thing is set"+(a.done?" — and done 💗":"");
+      }
       case "addSavingsGoal":
         await DB.addGoal({name:a.name||"goal",emoji:a.emoji||null,target:Number(a.target)||0,saved:0});
         return "🐖 added savings goal: "+(a.name||"");

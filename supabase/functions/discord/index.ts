@@ -312,7 +312,14 @@ Deno.serve(async (req) => {
         const adoptKey = Deno.env.get("PET_ADOPT_KEY") || "";
         if (adoptKey && String(pre.adoptKey || "") !== adoptKey) return json({ error: "adoption needs the family key" }, 403);
         if (!token || token.length < 12) return json({ error: "token too short" }, 400);
-        if (have && have !== token) return json({ error: "this name is already adopted on another device" }, 403);
+        if (have && have !== token) {
+          // family key = master key: a build carrying the right PET_ADOPT_KEY may RE-adopt the name
+          // (his new PC, a reinstall, or Eggie test-driving the exe before gifting). Without the
+          // family key configured, first-claim-wins stands and strangers can't take over a pet.
+          if (!adoptKey) return json({ error: "this name is already adopted on another device" }, 403);
+          await saveSent(petUser, (n) => ({ ...n, appConfig: { ...(n.appConfig || {}), petToken: token } }));
+          return json({ ok: true, adopted: petUser, readopted: true });
+        }
         if (!have) await saveSent(petUser, (n) => ({ ...n, appConfig: { ...(n.appConfig || {}), petToken: token } }));
         return json({ ok: true, adopted: petUser });
       }
