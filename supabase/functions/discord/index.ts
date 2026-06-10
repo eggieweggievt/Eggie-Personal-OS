@@ -160,6 +160,16 @@ async function execAction(userId: string, a: any): Promise<string> {
     case "addCalendarEvent":
       await saveSent(userId, (n) => ({ ...n, calendarEvents: [...(n.calendarEvents || []), { id: uid(), title: a.title || "event", date: a.date || todayStr(), endDate: a.endDate || "", time: a.time || "", tz: a.tz || "America/New_York", note: a.note || "", color: "#f6b8d4" }] }));
       return `📅 added “${a.title}” on ${a.date}${a.time ? " at " + a.time : ""}`;
+    case "delCalendarEvent": {
+      const nm = (a.title || "").toLowerCase(); let hit: any = null;
+      await saveSent(userId, (n) => ({ ...n, calendarEvents: (n.calendarEvents || []).filter((ev: any) => { const m = (ev.title || "").toLowerCase().includes(nm) && (!a.date || ev.date === a.date); if (m && !hit) { hit = ev; return false; } return true; }) }));
+      return hit ? `🗑 removed “${hit.title}” (${hit.date})` : `couldn't find an event like “${a.title || ""}”`;
+    }
+    case "moveCalendarEvent": {
+      const nm = (a.title || "").toLowerCase(); let hit: any = null;
+      await saveSent(userId, (n) => { const evs = (n.calendarEvents || []).slice(); const ev = evs.find((x: any) => (x.title || "").toLowerCase().includes(nm)); if (ev && a.date) { hit = ev; ev.date = a.date; if (ev.endDate && ev.endDate < a.date) ev.endDate = a.date; } return { ...n, calendarEvents: evs }; });
+      return hit ? `📅 moved “${hit.title}” to ${a.date}` : `couldn't find an event like “${a.title || ""}”`;
+    }
     case "addContent":
       await sb().from("content_items").insert({ user_id: userId, title: a.title || "idea", format: a.format || "short", stage: a.stage || "idea", pillar: a.pillar || null, priority: 60, criteria: {}, hashtags: [] });
       return `🎬 added content “${a.title}”`;
@@ -285,6 +295,47 @@ Deno.serve(async (req) => {
   //      client reminder. Gated by the publishable apikey header; execAction only ever touches the
   //      owner's own clients' channels, so it can't message anyone else. ----
   let pre: any = null; try { pre = JSON.parse(body); } catch { /* not JSON */ }
+
+  // ---- op:"pet" — the desktop-pet door (Fable etc.). Post-lockdown the pet can't touch the
+  //      tables with the publishable key, so it talks through here instead, gated by a per-user
+  //      petToken stored on THAT user's sentinel row. The owner's tag is hard-blocked: her data
+  //      is only reachable through her signed-in OS. First run "adopts" the name by claiming the
+  //      token (optionally requiring the PET_ADOPT_KEY secret so strangers can't squat tags). ----
+  if (pre && pre.op === "pet") {
+    const petUser = String(pre.userId || "").trim();
+    const token = String(pre.token || "");
+    if (!petUser || petUser === OWNER || petUser === "eggie") return json({ error: "that name isn't available" }, 403);
+    try {
+      const s = await loadSent(petUser);
+      const have = String(s?.appConfig?.petToken || "");
+      if (pre.kind === "adopt") {
+        const adoptKey = Deno.env.get("PET_ADOPT_KEY") || "";
+        if (adoptKey && String(pre.adoptKey || "") !== adoptKey) return json({ error: "adoption needs the family key" }, 403);
+        if (!token || token.length < 12) return json({ error: "token too short" }, 400);
+        if (have && have !== token) return json({ error: "this name is already adopted on another device" }, 403);
+        if (!have) await saveSent(petUser, (n) => ({ ...n, appConfig: { ...(n.appConfig || {}), petToken: token } }));
+        return json({ ok: true, adopted: petUser });
+      }
+      if (!have || have !== token) return json({ error: "unauthorized" }, 401);
+      if (pre.kind === "read") return json({ ok: true, notes: s });
+      if (pre.kind === "act") { const m = await execAction(petUser, pre.action || {}); return json({ ok: true, message: m }); }
+      if (pre.kind === "patch") {
+        const ALLOW = ["reminders", "tasks", "eugeneFacts", "calendarEvents", "appConfig"];
+        const key = String(pre.key || "");
+        if (!ALLOW.includes(key)) return json({ error: "key not allowed" }, 400);
+        let val: any = pre.value;
+        if (JSON.stringify(val ?? null).length > 250000) return json({ error: "too big" }, 413);
+        if (key === "appConfig") {
+          if (typeof val !== "object" || Array.isArray(val) || !val) return json({ error: "bad value" }, 400);
+          val = { ...(s.appConfig || {}), ...val, petToken: have };   // settings merge; the token can't be stripped or changed here
+        } else if (!Array.isArray(val)) return json({ error: "bad value" }, 400);
+        await saveSent(petUser, (n) => ({ ...n, [key]: val }));
+        return json({ ok: true });
+      }
+      return json({ error: "unknown kind" }, 400);
+    } catch (e) { return json({ error: String((e as Error)?.message || e) }, 500); }
+  }
+
   if (pre && pre.op === "relay") {
     const rk = Deno.env.get("RELAY_KEY");
     if (rk && req.headers.get("apikey") !== rk && req.headers.get("x-relay-key") !== rk) return json({ error: "unauthorized" }, 401);
@@ -299,8 +350,10 @@ Deno.serve(async (req) => {
       let okUser = false;
       if (jwt) { try { const { data } = await anon.auth.getUser(jwt); okUser = !!data?.user; } catch { okUser = false; } }
       if (!okUser) {
-        const { error } = await anon.from("daily_logs").select("log_date").limit(1);
-        if (error) return json({ error: "sign in to the OS to use the relay 🌸" }, 401);
+        // grace only while the project is genuinely pre-lockdown. ⚠ RLS hides rows WITHOUT an error,
+        // so "no error" is NOT proof of open access — rows must actually come back.
+        const { data: probe, error } = await anon.from("daily_logs").select("log_date").limit(1);
+        if (error || !probe || !probe.length) return json({ error: "sign in to the OS to use the relay 🌸" }, 401);
       }
     } catch { return json({ error: "unauthorized" }, 401); }
     try { const m = await execAction(pre.userId || OWNER, pre.action || {}); return json({ ok: true, message: m }); }
