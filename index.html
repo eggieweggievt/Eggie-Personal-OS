@@ -829,7 +829,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.8";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.9";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -1068,7 +1068,7 @@ async function runDailyEngines(sent){
 async function render(){
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
   const _tabs=_tabOrder.length?[...TABS].sort((a,b)=>{let ia=_tabOrder.indexOf(a[0]),ib=_tabOrder.indexOf(b[0]);return (ia<0?999:ia)-(ib<0?999:ib);}):TABS;
-  const MORE_TABS=["optimize","script","habits","health","care","review","settings"];
+  const MORE_TABS=["optimize","script","habits","review","settings"];   // health + care live on the main bar — not tucked away
   const primary=_tabs.filter(([t])=>!MORE_TABS.includes(t));
   const more=_tabs.filter(([t])=>MORE_TABS.includes(t));
   const moreActive=more.some(([t])=>t===state.tab);
@@ -1127,7 +1127,7 @@ async function render(){
 }
 /* ===================== HOME ===================== */
 async function renderHome(){
-  const [content,day,goals,sponsors,captures,income]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures(),DB.income()]);
+  const [content,day,goals,sponsors,captures,income,rows7]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures(),DB.income(),DB.dailyRange(7)]);
   if(state.focus){
     const energy=day.energy||"medium";
     const live=content.filter(c=>!c.parent_id&&c.stage!=="published").sort((a,b)=>b.priority-a.priority).slice(0,3);
@@ -1145,6 +1145,7 @@ async function renderHome(){
     </div>`;
   }
   const WIDGETS={
+    wellbeing:()=>cardWellbeing(day,goals,rows7), plate:()=>cardPlate(goals), clientsToday:()=>cardClientsToday(goals),
     today:()=>cardToday(day,goals), mission:()=>cardContentMission(content,day), artcorner:()=>cardArtCorner(goals),
     money:()=>cardMoneyPulse(income,sponsors,day),
     creator:()=>cardCreator(day), session:()=>cardSession(day,content), goals:()=>cardGoals(goals),
@@ -1152,17 +1153,19 @@ async function renderHome(){
     schedule:()=>cardSchedule(goals), ship:()=>cardShipToday(content), sponsors:()=>cardSponsorsMini(sponsors),
     pipeline:()=>cardPipelineSnap(content), braindump:()=>cardBrainDump(captures),
   };
-  /* fresh "home2" layout slot for the revamp — legacy cards start hidden but live in ＋cards */
-  if(!(goals.layouts&&goals.layouts.home2)){
+  /* "home3" — the hub-as-it-is-today layout: body & brain FRONT AND CENTER, then today's plate,
+     then the creative/work cards. Her saved home2 customizations stay untouched under their own key;
+     legacy cards remain available via ＋cards. */
+  if(!(goals.layouts&&goals.layouts.home3)){
     const hid={creator:true,session:true,habits:true,journal:true,schedule:true,ship:true,sponsors:true,pipeline:true};
-    const seed={order:[],size:{},min:{},hidden:hid};
-    goals.layouts=Object.assign({},goals.layouts||{},{home2:seed});
-    DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home2:seed})})).catch(()=>{});
+    const seed={order:["wellbeing","today","plate","mission","clientsToday","artcorner","money","braindump","goals","channel"],size:{},min:{},hidden:hid};
+    goals.layouts=Object.assign({},goals.layouts||{},{home3:seed});
+    DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home3:seed})})).catch(()=>{});
     SENT=goals;
   }
-  const DEF=["today","mission","artcorner","goals","money","channel","braindump","creator","session","habits","journal","schedule","ship","sponsors","pipeline"];
+  const DEF=["wellbeing","today","plate","mission","clientsToday","artcorner","money","braindump","goals","channel","creator","session","habits","journal","schedule","ship","sponsors","pipeline"];
   const focusChip=`<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button class="chip" data-act="setFocus" title="show only today — exit any time">🌙 just today</button></div>`;
-  return focusChip+modularPage("home2", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {today:8,mission:8,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
+  return focusChip+modularPage("home3", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {wellbeing:8,today:8,plate:8,mission:8,clientsToday:4,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
 }
 /* ===== generic modular page: any page = a reorderable/resizable grid of keyed boxes ===== */
 function layoutFor(tab){ const L=(SENT.layouts&&SENT.layouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
@@ -1202,7 +1205,7 @@ function layoutHome(){
     if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
   });
 }
-const WLABEL={today:"Today at a glance",mission:"Content mission control",artcorner:"Art corner",money:"Money pulse",creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
+const WLABEL={wellbeing:"Body & brain 💗",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",mission:"Content mission control",artcorner:"Art corner",money:"Money pulse",creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
 /* merge-update one page's layout block on the sentinel row */
 async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.layouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,layouts}; }); }
 let _mcTab="home", _mcLabels=WLABEL;
@@ -1230,6 +1233,52 @@ function cardToday(day,sent){
       ${(!evs.length&&!rems.length&&!slot)?`<div class="soft" style="font-size:12.5px">nothing scheduled — the day is yours 🌸</div>`:""}
     </div>
     ${wd==="Sun"?`<button class="btn" data-act="goTab" data-tab="review" style="margin-top:10px">🌷 it's Sunday — seal your week</button>`:""}
+  </section>`;
+}
+/* 💗 Body & brain — the front door of the new home. Energy + inner weather + meds + the gentle
+   insight, with one-tap doors into Health and Care. Checking in IS the win; nothing here nags. */
+function cardWellbeing(day,sent,rows){
+  const energy=day.energy||null, care=day.care||{}, h=day.health||{};
+  const eopt=(v,e,l)=>`<button data-act="energy" data-v="${v}" ${RO?"disabled":""} class="${energy===v?'on':''}">${e} ${l}</button>`;
+  const moods=["🌧️","🌥️","⛅","🌤️","🌞"].map((e,i)=>`<button data-act="careMood" data-v="${i+1}" class="${care.mood===i+1?'on':''}" ${RO?"disabled":""} style="font-size:16px">${e}</button>`).join("");
+  const meds=(sent.medsList||[]).slice(0,4);
+  const medRow=meds.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">${meds.map(m=>`<button class="chiptog ${(h.meds&&h.meds[m.id])?'on':''}" data-act="medToggle" data-id="${m.id}" ${RO?"disabled":""} style="font-size:11px;padding:4px 10px"><span class="check ${(h.meds&&h.meds[m.id])?'on':''}" style="width:13px;height:13px"></span>💊 ${esc(m.name)}</button>`).join("")}${(sent.medsList||[]).length>4?`<button class="chip" data-act="goTab" data-tab="health">+${(sent.medsList||[]).length-4} more</button>`:""}</div>`:"";
+  const insight=healthInsight(rows||[]);
+  return `<section class="panel" style="background:linear-gradient(135deg,#fef5fb,#f3ecfb)">
+    <div class="card-head"><span class="label">💗 body & brain</span><div style="display:flex;gap:6px"><button class="btn" data-act="goTab" data-tab="health" style="padding:3px 10px">💗 Health</button><button class="btn" data-act="goTab" data-tab="care" style="padding:3px 10px">🫂 Care</button></div></div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+      <div><div class="label" style="margin-bottom:4px">spoons today 🥄</div><div class="seg">${eopt("low","🌙","Low")}${eopt("medium","🌤","Med")}${eopt("high","🌞","High")}</div></div>
+      <div><div class="label" style="margin-bottom:4px">weather inside</div><div class="scale">${moods}</div></div>
+    </div>
+    ${medRow}
+    ${insight?`<div style="display:flex;gap:9px;align-items:flex-start;margin-top:10px"><span style="flex:0 0 auto">🐙</span><p class="soft" style="font-size:12px;line-height:1.5;margin:0">${insight}</p></div>`:""}
+    ${(!energy&&care.mood==null)?`<p class="soft" style="font-size:11px;margin:9px 0 0">two taps and the whole OS adapts to your day — that's the entire job of this card 💗</p>`:""}
+  </section>`;
+}
+/* ☀️ Today's plate — the Planner's Today lens, on the front page (☀-starred + due/overdue + today's pings) */
+function cardPlate(sent){
+  const tasks=sent.tasks||[], rems=sent.reminders||[];
+  const remByTask={}; rems.forEach(r=>{ if(r.taskId&&!r.done)remByTask[r.taskId]=r; });
+  const isToday=t=>!t.done&&((t.due&&t.due<=TODAY)||t.today===TODAY||(remByTask[t.id]&&remByTask[t.id].date<=TODAY));
+  const plate=tasks.filter(isToday).slice(0,5);
+  const looseRems=rems.filter(r=>!r.done&&!r.taskId&&r.date<=TODAY).slice(0,3);
+  const doneToday=tasks.filter(t=>t.done&&t.today===TODAY).length;
+  const rows=[
+    ...plate.map(t=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="taskDone" data-id="${t.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:13px">${esc(t.text)}</span>${t.est?`<span class="label num">~${t.est}m</span>`:""}<span class="pill ${spoonPill(t.spoon)}">${spoonShort(t.spoon)}</span><button class="ft-ic" data-act="focusTask" data-id="${t.id}" title="just this one">◎</button></div>`),
+    ...looseRems.map(r=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="remindDone" data-id="${r.id}" ${RO?"disabled":""} style="padding:0"></button><span class="grow" style="font-size:13px">⏰ ${esc(r.text)}</span><span class="label num">${r.date<TODAY?"overdue":esc(r.time||"")}</span></div>`)
+  ];
+  return `<section class="panel"><div class="card-head"><span class="label">☀️ today's plate</span><div style="display:flex;gap:8px;align-items:center">${doneToday?`<span class="pill pill-mint">${doneToday} done ✓</span>`:""}<button class="btn" data-act="goTab" data-tab="planner" style="padding:3px 10px">open planner</button></div></div>
+    ${rows.length?rows.join(""):`<div class="soft" style="font-size:12.5px">nothing on the plate — rest is a valid plan, or tap ☀ on anything in the Planner to pull it in 🌸</div>`}
+  </section>`;
+}
+/* 🌸 Clients · today's three (compact home echo of the Clients-tab checklist) */
+function cardClientsToday(sent){
+  const clients=sent.clients||[]; if(!clients.length)return `<section class="panel"><div class="card-head"><span class="label">🌸 clients</span></div><div class="soft" style="font-size:12.5px">no clients yet — the radar lives in 🌸 Clients</div></section>`;
+  const all=[]; clients.forEach(c=>{ if(c.status==="offboarded"||c.status==="paused")return; (c.tasks||[]).forEach(t=>{ if(!t.done&&(t.status||"needs")!=="done")all.push({c,t}); }); });
+  all.sort((a,b)=>String(a.t.due||"9999").localeCompare(String(b.t.due||"9999")));
+  const three=all.slice(0,3);
+  return `<section class="panel"><div class="card-head"><span class="label">🌸 clients · today's three</span><button class="btn" data-act="goTab" data-tab="clients" style="padding:3px 10px">open</button></div>
+    ${three.length?three.map(x=>{const od=x.t.due&&x.t.due<TODAY;return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)"><button class="check" data-act="clientTaskDone" data-id="${x.c.id}" data-tid="${x.t.id}" ${RO?"disabled":""} style="padding:0"></button><span style="font-size:11.5px;font-weight:700;color:var(--lav-deep)">${esc(x.c.name)}</span><span class="grow" style="font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(x.t.text)}</span>${od?`<span class="pill" style="background:#fde4e4;color:#c0566a">!</span>`:""}</div>`;}).join(""):`<div class="soft" style="font-size:12.5px">everyone's taken care of 🌸</div>`}
   </section>`;
 }
 function cardContentMission(content,day){
