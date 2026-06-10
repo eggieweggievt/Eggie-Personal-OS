@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.11";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.12";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.12: fixed the teleport-to-top glitch — checking anything off now keeps your scroll position on every page",
   "2026-06-10.11: Care + Health rebuilt on the research — Care: front-door weather check-in routes to ONE thing, 📈 bipolar mood chart (elevation −4..+4 + irritability), 🕰️ rhythm anchors, ✨ one-good-thing (rated), 🚸 early-warning signature, 🛟 WRAP-lite plan + 9-8-8 crisis card, breathing presets; Health: 🌅 morning check sets the day's spoons, 🎯 clinician-agreed water/salt targets + 🥵 heat + 🌺 period flags, 🩹 skin-picking companion (urge surf, strategy shelf, healing days, zero shame), 🛁 tiered hygiene care-menu (wipes count like showers), ↩ same-as-yesterday, 🩺 90-day doctor export",
   "2026-06-10.10: you (Eugene) now receive this live changelog with every message — you are never out of date",
   "2026-06-10.9: Home rebuilt — 💗 body & brain card first (spoons/mood/meds/insight), ☀️ today's plate, clients' three; Health + Care moved onto the MAIN tab bar",
@@ -1133,7 +1134,20 @@ async function render(){
     view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
-    else { window.scrollTo(0,sy); }                         // keep your place on toggles / edits
+    else {
+      // Modular grids (Home/Care/Health/Money) get their true card heights 1-2 frames AFTER the
+      // innerHTML swap (layoutHome assigns row-spans). A single synchronous scrollTo lands while
+      // the grid is still collapsed and gets clamped → "checking anything teleports me to the top".
+      // So: pin the position across the layout passes — and stand down the moment SHE scrolls.
+      let pinDone=false;
+      const stopPin=()=>{ pinDone=true; removeEventListener("wheel",stopPin); removeEventListener("touchmove",stopPin); removeEventListener("keydown",stopPin); };
+      addEventListener("wheel",stopPin,{passive:true}); addEventListener("touchmove",stopPin,{passive:true}); addEventListener("keydown",stopPin);
+      const pin=()=>{ if(!pinDone) window.scrollTo(0,sy); };
+      pin();
+      requestAnimationFrame(pin);                            // after layoutHome's RAF pass
+      setTimeout(pin,60);
+      setTimeout(()=>{ pin(); stopPin(); },150);             // after postRender's 120ms layout pass, then clean up
+    }
   }catch(e){ console.error(e);
     if(!DEMO && SB && !SESSION){ showLogin(); return; }   // locked-down DB + signed out → sign-in panel, not a scary error
     view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
