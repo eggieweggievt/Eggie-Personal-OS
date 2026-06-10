@@ -693,7 +693,7 @@ const DB = {
   async addSponsor(s){ this._c.sponsors=null; const row={user_id:UID,brand:s.brand,deal_type:s.deal_type||null,stage:s.stage||"draft",value:s.value||null,note:s.note||null}; if(DEMO){demo.sponsors.unshift({...row,id:uid(),updated_at:new Date().toISOString()});return;} await SB.from("sponsors").insert(row); },
   async updateSponsor(id,patch){ this._c.sponsors=null; patch.updated_at=new Date().toISOString(); if(DEMO){const t=demo.sponsors.find(x=>x.id===id);if(t)Object.assign(t,patch);return;} await SB.from("sponsors").update(patch).eq("id",id).eq("user_id",UID); },
   async delSponsor(id){ this._c.sponsors=null; if(DEMO){demo.sponsors=demo.sponsors.filter(x=>x.id!==id);return;} await SB.from("sponsors").delete().eq("id",id).eq("user_id",UID); },
-  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.daily[date]=n; },
+  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(error) throw new Error("couldn't read your data ("+(error.message||"network")+")"); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.daily[date]=n; },
   async saveDaily(date,merge){
     if(DEMO){ const cur=await DB.daily(date); const next=merge({...cur}); demo.daily[date]=next; return next; }
     // Re-read the LIVE row for EVERY date right before writing (not just the sentinel). The
@@ -701,11 +701,22 @@ const DB = {
     // can be written from two devices at once (desktop + iPad logging health on the same day).
     // Merging onto a stale cache clobbered those — one tiny select per save is cheap insurance. 🛟
     let base={};
-    { const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} }
+    { const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle();
+      if(error){ toast("⚠️ NOT saved — couldn't read your live data first ("+(error.message||"network")+") 🌸"); throw new Error("pre-save read failed: "+(error.message||"unknown")); }
+      if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} }
+    // 🛟 wipe tripwire: this device has seen a full config row before, but the live read came back
+    // (near-)empty and we're about to write a merge built on emptiness. That's a lockout/RLS state,
+    // not a fresh start — writing now would wipe the row for real. Refuse, loudly. (Restore uses
+    // DB._force=true to bypass, since rebuilding an actually-empty row is its whole job.)
+    if(date===SENTINEL && !DB._force && Object.keys(base).length<2 && localStorage.getItem("eggie-had-data")==="1"){
+      toast("🚫 NOT saved — your data looks unreachable from this device (signed out?). Refusing to overwrite it. 💗");
+      throw new Error("sentinel wipe-guard tripped: live row read back empty on a device that has seen data");
+    }
     const next=merge({...base});
-    await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
-    this._c.daily[date]=next;
-    if(date===SENTINEL){ DB.localBackup(next); }
+    const {error:werr}=await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
+    if(werr){ toast("⚠️ NOT saved — "+(werr.message||"write blocked")+" (sign in?) 🌸"); throw new Error("save failed: "+(werr.message||"unknown")); }
+    this._c.daily[date]=next;                                  // cache only AFTER a confirmed write — no more "looked saved, gone on reload"
+    if(date===SENTINEL){ DB.localBackup(next); if(Object.keys(next).length>2){ try{ localStorage.setItem("eggie-had-data","1"); }catch(e){} } }
     if(date!==SENTINEL){ Object.keys(this._c.range).forEach(k=>{ const arr=this._c.range[k]; if(!arr)return; const i=arr.findIndex(r=>r.date===date); if(i>=0)arr[i]={date,notes:next}; else arr.push({date,notes:next}); }); }
     return next;
   },
@@ -807,13 +818,16 @@ async function authBoot(){
   if(DEMO||!SB) return true;                                   // demo mode needs no login
   try{ const {data}=await SB.auth.getSession(); SESSION=(data&&data.session)||null; }catch(e){ SESSION=null; }
   if(SESSION) return true;
-  // pre-lockdown grace: if anonymous reads still work, the project isn't locked yet — carry on
-  try{ const {error}=await SB.from("daily_logs").select("log_date").limit(1); if(!error) return true; }catch(e){}
+  // pre-lockdown grace: if anonymous reads still RETURN ROWS, the project isn't locked yet — carry on.
+  // ⚠️ post-lockdown, RLS hides rows WITHOUT an error ({data:[], error:null}) — an "error-only" check
+  // here waved signed-out devices straight into an empty-looking app that couldn't save anything
+  // (every tab blank = "all my data is deleted!"). Rows must actually come back to skip the login.
+  try{ const {data,error}=await SB.from("daily_logs").select("log_date").limit(1); if(!error && data && data.length) return true; }catch(e){}
   showLogin(); return false;
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.4";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.5";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -986,6 +1000,16 @@ async function render(){
   const dc=document.getElementById("demoChip"); dc.textContent=DEMO?"● demo":"demo"; dc.className="chip"+(DEMO?" demo":"");
   if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
   const _sent = await DB.daily(SENTINEL);
+  // 🛟 anti-"everything's gone" guard: if this device has EVER seen real data but the config row
+  // now reads back empty, we are locked out (signed out / expired session / RLS) — NOT data-less.
+  // Signed out → show the sign-in panel and STOP (data reappears after login, nothing can write).
+  // Signed IN with a truly empty row → let her through to Settings (restore lives there), with a
+  // warning banner; the saveDaily tripwire still blocks accidental overwrites meanwhile.
+  if(!DEMO && SB && !Object.keys(_sent).length && localStorage.getItem("eggie-had-data")==="1"){
+    try{ delete DB._c.daily[SENTINEL]; }catch(e){}
+    if(!SESSION){ showLogin("Your OS is locked — sign in and everything comes right back 💗"); return; }
+    if(!state._emptyWarned){ state._emptyWarned=true; toast("⚠️ Your config row reads back EMPTY. Don't edit anything — go to ⚙️ Settings → 🛟 Restore points / ☁️ cloud snapshots. 💗"); }
+  } else if(!DEMO && SB && Object.keys(_sent).length>2){ try{ localStorage.setItem("eggie-had-data","1"); }catch(e){} }
   state.lib = (_sent.habitsLib && _sent.habitsLib.length) ? _sent.habitsLib : CONFIG.defaultHabits.map(h=>({...h}));
   HABIT_CATS = (_sent.habitCats && _sent.habitCats.length) ? _sent.habitCats : DEFAULT_CATS.slice();
   mergeCfg(_sent.appConfig); STICKIES = _sent.stickies || []; SENT=_sent;
@@ -3218,7 +3242,9 @@ async function restoreFrom(data,labelWhen){
   if(!data){ toast("That copy looks empty 🌸"); return; }
   const c=(data.clients||[]).length;
   if(!confirm(`Restore ${c} client${c===1?"":"s"} (+ inbox & invoices) from ${labelWhen}?\n\nThis replaces the current clients / inbox / invoices with that copy. Everything else stays as-is.`)) return;
-  await DB.saveDaily(SENTINEL,n=>({...n, clients:data.clients||n.clients||[], inbox:data.inbox||n.inbox||[], invoices:data.invoices||n.invoices||[]}));
+  DB._force=true;   // restoring into a genuinely-empty row is legitimate — bypass the wipe tripwire
+  try{ await DB.saveDaily(SENTINEL,n=>({...n, clients:data.clients||n.clients||[], inbox:data.inbox||n.inbox||[], invoices:data.invoices||n.invoices||[]})); }
+  finally{ DB._force=false; }
   toast("🛟 Restored — welcome back 🌸"); state.clientPage=null; render();
 }
 async function exportData(){
