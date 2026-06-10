@@ -1,4 +1,4 @@
-# Turn on the AI brain (the ✨ Analyze button + 🔮 Ask) 🐙
+# Turn on the AI brain (✨ Analyze · 🎯 Optimize · ✍️ Script · 🐙 Eugene) 🐙
 
 The dashboard's AI runs in a **Supabase Edge Function** called `analyze` — a tiny serverless
 function that lives inside *your* Supabase project, holds your Anthropic key safely, and reads your
@@ -120,8 +120,8 @@ keys aren't JWTs, so we skip JWT verification and the page calls it directly).
 Open the dashboard (demo toggle **off**, chip shows `● live`):
 - **🎬 Content → open any item → ✨ analyze** → a score, the 4-criteria check, stronger titles
   (tap one to use it), hooks, and a 1S/2M/2L hashtag set — all learning from your past content.
-- **🔮 Ask** → ask anything about your content or brand ("what should I film this week?",
-  "is my pillar mix healthy?") and get an answer in your voice.
+- **🐙 Ask Eugene** (tab or the floating pet) → ask anything, or tell him to DO things — he runs
+  on the same function's `agent` mode and can see + act on your whole OS.
 
 ## Notes
 

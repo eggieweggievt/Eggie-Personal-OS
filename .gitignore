@@ -11,3 +11,6 @@ stream-avatars/eggie/
 stream-avatars/eggie.zip
 desktop-pet/
 *.zip
+
+# Supabase CLI scratch (machine-local, regenerated on link)
+supabase/.temp/

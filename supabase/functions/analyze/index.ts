@@ -3,11 +3,8 @@
 // The AI brain for the dashboard. Runs inside your Supabase project, holds your
 // secret keys, and reads your own content to learn your patterns.
 //
-// Modes:
-//   { mode:"analyze", input:{title,format,platform,pillar,hook,script}, userId }
-//       -> { score, criteria, verdict, titles[], hooks[], hashtags[], fix }
-//   { mode:"ask", input:{question}, userId }
-//       -> { answer }
+// Modes: analyze · agent (Eugene) · optimize (video + livestream) · script · email ·
+//        thumbnail (vision) · channelStats · channelSnapshot · gameUpdates
 //
 // Optional: pass body.vidiq (any JSON from a VidIQ lookup) to enrich the answer.
 //
@@ -412,16 +409,7 @@ Max 12 events, future dates only.`,
       return json(parsed && Array.isArray(parsed.events) ? { events: parsed.events } : { events: [] });
     }
 
-    if (mode === "ask") {
-      const q = (body.input?.question || "").toString().slice(0, 1000);
-      if (!q) return json({ error: "missing question" }, 400);
-      const answer = await claude(
-        BRAND,
-        `Her recent content (newest first):\n${history}${vidiq}\n\nShe asks: "${q}"\n\nAnswer in her voice — concrete, warm, and grounded in her actual patterns + platform rules. If she'd benefit from a specific next action, say it plainly.`,
-        1400,
-      );
-      return json({ answer });
-    }
+    // (the old "ask" mode was removed 2026-06-10 — Eugene's "agent" mode replaced it everywhere)
 
     // --- agent: answer AND emit structured actions the front-end runs against the OS ---
     if (mode === "agent") {
@@ -718,11 +706,25 @@ ${common}`;
       const i = body.input || {};
       const footer = (i.footer || "").toString().slice(0, 1500);
       const live = i.kind === "livestream";
+      // her REAL stream schedule for the description (was hardcoded "4 days/wk, 4–6pm EDT",
+      // which would quietly lie in every generated description the moment her week changed)
+      let schedLine = "see my channel for this week's schedule";
+      if (live) {
+        try {
+          const sbS = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+          const { data: sRow } = await sbS.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+          const sN = JSON.parse(sRow?.notes || "{}");
+          const td = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
+          const md = new Date(td + "T00:00"); md.setDate(md.getDate() - ((md.getDay() + 6) % 7));
+          const wk = (sN.schedWeeks && sN.schedWeeks[md.toLocaleDateString("en-CA")]) || sN.schedule || [];
+          if (wk.length) schedLine = wk.map((x: any) => `${x.day}${x.time ? " " + x.time : ""}${x.title ? " (" + x.title + ")" : ""}`).join(" · ");
+        } catch { /* keep the generic line */ }
+      }
       const prompt = live
         ? `Optimize a MULTISTREAM (she goes live on YouTube + Twitch + Twitter/X at once — all for the SAME stream). Return ONLY JSON:
 { "titles": string[], "description": string, "hashtags": string[], "tags": string[], "twitchTitle": string, "twitterTitle": string, "tips": string[] }
 - titles: 4 YOUTUBE stream titles in her format → [aesthetic emoji] + [hook/meme] + [GAME] + cue. Curiosity/challenge framing ("If I die I restart", "first playthrough", "24h grind"). Always name the game.
-- description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her schedule (4 days/wk, 4–6pm EDT), then paste the FOOTER block verbatim near the end.
+- description: a full YouTube live/VOD description — a 1-2 line hook, what the stream is + her current schedule (${schedLine}), then paste the FOOTER block verbatim near the end.
 - hashtags: 2-3 YouTube hashtags (the game + #vtuber).
 - tags: as MANY relevant YouTube tags as fit within YouTube's 500-character TOTAL limit (all tags joined by ", " must be ≤ 500 chars — usually ~30-45 tags). Include the game + its variants, "vtuber", "vtuber live", "vtuber livestream", "livestream", "live", her niches (ARPG/MMO/Soulslike), plus long-tail combos. Most important first, no duplicates. Maximize without exceeding 500 chars.
 - twitchTitle: ONE Twitch title → [emoji] [hook/meme] [GAME] [optional !command]; punchy, curiosity/challenge.

@@ -122,8 +122,10 @@ create index if not exists savings_user_idx on savings_goals (user_id);
 -- ⚠ The static page talks to Supabase with your PUBLIC anon key (visible in the
 -- page source). These policies let anyone with your project URL + anon key read
 -- and write these tables. That's the normal trade-off for a personal, single-
--- user static dashboard. To lock it down later, switch to Supabase Auth (email
--- magic link) and change `using (true)` to `using (auth.uid()::text = user_id)`.
+-- user static dashboard.
+-- 🔐 To make it private (recommended once health data lives here): follow the
+-- steps in eggie-os-auth-lockdown.sql — it replaces these open policies with
+-- signed-in-only ones, and the app shows a one-time sign-in instead.
 -- ---------------------------------------------------------------------------
 do $$
 declare t text;

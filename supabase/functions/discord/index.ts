@@ -20,6 +20,7 @@
 // INTERACTIONS ENDPOINT URL.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { todayBits } from "../_shared/today.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info", "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
@@ -214,26 +215,17 @@ async function runAgent(userId: string, q: string): Promise<string> {
   return reply.slice(0, 1900);
 }
 
-/* ---------- /today brief ---------- */
+/* ---------- /today brief — built from the SHARED today-builder (same code as the briefing email) ---------- */
 async function todayBrief(userId: string): Promise<string> {
   const s = await loadSent(userId);
-  const today = todayStr();
-  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(new Date().toLocaleString("en-US", { timeZone: TZ })).getDay()];
-  // per-week schedule (schedWeeks[thisMonday]) with the legacy flat `schedule` as fallback — same as the app + briefing
-  const md = new Date(today + "T00:00"); md.setDate(md.getDate() - ((md.getDay() + 6) % 7));
-  const weekSched = (s.schedWeeks && s.schedWeeks[md.toLocaleDateString("en-CA")]) ? s.schedWeeks[md.toLocaleDateString("en-CA")] : (s.schedule || []);
-  const slot = weekSched.find((x: any) => (x.day || "").slice(0, 3) === wd);
-  const evs = (s.calendarEvents || []).filter((e: any) => e.date === today || (e.endDate && e.date <= today && e.endDate >= today));
-  const rems = (s.reminders || []).filter((r: any) => !r.done && r.date <= today);
-  const tasks = (s.tasks || []).filter((t: any) => !t.done).length;
-  const ch = s.artChallenge || {};
-  const bits = [];
-  if (slot) bits.push(`🔴 stream day — ${slot.title || "stream"}${slot.time ? " · " + slot.time : ""}`);
-  evs.forEach((e: any) => bits.push(`📅 ${e.title}${e.time ? " · " + e.time : ""}`));
-  rems.forEach((r: any) => bits.push(`⏰ ${r.text}${r.date < today ? " (overdue)" : r.time ? " · " + r.time : ""}`));
-  if (tasks) bits.push(`🗒️ ${tasks} open task${tasks > 1 ? "s" : ""}`);
-  if (ch.dayText && !ch.dayDone) bits.push(`🎨 art challenge: ${ch.dayText}`);
-  return ("hi! 🐙 today:\n" + (bits.length ? bits.map((b) => "• " + b).join("\n") : "a clear slate — the day is yours 🌸")).slice(0, 1900);
+  const b = todayBits(s);
+  const lines: string[] = [];
+  b.slots.forEach((slot: any) => lines.push(`🔴 stream day — ${slot.title || "stream"}${slot.time ? " · " + slot.time : ""}`));
+  b.events.forEach((e: any) => lines.push(`📅 ${e.title}${e.time ? " · " + e.time : ""}`));
+  b.dueReminders.forEach((r: any) => lines.push(`⏰ ${r.text}${r.date < b.today ? " (overdue)" : r.time ? " · " + r.time : ""}`));
+  if (b.openTasks) lines.push(`🗒️ ${b.openTasks} open task${b.openTasks > 1 ? "s" : ""}`);
+  if (b.artChallenge && !b.artChallenge.done) lines.push(`🎨 art challenge: ${b.artChallenge.text}`);
+  return ("hi! 🐙 today:\n" + (lines.length ? lines.map((x) => "• " + x).join("\n") : "a clear slate — the day is yours 🌸")).slice(0, 1900);
 }
 
 /* ---------- Discord plumbing ---------- */
@@ -290,6 +282,20 @@ Deno.serve(async (req) => {
     const rk = Deno.env.get("RELAY_KEY");
     if (rk && req.headers.get("apikey") !== rk && req.headers.get("x-relay-key") !== rk) return json({ error: "unauthorized" }, 401);
     if (!req.headers.get("apikey")) return json({ error: "missing apikey" }, 401);
+    // Who's calling? Post-lockdown the web app sends the owner's Supabase Auth JWT — verify it.
+    // Pre-lockdown grace: if the project still allows anonymous table reads (lockdown SQL not run
+    // yet), accept the publishable key alone, exactly like before. Once locked, a JWT is required —
+    // so a stranger reading the key out of the page source can no longer message client channels.
+    try {
+      const anon = createClient(Deno.env.get("SUPABASE_URL")!, req.headers.get("apikey")!);
+      const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+      let okUser = false;
+      if (jwt) { try { const { data } = await anon.auth.getUser(jwt); okUser = !!data?.user; } catch { okUser = false; } }
+      if (!okUser) {
+        const { error } = await anon.from("daily_logs").select("log_date").limit(1);
+        if (error) return json({ error: "sign in to the OS to use the relay 🌸" }, 401);
+      }
+    } catch { return json({ error: "unauthorized" }, 401); }
     try { const m = await execAction(pre.userId || OWNER, pre.action || {}); return json({ ok: true, message: m }); }
     catch (e) { return json({ error: String((e as Error)?.message || e) }, 500); }
   }

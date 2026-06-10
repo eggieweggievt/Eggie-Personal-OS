@@ -42,6 +42,7 @@
   h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;}
   .muted{color:var(--muted);} .soft{color:var(--ink-soft);} .pink{color:var(--pink-deep);} .lav{color:var(--lav-deep);} .mint{color:var(--mint);}
   .num{font-variant-numeric:tabular-nums;} a{color:var(--lav-deep);}
+  .mono{font-variant-numeric:tabular-nums;letter-spacing:.01em;} textarea.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;}
   button{font-family:inherit;cursor:pointer;font-weight:600;} input,textarea,select{font-family:inherit;font-weight:500;}
   .label{font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--muted);font-weight:700;}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:16px;}
@@ -441,6 +442,7 @@ function demoBanner(){
 }
 let RO = CONFIG.readOnly;
 const SB = (!DEMO && window.supabase) ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
+if(SB){ try{ SB.auth.onAuthStateChange((_e,s)=>{ SESSION=s; }); }catch(e){} }
 const UID = CONFIG.userId;
 const TODAY = new Date().toLocaleDateString("en-CA");
 const SENTINEL = "2000-01-01";
@@ -694,12 +696,12 @@ const DB = {
   async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.daily[date]=n; },
   async saveDaily(date,merge){
     if(DEMO){ const cur=await DB.daily(date); const next=merge({...cur}); demo.daily[date]=next; return next; }
-    // The SENTINEL row is also written by the server (the /sakura inbox, client-channel reminders,
-    // daily snapshots). Merging onto a stale CACHE would clobber those — so re-read the LIVE row
-    // right before writing. Belt + suspenders against the data-loss class we hit before. 🛟
-    let base;
-    if(date===SENTINEL){ const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); base={}; if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} }
-    else base=await DB.daily(date);
+    // Re-read the LIVE row for EVERY date right before writing (not just the sentinel). The
+    // sentinel is written by the server (inbox, client reminders, snapshots), and TODAY's row
+    // can be written from two devices at once (desktop + iPad logging health on the same day).
+    // Merging onto a stale cache clobbered those — one tiny select per save is cheap insurance. 🛟
+    let base={};
+    { const {data}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} }
     const next=merge({...base});
     await SB.from("daily_logs").upsert({user_id:UID,log_date:date,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"});
     this._c.daily[date]=next;
@@ -765,8 +767,53 @@ async function aiCall(mode,input,vidiq){
   return data;
 }
 
+/* ===================== IMAGE STORAGE (Supabase Storage bucket "eggie-os") =====================
+   Mood-board photos + client avatars used to live as base64 data-URLs INSIDE the sentinel JSON,
+   which made that row megabytes heavy (slow cold loads, heavy Eugene context, fat backups).
+   New uploads now go to Storage and only the URL is saved. Falls back to the data URL when
+   storage isn't available (demo mode / signed out / bucket not created) so nothing ever breaks. */
+function dataURLtoBlob(d){ const m=String(d||"").match(/^data:([^;]+);base64,(.*)$/); if(!m)return null; const bin=atob(m[2]); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i); return new Blob([u],{type:m[1]}); }
+async function storeImage(dataURL,folder){
+  if(DEMO||!SB) return dataURL;
+  try{
+    const blob=dataURLtoBlob(dataURL); if(!blob) return dataURL;
+    const ext=blob.type==="image/png"?"png":"jpg";
+    const path=(folder||"img")+"/"+Date.now().toString(36)+"-"+uid().slice(0,6)+"."+ext;
+    const {error}=await SB.storage.from("eggie-os").upload(path,blob,{contentType:blob.type,upsert:false});
+    if(error) return dataURL;
+    const {data}=SB.storage.from("eggie-os").getPublicUrl(path);
+    return (data&&data.publicUrl)||dataURL;
+  }catch(e){ return dataURL; }
+}
+
+/* ===================== AUTH GATE (Supabase Auth — locks the OS to just Eggie) =====================
+   Graceful by design: BEFORE the lockdown SQL is run, anonymous reads still work, so the gate
+   quietly lets the app through (zero disruption, no stranding). AFTER lockdown, anon reads fail
+   and the gate shows a sign-in panel. Sessions persist per device — sign in once, then forget it. */
+let SESSION=null;
+function showLogin(err){
+  const v=document.getElementById("view"); if(!v)return;
+  v.innerHTML=`<div class="panel" style="max-width:360px;margin:10vh auto;text-align:center">
+    <div style="font-size:36px">🐙</div>
+    <h2 style="font-size:19px;margin-top:4px">Welcome back, ${esc(CONFIG.creator.name||"Eggie")}</h2>
+    <p class="soft" style="font-size:12px;margin:6px 0 14px">Your OS is locked to just you. Sign in once — this device stays signed in. 🌸</p>
+    <input class="inp" id="authEmail" type="email" autocomplete="username" placeholder="email" value="eggieweggievt@gmail.com" style="margin-bottom:8px"/>
+    <input class="inp" id="authPass" type="password" autocomplete="current-password" placeholder="password" style="margin-bottom:12px"/>
+    <button class="btn btn-pink" data-act="signIn" style="width:100%">sign in 💗</button>
+    <div id="authErr" class="soft" style="color:var(--rose);font-size:12px;margin-top:8px;min-height:16px">${err?esc(err):""}</div>
+  </div>`;
+}
+async function authBoot(){
+  if(DEMO||!SB) return true;                                   // demo mode needs no login
+  try{ const {data}=await SB.auth.getSession(); SESSION=(data&&data.session)||null; }catch(e){ SESSION=null; }
+  if(SESSION) return true;
+  // pre-lockdown grace: if anonymous reads still work, the project isn't locked yet — carry on
+  try{ const {error}=await SB.from("daily_logs").select("log_date").limit(1); if(!error) return true; }catch(e){}
+  showLogin(); return false;
+}
+
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.3";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.4";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -970,7 +1017,9 @@ async function render(){
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
     else { window.scrollTo(0,sy); }                         // keep your place on toggles / edits
-  }catch(e){ console.error(e); view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
+  }catch(e){ console.error(e);
+    if(!DEMO && SB && !SESSION){ showLogin(); return; }   // locked-down DB + signed out → sign-in panel, not a scary error
+    view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
 async function renderHome(){
@@ -2272,9 +2321,13 @@ async function renderSettings(){
       <p class="soft" style="font-size:11.5px;margin:10px 0 0">Lock keeps cards from wiggling while you tap · reset puts every page back to its defaults.</p>
     </div>
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">💾 Data</h2><div style="display:flex;gap:6px;align-items:center"><span class="chip">build ${APP_BUILD}</span><span class="chip ${DEMO?'demo':'on'}">${DEMO?'demo data':'● live · synced'}</span></div></div>
-      <button class="btn" data-act="exportData">⬇️ export all my data (backup)</button>
-      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Connected to ${esc(CONFIG.url)}${RO?" · read-only right now":""}. If a device misbehaves, compare its build number here to the newest one.</p>
+    <div class="panel"><div class="card-head"><h2 style="font-size:17px">💾 Data</h2><div style="display:flex;gap:6px;align-items:center"><span class="chip">build ${APP_BUILD}</span><span class="chip ${DEMO?'demo':'on'}">${DEMO?'demo data':'● live · synced'}</span>${SESSION?`<span class="chip on">🔐 signed in</span>`:""}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" data-act="exportData">⬇️ export all my data (backup)</button>
+        <button class="btn" data-act="slimData" ${RO?"disabled":""} title="moves mood-board photos + client avatars out of the database into cloud storage — same pictures, much lighter data">🚿 slim my data</button>
+        ${SESSION?`<button class="btn" data-act="signOut" title="sign this device out">🚪 sign out</button>`:""}
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Connected to ${esc(CONFIG.url)}${RO?" · read-only right now":""}. If a device misbehaves, compare its build number here to the newest one. 🚿 is safe to tap any time — it moves images already saved inside your data into cloud storage so the OS loads faster.</p>
     </div>
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">🛟 Restore points</h2><span class="label">this device · auto-saved</span></div>
@@ -3230,8 +3283,11 @@ function ftFmt(s){ s=Math.max(0,s); const m=Math.floor(s/60),x=s%60; return m+":
 function actDoc(){ return PIP?PIP.document:document; }
 function paintTimer(){ if(PIP)renderPip(); else renderTimer(); }
 function toggleTimer(){ if(PIP)return; const w=document.getElementById("focusWidget"); if(!w)return; if(w.classList.contains("hidden")){ w.classList.remove("hidden"); if(!w.style.left){w.style.left=Math.max(8,window.innerWidth-272)+"px";w.style.top=Math.max(60,window.innerHeight-380)+"px";} renderTimer(); } else { pauseTimer(); w.classList.add("hidden"); } }
-function startPause(){ const t=actDoc().getElementById("focusTask"); if(t)timer.task=t.value; if(timer.running){ timer.running=false; if(timer.iv){clearInterval(timer.iv);timer.iv=null;} } else { timer.running=true; timer.iv=setInterval(()=>{ timer.remaining--; if(timer.remaining<=0){phaseComplete();return;} tickTimer(); },1000); } paintTimer(); }
-function pauseTimer(){ timer.running=false; if(timer.iv){clearInterval(timer.iv);timer.iv=null;} }
+/* wall-clock based: browsers throttle setInterval in background tabs, so we always compute
+   the remaining time from an absolute end-timestamp — the countdown stays true even if the
+   tab was asleep for ten minutes, and catches up the moment it wakes. */
+function startPause(){ const t=actDoc().getElementById("focusTask"); if(t)timer.task=t.value; if(timer.running){ pauseTimer(); } else { timer.running=true; timer.endsAt=Date.now()+Math.max(1,timer.remaining)*1000; timer.iv=setInterval(()=>{ timer.remaining=Math.round((timer.endsAt-Date.now())/1000); if(timer.remaining<=0){phaseComplete();return;} tickTimer(); },1000); } paintTimer(); }
+function pauseTimer(){ if(timer.running&&timer.endsAt)timer.remaining=Math.max(0,Math.round((timer.endsAt-Date.now())/1000)); timer.running=false; timer.endsAt=null; if(timer.iv){clearInterval(timer.iv);timer.iv=null;} }
 function resetTimer(){ pauseTimer(); timer.remaining=(timer.mode==="work"?timer.workMin:timer.breakMin)*60; paintTimer(); }
 function phaseComplete(){ pauseTimer(); ftChime(); if(timer.mode==="work"){ timer.pomos++; timer.mode="break"; timer.remaining=timer.breakMin*60; toast("Focus block done 🍅 — gentle break 🌸"); } else { timer.mode="work"; timer.remaining=timer.workMin*60; toast("Break over — ready when you are 💗"); } paintTimer(); }
 function setLen(which,d){ if(which==="work"){ timer.workMin=Math.max(5,Math.min(90,timer.workMin+d)); localStorage.setItem("eggie-work",timer.workMin); if(timer.mode==="work"&&!timer.running)timer.remaining=timer.workMin*60; } else { timer.breakMin=Math.max(1,Math.min(30,timer.breakMin+d)); localStorage.setItem("eggie-break",timer.breakMin); if(timer.mode==="break"&&!timer.running)timer.remaining=timer.breakMin*60; } paintTimer(); }
@@ -3289,7 +3345,7 @@ function toast(msg,undoAct){const el=document.getElementById("toast");el.innerHT
 
 /* ===================== EVENTS ===================== */
 const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel","addContent","addSub","delContent","bulkPublish","saveContent","delContentModal","critToggle","addIncome","addLedger","delLedger","addSponsor","editChannel","saveChannel","saveReview","dropStage","dropSponsor","addHabit","editHabit","saveHabit","delHabit","libToggle","saveCats","saveSetAside","addGoal","editGoal","allotGoal","saveGoal","delGoal","savePitch","aiAnalyze","healthSet","healthJoint","medToggle","healthFlare","saveHealthNotes","recoveryDay","saveMed","delMed","autoChannel","runOptimize","checkThumb","addSlot","delSlot","addSug","saveScript","delScript","scrToContent","saveJournal","saveConfig","noteToContent","noteSticky","delCapture","addSticky","stickyColor","delSticky","stickyFmt","addTask","taskDone","delTask","addSubtask","subDone","delSub","careJoy","careMood","careSkill","careFeel","careEmoSkill","careSupport","careEF","saveCareLog","joyAdd","joyDel","homeMin","homeHide","cardToggle","healthCounter","healthToggle","saveCreative","saveCalEvent","delCalEvent","crDone","crDel",
-  "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave"];
+  "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -3525,6 +3581,34 @@ document.addEventListener("click",async(e)=>{
   if(act==="genPitch")return genPitch();
   if(act==="copy"){ const t=document.getElementById(el.dataset.target); if(t){navigator.clipboard&&navigator.clipboard.writeText(t.value);toast("Copied 💗");} return; }
   if(act==="savePitch"){ const b=pitchVal("pBrand"); if(!b){toast("Add a brand name first 🌸");return;} await DB.addSponsor({brand:b,deal_type:pitchVal("pType"),stage:"draft",note:pitchVal("pAngle")||null}); toast("Saved to pipeline 💌"); return; }
+  if(act==="signIn"){
+    const em=(((document.getElementById("authEmail")||{}).value)||"").trim(), pw=((document.getElementById("authPass")||{}).value)||"";
+    const eEl=document.getElementById("authErr");
+    if(!em||!pw){ if(eEl)eEl.textContent="email + password, please 🌸"; return; }
+    if(eEl)eEl.textContent="signing in…";
+    try{
+      const {data,error}=await SB.auth.signInWithPassword({email:em,password:pw});
+      if(error){ if(eEl)eEl.textContent=error.message+" 🌸"; return; }
+      SESSION=data.session; DB.bust(); render();
+    }catch(e2){ if(eEl)eEl.textContent=(e2.message||"couldn't sign in")+" 🌸"; }
+    return;
+  }
+  if(act==="signOut"){ try{ await SB.auth.signOut(); }catch(e2){} SESSION=null; location.reload(); return; }
+  if(act==="slimData"){
+    if(DEMO||!SB){ toast("Needs the live backend 🌸"); return; }
+    toast("Slimming… uploading images to cloud storage 🚿");
+    try{
+      const sent2=await DB.daily(SENTINEL);
+      let moved=0, failed=0;
+      const board=(sent2.artBoard||[]).map(c=>({...c}));
+      for(const c of board){ if(c.type==="img"&&/^data:/.test(c.url||"")){ const u=await storeImage(c.url,"board"); if(u!==c.url){c.url=u;moved++;} else failed++; } }
+      const clients2=(sent2.clients||[]).map(c=>({...c}));
+      for(const c of clients2){ if(/^data:/.test(c.avatar||"")){ const u=await storeImage(c.avatar,"avatars"); if(u!==c.avatar){c.avatar=u;moved++;} else failed++; } }
+      if(moved) await DB.saveDaily(SENTINEL,n=>({...n,artBoard:board,clients:clients2}));
+      toast(moved?`🚿 moved ${moved} image${moved===1?"":"s"} to storage${failed?` · ${failed} couldn't upload`:""} — your data just got lighter 💗`:(failed?"Couldn't upload — are you signed in + is the storage bucket created? 🌸":"Nothing to slim — your data's already light 🌸"));
+    }catch(e2){ toast("Slimming hiccuped: "+(e2.message||e2)+" 🌸"); }
+    render(); return;
+  }
   if(act==="settings")return settingsModal();
   if(act==="saveConfig")return saveConfig();
   if(act==="exportData")return exportData();
@@ -3623,7 +3707,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="saveReview")return saveReview();
 });
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&e.target.files&&e.target.files[0]) loadThumb(e.target.files[0]);
-  if(e.target&&e.target.id==="cm_avatarFile"&&e.target.files&&e.target.files[0]){ const cid=e.target.dataset.id, file=e.target.files[0]; (async()=>{ try{ toast("resizing… 🖼️"); const url=await avatarToDataURL(file); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,avatar:url}:c)})); toast("Picture set 🌸"); clientModal(cid); render(); }catch(err){ toast("couldn't read that image 🌸"); } })(); }
+  if(e.target&&e.target.id==="cm_avatarFile"&&e.target.files&&e.target.files[0]){ const cid=e.target.dataset.id, file=e.target.files[0]; (async()=>{ try{ toast("resizing… 🖼️"); const url=await storeImage(await avatarToDataURL(file),"avatars"); await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,avatar:url}:c)})); toast("Picture set 🌸"); clientModal(cid); render(); }catch(err){ toast("couldn't read that image 🌸"); } })(); }
   if(e.target&&e.target.id==="f_uploadFile"&&e.target.files&&e.target.files[0]){ const file=e.target.files[0], url=URL.createObjectURL(file), up=document.getElementById("f_upload"), prev=document.getElementById("f_uploadPrev"); if(up&&!up.value.trim())up.value=file.name; if(prev)prev.innerHTML=(file.type.indexOf("video")===0?`<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`:`<img src="${url}" style="max-width:170px;border-radius:10px" />`)+`<div class="soft" style="font-size:11px;margin-top:4px">preview only — paste a link above to keep it with the brief 🌸</div>`; }
   if(e.target&&e.target.dataset&&e.target.dataset.act==="stickyEdit"&&!RO){ const n=STICKIES.find(s=>s.id===e.target.dataset.id); if(n){n.text=e.target.value;saveStickies();} }
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
@@ -3634,8 +3718,9 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.dataset&&e.target.dataset.mbnote){ const idn=e.target.dataset.mbnote; DB.saveDaily(SENTINEL,n=>({...n,artBoard:(n.artBoard||[]).map(c=>c.id===idn?{...c,text:e.target.value}:c)})).catch(()=>{}); }
   if(e.target&&e.target.id==="mbFile"&&e.target.files&&e.target.files.length){ (async()=>{ const files=[...e.target.files]; let added=0;
     for(const f of files){ try{ const {url,ar}=await mbFileToDataURL(f); const w=180, h=Math.max(100,Math.min(260,Math.round(180/ar)));
+      const stored=await storeImage(url,"board");   // cloud-storage URL when available; data URL fallback
       const ox=24+Math.floor(Math.random()*70)+added*16, oy=24+Math.floor(Math.random()*50)+added*16;
-      await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"img",url,x:ox,y:oy,w,h}]})); added++;
+      await DB.saveDaily(SENTINEL,n=>({...n,artBoard:[...(n.artBoard||[]),{id:uid(),type:"img",url:stored,x:ox,y:oy,w,h}]})); added++;
     }catch(err){ console.error(err); } }
     toast(added?("Added "+added+" photo"+(added>1?"s":"")+" 🖼️"):"Couldn't read that image 🌸"); render(); })(); } });
 /* keep optimizer text inputs in state as they're typed, so a tab switch / re-render never wipes them */
@@ -3738,6 +3823,7 @@ document.addEventListener("pointercancel",()=>{ resizeSticky=null; });
 document.addEventListener("keydown",async(e)=>{
   if(e.key!=="Enter")return; const t=e.target;
   if(t.id==="capInput")document.querySelector('[data-act="capture"]').click();
+  if(t.id==="authPass"||t.id==="authEmail"){ const b=document.querySelector('[data-act="signIn"]'); if(b)b.click(); }
   if(t.id==="newContent")document.querySelector('[data-act="addContent"]').click();
   if(t.id==="ledAmount"||t.id==="ledNote")document.querySelector('[data-act="addLedger"]').click();
   if(t.id==="sponsorBrand")document.querySelector('[data-act="addSponsor"]').click();
@@ -3795,7 +3881,7 @@ function postRender(){ const c=document.getElementById("clock"); if(c)c.textCont
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
-render();
+authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lockdown SQL is run)
 /* ===== glowing sakura petal cursor trail (pink + white) ===== */
 (function(){
   const reduce=()=>{ try{ return document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
@@ -4419,7 +4505,9 @@ render();
       speechSynthesis.cancel(); speechSynthesis.speak(u);
     }catch(e){}
   }
-  async function runClientRelay(action){ if(DEMO||!SB)return "needs the backend deployed first 🌸"; try{ var r=await fetch(CONFIG.url+"/functions/v1/discord",{method:"POST",headers:{"content-type":"application/json","apikey":CONFIG.anonKey},body:JSON.stringify({op:"relay",userId:UID,action:action})}); var j=await r.json(); return j.message||(j.error?("hmm — "+j.error):"done"); }catch(e){ return "couldn't reach Discord: "+(e.message||e); } }
+  async function runClientRelay(action){ if(DEMO||!SB)return "needs the backend deployed first 🌸"; try{
+    var tok=""; try{ tok=((await SB.auth.getSession()).data.session||{}).access_token||""; }catch(e){}   // post-lockdown, the relay requires her real sign-in token
+    var r=await fetch(CONFIG.url+"/functions/v1/discord",{method:"POST",headers:Object.assign({"content-type":"application/json","apikey":CONFIG.anonKey},tok?{authorization:"Bearer "+tok}:{}),body:JSON.stringify({op:"relay",userId:UID,action:action})}); var j=await r.json(); return j.message||(j.error?("hmm — "+j.error):"done"); }catch(e){ return "couldn't reach Discord: "+(e.message||e); } }
   window.runClientRelay=runClientRelay;
   async function runAgent(q,img){
     var hist=window.EUGENE_HIST.slice(-16);

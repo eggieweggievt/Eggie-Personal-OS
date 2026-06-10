@@ -10,6 +10,7 @@
 // Deploy:   supabase functions deploy briefing --no-verify-jwt
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { parseNotes, todayBits } from "../_shared/today.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type", "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
@@ -19,7 +20,7 @@ const TO = Deno.env.get("BRIEFING_TO") || "eggie@eggieweggie.ca";
 const FROM = Deno.env.get("BRIEFING_FROM") || "Eggie OS <onboarding@resend.dev>";
 
 function esc(s: unknown){ return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]!)); }
-function parse(n: string | null){ try { return n ? JSON.parse(n) : {}; } catch { return {}; } }
+const parse = parseNotes;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -29,7 +30,6 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const now = new Date();
-    const dayShort = now.toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Toronto" });
     const niceDate = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/Toronto" });
     const monthKey = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-CA");
     const yKey = new Date(now.getTime() - 86400000).toLocaleDateString("en-CA");
@@ -39,16 +39,12 @@ Deno.serve(async (req) => {
     const inFlight = (content || []).filter((c: any) => !c.parent_id && c.stage !== "published");
     const top = inFlight.slice(0, 3);
 
-    // sentinel: goals + schedule
+    // sentinel: goals + today's shape (stream slot etc.) via the SHARED builder — same code /today uses
     const { data: sent } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", "2000-01-01").maybeSingle();
     const s = parse(sent?.notes ?? null);
     const goals = (s.goals_week_items || []).filter((g: any) => !g.done).slice(0, 3);
-    // per-week schedule: read THIS week's slots (schedWeeks[thisMonday]) with legacy `schedule` fallback
-    const todayTO = now.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
-    const md = new Date(todayTO + "T00:00"); md.setDate(md.getDate() - ((md.getDay() + 6) % 7));
-    const mondayISO = md.toLocaleDateString("en-CA");
-    const weekSched = (s.schedWeeks && s.schedWeeks[mondayISO]) ? s.schedWeeks[mondayISO] : (s.schedule || []);
-    const todayStream = weekSched.filter((x: any) => x.day === dayShort);
+    const bits = todayBits(s);
+    const todayStream = bits.slots;
 
     // yesterday habits — the app stores habits as {counts:{habitId:n}}, not a done[] array
     const { data: yday } = await sb.from("daily_logs").select("notes").eq("user_id", USER).eq("log_date", yKey).maybeSingle();
@@ -65,6 +61,8 @@ Deno.serve(async (req) => {
     const sectionsHtml = `
       <p style="margin:0 0 6px;color:#7c6a80">Good morning, Eggie 🐙 — here's your gentle plan for <b>${niceDate}</b>.</p>
       ${todayStream.length ? `<p style="margin:10px 0 4px"><b>🗓️ Streaming today:</b> ${todayStream.map((x: any) => `${esc(x.title || "Stream")}${x.time ? " (" + esc(x.time) + ")" : ""}`).join(" · ")}</p>` : `<p style="margin:10px 0 4px;color:#7c6a80">🌙 No stream scheduled today — a rest or batch day is allowed.</p>`}
+      ${bits.events.length ? `<p style="margin:8px 0 4px"><b>📅 On the calendar:</b> ${bits.events.slice(0, 4).map((e: any) => `${esc(e.title)}${e.time ? " (" + esc(e.time) + ")" : ""}`).join(" · ")}</p>` : ""}
+      ${bits.dueReminders.length ? `<p style="margin:8px 0 4px"><b>⏰ Gentle nudges waiting:</b> ${bits.dueReminders.slice(0, 4).map((r: any) => esc(r.text)).join(" · ")}</p>` : ""}
       <p style="margin:12px 0 4px"><b>🎬 In flight (${inFlight.length}):</b></p>
       <ul style="margin:0;padding-left:18px;color:#4a3a4d">${top.map((c: any) => li(`${c.title} — ${c.stage}`)).join("") || li("nothing queued — ideas welcome 🌸")}</ul>
       ${goals.length ? `<p style="margin:12px 0 4px"><b>🌷 Week goals left:</b></p><ul style="margin:0;padding-left:18px;color:#4a3a4d">${goals.map((g: any) => li(g.text)).join("")}</ul>` : ""}
