@@ -305,6 +305,7 @@
   /* Ask Eugene — full chat page */
   .eu-full{position:fixed;inset:0;z-index:9995;background:var(--bg);padding:14px;display:flex;flex-direction:column;}
   .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
+  body.eu-drop .eu-card{outline:2px dashed #ec7faf;outline-offset:-2px;}
   .eu-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,#ec7faf18,#a98fe018);}
   .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#eef2fb center/cover no-repeat url("pet-widget/Screenshot 2026-06-02 202234.png");flex:0 0 auto;}
   .eu-log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0;}
@@ -763,7 +764,7 @@ async function aiCall(mode,input,vidiq){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.1";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.2";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Eugene"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
@@ -2820,8 +2821,12 @@ async function euAttachPhoto(file){
     const ni=document.getElementById("euInput"); if(ni&&keep) ni.value=keep;
   }catch(e){ toast("couldn't read that photo 🌸 (iPhone HEIC? try a screenshot or JPEG)"); }
 }
-/* paste a screenshot straight into the Eugene tab */
-document.addEventListener("paste",e=>{ try{ if(state.tab!=="eugene"||state.eugeneBusy) return; const it=[...((e.clipboardData||{}).items||[])].find(x=>x.type&&x.type.indexOf("image/")===0); if(it){ const f=it.getAsFile(); if(f){ e.preventDefault(); euAttachPhoto(f); } } }catch(err){} });
+/* paste a screenshot straight into the Eugene tab (skipped when typing in the floating pet chat — that has its own paste) */
+document.addEventListener("paste",e=>{ try{ if(state.tab!=="eugene"||state.eugeneBusy) return; const ae=document.activeElement; if(ae&&ae.closest&&ae.closest("#petChat")) return; const it=[...((e.clipboardData||{}).items||[])].find(x=>x.type&&x.type.indexOf("image/")===0); if(it){ const f=it.getAsFile(); if(f){ e.preventDefault(); euAttachPhoto(f); } } }catch(err){} });
+/* drag a photo anywhere onto the Eugene tab — the chat card shows a dashed outline while you hover */
+let _euDragT=null;
+document.addEventListener("dragover",e=>{ try{ if(state.tab!=="eugene") return; const ts=(e.dataTransfer||{}).types||[]; let has=false; for(const t of ts){ if(t==="Files"){ has=true; break; } } if(!has) return; e.preventDefault(); document.body.classList.add("eu-drop"); clearTimeout(_euDragT); _euDragT=setTimeout(()=>document.body.classList.remove("eu-drop"),200); }catch(err){} });
+document.addEventListener("drop",e=>{ try{ document.body.classList.remove("eu-drop"); if(state.tab!=="eugene") return; const f=[...((e.dataTransfer||{}).files||[])].find(x=>/^image\//.test(x.type||"")); if(f){ e.preventDefault(); euAttachPhoto(f); } }catch(err){} });
 
 /* ===== web push: this device subscribes itself; the public key comes from the reminders function (GET) ===== */
 if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js").catch(function(){}); }catch(e){} }

@@ -62,6 +62,8 @@
     .pet-chip{border:1px solid #e4e6f5;background:#f6f8ff;color:#5a5478;border-radius:12px;padding:7px 11px;font:inherit;font-size:12px;line-height:1.35;cursor:pointer;text-align:left;transition:background .12s;}
     .pet-chip:hover{background:#eef1ff;}
     .pet-sbtn{border:none;background:none;font-size:15px;cursor:pointer;line-height:1;padding:0 2px;}
+    #pet.pet-drop{filter:drop-shadow(0 0 11px ${c.accentFrom}) drop-shadow(0 5px 7px rgba(80,70,110,.4));}
+    #petChat.pet-drop{outline:2px dashed ${c.accentFrom};outline-offset:-2px;}
     `;
     document.head.appendChild(s);
   }
@@ -215,14 +217,7 @@
       var pb = chat.querySelector("[data-photo]"), pf = chat.querySelector("[data-photofile]");
       if (pb && pf) {
         pb.onclick = function () { pf.click(); };
-        pf.onchange = async function () {
-          var f = pf.files && pf.files[0]; pf.value = "";
-          if (!f || !c.pickPhoto || S.busy) return;
-          var keep = (chat.querySelector("#petInput") || {}).value || "";
-          try { S.img = await c.pickPhoto(f); } catch (e) { S.img = null; }
-          paintChat();
-          var ni = chat.querySelector("#petInput"); if (ni && keep) ni.value = keep;
-        };
+        pf.onchange = function () { var f = pf.files && pf.files[0]; pf.value = ""; if (f) attachPhoto(f); };
       }
       var pc = chat.querySelector("[data-imgclear]"); if (pc) pc.onclick = function () { S.img = null; paintChat(); };
       var input = chat.querySelector("#petInput");
@@ -241,6 +236,31 @@
       catch (e) { ans = "aw, I couldn't reach the server — " + (e.message || "try again"); }
       S.log.push({ role: "pet", text: ans }); S.busy = false; paintChat();
     }
+    /* ---- photos by paste & drag-drop (active only when a pickPhoto handler is configured) ---- */
+    async function attachPhoto(f) {
+      if (!c.pickPhoto || !f || !/^image\//.test(f.type || "") || S.busy) return;
+      var keep = (chat.querySelector("#petInput") || {}).value || "";
+      try { S.img = await c.pickPhoto(f); } catch (e) { S.img = null; }
+      if (!S.open) { if (S.img) toggle(); }                                  // dropped on the closed pet → open the chat holding the photo
+      else { paintChat(); var ni = chat.querySelector("#petInput"); if (ni && keep) ni.value = keep; }
+    }
+    function dragFile(e) { var fs = (e.dataTransfer || {}).files || []; for (var i = 0; i < fs.length; i++) if (/^image\//.test(fs[i].type || "")) return fs[i]; return null; }
+    function dragHasFiles(e) { var ts = (e.dataTransfer || {}).types || []; for (var i = 0; i < ts.length; i++) if (ts[i] === "Files") return true; return false; }
+    function dropZone(el) {
+      el.addEventListener("dragover", function (e) { if (!c.pickPhoto || !dragHasFiles(e)) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = "copy"; } catch (_) { } el.classList.add("pet-drop"); });
+      el.addEventListener("dragleave", function () { el.classList.remove("pet-drop"); });
+      el.addEventListener("drop", function (e) { el.classList.remove("pet-drop"); if (!c.pickPhoto) return; var f = dragFile(e); if (f) { e.preventDefault(); e.stopPropagation(); attachPhoto(f); } });
+    }
+    dropZone(pet); dropZone(chat);
+    // while a file is dragged anywhere on the page, the pet sits still so he's easy to aim at
+    document.addEventListener("dragover", function (e) { if (!c.pickPhoto || !dragHasFiles(e)) return; if (S.st === "walk" || S.st === "sit") { S.st = "sit"; S.stt = 0; } });
+    // paste a copied image while typing in the open pet chat (focus must be inside the chat so other inputs keep their paste)
+    document.addEventListener("paste", function (e) {
+      if (!c.pickPhoto || !S.open || S.busy) return;
+      if (!chat.contains(document.activeElement)) return;
+      var items = (e.clipboardData || {}).items || [];
+      for (var i = 0; i < items.length; i++) { var it = items[i]; if (it.type && it.type.indexOf("image/") === 0) { var f = it.getAsFile(); if (f) { e.preventDefault(); attachPhoto(f); } return; } }
+    });
     function toggle() {
       S.open = !S.open;
       if (S.open) { bubble.classList.add("pet-hidden"); S.st = "sit"; S.stt = 0; chat.classList.remove("pet-hidden"); paintChat(); positionUI(); }
