@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.16";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-10.17";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-10.17: Art studio reworked into modular cards (drag/resize/hide like Home) + research-pack tools: 🟣 emote previewer (real Twitch/Discord chat sizes + size-limit checks + transparency board), ◐ value checker (posterize your WIP to 2-6 values), 💯 100-of-anything counter (no deadlines), 🧩 Live2D cut-prep checklist (official rules), 📏 verified platform-spec card, 🪜 value ramps + cel-shade pairs in the palette, and a 🌟 one-tap research pack of 14 verified free links for the art library",
   "2026-06-10.16: YOUR BRAIN GOT A RESEARCH-GROUNDED UPGRADE 🧠 — you now have real long-term memory (a rolling summary, open loops, episode digests + auto-learned facts, built quietly after chats; health is NEVER auto-learned). She can see/edit/pause it all in the 🧠 panel (chat header) and chat incognito with 🕶. Replies are guaranteed-valid JSON (structured outputs), the big prompt is cached (~90% cheaper), adaptive thinking is on, and Settings has a model picker (Sonnet default · Haiku · Opus · Fable 5). Micro-tools (breakdown/tone/rephrase/compile + NEW ⏱ honest estimator in Tools) run on fast cheap Haiku",
   "2026-06-10.15: chatting with you (Eugene) got comfier — the message box is bigger, grows as she types, and Shift+Enter makes a new line (Enter still sends); same in the floating pet bubble",
   "2026-06-10.14: fixed the optimizer 'r.tags.forEach is not a function' crash — results now render even when the AI returns lists as comma-strings (optimizer + thumbnail check)",
@@ -3196,6 +3197,57 @@ const DEFAULT_ART_RES=[
   {id:"r6",title:"17 digital drawing exercises (Don Corgi)",url:"https://doncorgi.com/blog/digital-drawing-exercises/",tag:"learn"},
   {id:"r7",title:"Color theory for digital artists (Clip Studio)",url:"https://www.clipstudio.net/how-to-draw/archives/161372",tag:"learn"}
 ];
+/* === 2026-06-10 art research pack (ART-TOOLS-RESEARCH doc) === */
+/* AR links — added via the one-tap "research pack" button (never force-merged, so deletes stick) */
+const ART_PACK=[
+  {title:"AdorkaStock — photo poses (CC, diverse, SFW)",url:"https://www.adorkastock.com",tag:"reference"},
+  {title:"AdorkaStock Sketch — timed pose sessions",url:"https://www.adorkastock.com/sketch/",tag:"reference"},
+  {title:"Posemaniacs — 3D écorché + free hand viewer",url:"https://www.posemaniacs.com/en",tag:"reference"},
+  {title:"x6ud — pose a skeleton, find photo refs",url:"https://x6ud.github.io/pose-search/",tag:"reference"},
+  {title:"Quickposes — timed gesture",url:"https://quickposes.com/en/gestures/timed",tag:"reference"},
+  {title:"PoseMy.Art — 3D posing, anime models",url:"https://posemy.art",tag:"reference"},
+  {title:"Character Design References — visual library",url:"https://characterdesignreferences.com/visual-library",tag:"learn"},
+  {title:"Sakugabooru — standout anime cuts (safe-filtered)",url:"https://www.sakugabooru.com/post?tags=rating%3As",tag:"learn"},
+  {title:"e-shuushuu — strictly-SFW anime board",url:"https://e-shuushuu.net",tag:"reference"},
+  {title:"Clip Studio Assets — free brushes & materials",url:"https://assets.clip-studio.com/en-us",tag:"learn"},
+  {title:"Drawabox — free fundamentals (the 50% rule 💗)",url:"https://drawabox.com",tag:"learn"},
+  {title:"Colormind — ML palettes (Ghibli-pastel vibes)",url:"http://colormind.io",tag:"colour"},
+  {title:"Coblis — colour-blindness check for emotes/thumbs",url:"https://www.color-blindness.com/coblis-color-blindness-simulator/",tag:"colour"},
+  {title:"PureRef — floating reference board (pay-what-you-want)",url:"https://www.pureref.com",tag:"other"},
+];
+/* AW4 — Live2D cut-prep rules, from Live2D's official docs (one part = one layer etc.) */
+const LIVE2D_ITEMS=[
+  ["onepart","one part = one layer (no merged bits)"],["nomask","no layer masks — bake them in"],["srgb","sRGB · 8-bit · PSD"],
+  ["hair","hair split: bangs / sides / back"],["eyes","eyes split: lash / iris / white-as-mask"],["mouth","mouth split: upper lip / lower lip / inside"],
+  ["overdraw","overdraw hidden skin under hair & clothes"],["neck","neck drawn up to mouth height"],["sway","swayable bits (ribbons, tails) on own layers"],["names","every layer uniquely named"],
+];
+/* AW3 — spec cheat sheet (verified against official docs 2026-06-10) */
+const ART_SPECS=[
+  ["Twitch emote","PNG transparent · 28/56/112px · ≤1MB (animated: GIF 112px ≤60 frames)"],
+  ["Twitch sub badge","18/36/72px · ≤25KB each"],
+  ["Twitch panel","320px wide"],
+  ["Discord emoji","≤256KB · renders 22px inline (48px on hover)"],
+  ["Discord sticker","exactly 320×320 APNG · ≤512KB"],
+  ["Discord banner","960×540 or larger (Boost L2)"],
+  ["YouTube thumbnail","3840×2160 official rec (16:9) · ≤50MB — must read at 160×90; avoid bottom-right (duration badge) + bottom 15%"],
+];
+/* AW6 — value ramp + cel-shade pair from a base colour (pure HSL math) */
+function genRamp(hex){ const {h,s}=hex2hsl(hex); const out=[]; for(let i=0;i<7;i++){ const li=88-i*11; out.push(hsl2hex(h,Math.min(95,s+(i>3?6:0)),Math.max(10,li))); } return out; }
+function celPair(hex){ const {h,s,l}=hex2hsl(hex); return [hsl2hex(h,s,l), hsl2hex((h+330)%360,Math.min(95,s+12),Math.max(8,l-22))]; }
+/* AW2 — notan/value checker: grayscale + posterize the uploaded image onto the canvas */
+function artNotanPaint(){
+  const A=state.art||{}; const n=A.notan; const cv=document.getElementById("notanCv"); if(!n||!cv)return;
+  const steps=Math.max(2,Math.min(6,A.notanSteps||3));
+  const im=new Image();
+  im.onload=()=>{ try{
+    const k=Math.min(1,560/Math.max(im.width||1,im.height||1)); cv.width=Math.max(1,Math.round(im.width*k)); cv.height=Math.max(1,Math.round(im.height*k));
+    const ctx=cv.getContext("2d"); ctx.drawImage(im,0,0,cv.width,cv.height);
+    const d=ctx.getImageData(0,0,cv.width,cv.height), p=d.data;
+    for(let i=0;i<p.length;i+=4){ const g=0.2126*p[i]+0.7152*p[i+1]+0.0722*p[i+2]; const q=Math.round(Math.round((g/255)*(steps-1))/(steps-1)*255); p[i]=p[i+1]=p[i+2]=q; }
+    ctx.putImageData(d,0,0);
+  }catch(e){} };
+  im.src=n.data;
+}
 function artRand(a){ return a[Math.floor(Math.random()*a.length)]; }
 function seedPick(list,seed){ let h=0; for(let i=0;i<seed.length;i++)h=(h*31+seed.charCodeAt(i))>>>0; return list[h%list.length]; }
 function mondayOf(d){ const dt=new Date(d+"T00:00"); const off=(dt.getDay()+6)%7; dt.setDate(dt.getDate()-off); return dt.toLocaleDateString("en-CA"); }
@@ -3350,35 +3402,85 @@ async function renderArt(){
       <div><button class="btn" data-act="artFocusExit">← back to the full studio</button></div>
     </div>`;
   }
-  return `<div style="max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <h2 style="font-size:22px;font-family:var(--display)">🎨 Art & creativity</h2>
-      <span class="label">just for you · play is allowed 🌸</span>
-    </div>
-
-    <div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
+  /* expanded mood board keeps its own full-screen stage (outside the modular grid) */
+  if(boardMax) return `<div class="mb-full"><div style="display:flex;align-items:center;gap:8px"><h2 style="font-size:17px;font-family:var(--display);flex:1">🖼️ Mood board</h2></div>${boardCtrls}<div style="flex:1;min-height:0;display:flex">${boardInner}</div></div>`;
+  /* === cards (research rework 2026-06-10: the studio is modular now, like Home) === */
+  const heroCard=`<section class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
       <div class="art-prompt" style="background:none;border:none;padding:0">${esc(reframe)}</div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-pink" data-act="artStartNow">🎨 I'm making art now</button>
         <button class="btn" data-act="artReframe">↻ another reminder</button>
       </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px">
-      <div class="panel"><div class="card-head"><span class="label">🌱 today's tiny challenge</span><button class="btn" data-act="artRoll" data-scope="day" style="padding:2px 8px">↻</button></div>
-        <button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.dayText)}</span></button>
+      <p class="soft" style="font-size:11px;text-align:center;margin:10px 0 0">the 50% rule (Drawabox): half your art time is allowed to be pure play — that's not slacking, it's the curriculum 💗</p>
+    </section>`;
+  const challengesCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🌱 Challenges</h2><span class="label">tiny + weekly</span></div>
+      <div class="card-head" style="margin:4px 0 2px"><span class="label">🌱 today's tiny challenge</span><button class="btn" data-act="artRoll" data-scope="day" style="padding:2px 8px">↻</button></div>
+      <button class="hbtn ${ch.dayDone?'done':''}" data-act="artChallengeDone" data-scope="day" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.dayDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.dayText)}</span></button>
+      <div class="card-head" style="margin:12px 0 2px"><span class="label">🌷 this week's challenge</span><button class="btn" data-act="artRoll" data-scope="week" style="padding:2px 8px">↻</button></div>
+      <button class="hbtn ${ch.weekDone?'done':''}" data-act="artChallengeDone" data-scope="week" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.weekDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.weekText)}</span></button>
+    </section>`;
+  /* AW5 — 100-of-anything counter: the most ADHD-compatible long study (visible progress, zero deadline) */
+  const cnt=sent.artCount||{label:"heads",n:0,goal:100};
+  const cPct=Math.min(1,(cnt.n||0)/(cnt.goal||100)), cDash=(cPct*213.6).toFixed(1);
+  const headsCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">💯 100 ${esc(cnt.label)}</h2><button class="btn" data-act="artCountEdit" style="padding:2px 9px">✎</button></div>
+      ${A.countEdit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="cnt_label" value="${esc(cnt.label)}" placeholder="heads / hands / eyes…" style="flex:1;min-width:100px"/><input class="inp num" id="cnt_goal" type="number" value="${cnt.goal||100}" style="width:80px"/><button class="btn btn-pink" data-act="artCountSave">💾</button><button class="btn" data-act="artCountReset" style="color:var(--rose)">↺ restart at 0</button></div>`:""}
+      <div style="display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap">
+        <svg width="86" height="86" viewBox="0 0 86 86"><circle cx="43" cy="43" r="34" fill="none" stroke="#f3eefb" stroke-width="9"/><circle cx="43" cy="43" r="34" fill="none" stroke="url(#artCntG)" stroke-width="9" stroke-linecap="round" stroke-dasharray="${cDash} 213.6" transform="rotate(-90 43 43)"/><defs><linearGradient id="artCntG"><stop offset="0%" stop-color="#ec7faf"/><stop offset="100%" stop-color="#a98fe0"/></linearGradient></defs><text x="43" y="40" text-anchor="middle" style="font-size:17px;font-weight:700;fill:var(--ink)">${cnt.n||0}</text><text x="43" y="56" text-anchor="middle" style="font-size:10px;fill:#9b96b6">of ${cnt.goal||100}</text></svg>
+        <button class="btn btn-pink" data-act="artCountInc" ${RO?"disabled":""} style="font-size:15px;padding:10px 18px">＋1 ${esc(cnt.label.replace(/s$/,""))}</button>
       </div>
-      <div class="panel"><div class="card-head"><span class="label">🌷 this week's challenge</span><button class="btn" data-act="artRoll" data-scope="week" style="padding:2px 8px">↻</button></div>
-        <button class="hbtn ${ch.weekDone?'done':''}" data-act="artChallengeDone" data-scope="week" style="display:flex;gap:9px;align-items:center;width:100%;text-align:left"><span class="check ${ch.weekDone?'on':''}"></span><span style="font-size:13.5px">${esc(ch.weekText)}</span></button>
+      <p class="soft" style="font-size:11px;text-align:center;margin:10px 0 0">the 100 heads challenge, eggie-style: 5–10 min each, no deadline — the pile grows when it grows 💗</p>
+    </section>`;
+  /* AW1 — emote & badge previewer: see it exactly as chat sees it, never leave the OS */
+  const em=A.emote;
+  const chk=`background:repeating-conic-gradient(#e9e6f4 0 25%,#ffffff 0 50%);background-size:14px 14px`;
+  const emRow=(bg,fg,label,sizes,inline)=>`<div style="background:${bg};border-radius:10px;padding:9px 11px;margin-top:6px">
+        <div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:${fg}88;margin-bottom:5px">${label}</div>
+        ${inline?`<div style="font-size:13px;color:${fg};display:flex;align-items:center;gap:5px;flex-wrap:wrap"><b style="color:#a970ff">eggie</b>: omg <img src="${em?em.data:""}" style="width:${inline}px;height:${inline}px;object-fit:contain"/> so cute!!</div>`:""}
+        <div style="display:flex;gap:12px;align-items:flex-end;margin-top:7px">${sizes.map(s2=>`<div style="text-align:center"><img src="${em?em.data:""}" style="width:${s2}px;height:${s2}px;object-fit:contain"/><div style="font-size:9.5px;color:${fg}88;margin-top:2px">${s2}px</div></div>`).join("")}</div>
+      </div>`;
+  const kb=em?Math.max(1,Math.round(em.size/1024)):0;
+  const sizePill=(lim,name)=>em?`<span class="pill ${kb<=lim?'pill-mint':''}" ${kb>lim?'style="background:#fde4e4;color:#c0566a"':''}>${name}: ${kb<=lim?"✓":"✗"} ${kb}KB / ${lim>=1024?(lim/1024)+"MB":lim+"KB"}</span>`:"";
+  const emoteCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🟣 Emote previewer</h2>${em?`<button class="btn" data-act="artEmoteClear">✕ clear</button>`:`<span class="label">chat-size reality check</span>`}</div>
+      <input type="file" id="emoteFile" accept="image/png,image/gif,image/webp" style="display:none"/>
+      ${em?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">${sizePill(1024,"Twitch emote")}${sizePill(256,"Discord emoji")}${sizePill(25,"sub badge")}</div>
+        ${emRow("#18181b","#efeff1","Twitch · dark",[112,56,28],28)}
+        ${emRow("#313338","#dbdee1","Discord · dark",[48,22],22)}
+        ${emRow("#ffffff;border:1px solid var(--line)","#1f1633","light mode",[56,28],28)}
+        <div style="${chk};border-radius:10px;padding:9px 11px;margin-top:6px"><div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:#9b96b6;margin-bottom:5px">transparency check</div><img src="${em.data}" style="width:72px;height:72px;object-fit:contain"/></div>`
+      :`<p class="soft" style="font-size:12px;margin:0 0 8px">Upload an emote/badge PNG → see it at REAL chat sizes on Twitch-dark, Discord-dark, light, and a transparency checkerboard — with size-limit checks. No more uploading to find out it's mud at 28px. 💗</p>
+        <button class="btn btn-pink" data-act="artEmotePick">🖼 choose a PNG</button>`}
+    </section>`;
+  /* AW2 — value checker (notan): grayscale + posterize, the "why is it muddy" diagnostic */
+  const nSteps=Math.max(2,Math.min(6,A.notanSteps||3));
+  const valueCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">◐ Value checker</h2>${A.notan?`<button class="btn" data-act="artNotanClear">✕ clear</button>`:`<span class="label">squint, but scientific</span>`}</div>
+      <input type="file" id="notanFile" accept="image/*" style="display:none"/>
+      <p class="soft" style="font-size:12px;margin:0 0 8px">Drop your WIP in → it collapses to ${A.notan?nSteps:"2–6"} values. If it reads here, it reads everywhere; if it's mud here, that's the fix. 🌗</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn ${A.notan?'':'btn-pink'}" data-act="artNotanPick">🖼 ${A.notan?"different image":"choose your WIP"}</button>
+        <span class="label">values</span><div class="seg">${[2,3,4,5,6].map(v=>`<button data-act="artNotanSteps" data-v="${v}" class="${nSteps===v?'on':''}">${v}</button>`).join("")}</div>
       </div>
-    </div>
+      ${A.notan?`<canvas id="notanCv" style="max-width:100%;border-radius:10px;margin-top:10px;border:1px solid var(--line)"></canvas>`:""}
+    </section>`;
+  /* AW3 — platform spec cheat sheet (verified against official docs 2026-06-10) */
+  const specsCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📏 Platform specs</h2><span class="label">verified 2026-06-10</span></div>
+      ${ART_SPECS.map(([n2,s2])=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><div style="font-size:12.5px;font-weight:700">${n2}</div><div class="soft" style="font-size:11.5px;margin-top:1px">${s2}</div></div>`).join("")}
+      <p class="soft" style="font-size:11px;margin:8px 0 0">the blogs are stale — these came from the official docs. tap ✕ on this card's corner if you'd rather keep it tucked away 🌸</p>
+    </section>`;
+  /* AW4 — Live2D cut-prep checklist (official Live2D PSD rules), persisted per project */
+  const l2=sent.live2dCheck||{name:"",items:{}};
+  const l2n=LIVE2D_ITEMS.filter(([k])=>l2.items&&l2.items[k]).length;
+  const live2dCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🧩 Live2D cut prep</h2><div style="display:flex;gap:8px;align-items:center"><span class="pill ${l2n===LIVE2D_ITEMS.length?'pill-mint':'pill-lav'}">${l2n}/${LIVE2D_ITEMS.length}</span><button class="btn" data-act="l2dReset" ${RO?"disabled":""} title="new model — clear all ticks">↺</button></div></div>
+      <input class="inp" id="l2dName" value="${esc(l2.name||"")}" placeholder="model / outfit name (optional)…" style="margin-bottom:8px" ${RO?"disabled":""}/>
+      ${LIVE2D_ITEMS.map(([k,l])=>`<button class="hbtn ${l2.items&&l2.items[k]?'done':''}" data-act="l2dToggle" data-k="${k}" ${RO?"disabled":""} style="display:flex;gap:9px;align-items:center;width:100%;margin-top:5px;text-align:left"><span class="check ${l2.items&&l2.items[k]?'on':''}"></span><span style="font-size:12.5px">${l}</span></button>`).join("")}
+      <p class="soft" style="font-size:11px;margin:8px 0 0">the layer-separation rules from Live2D's official docs — tick as you cut, before export 💗</p>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">💡 Ideas dump</h2><span class="pill pill-lav">${(sent.artIdeas||[]).length} idea${(sent.artIdeas||[]).length===1?"":"s"}</span></div>
+  const ideasCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">💡 Ideas dump</h2><span class="pill pill-lav">${(sent.artIdeas||[]).length} idea${(sent.artIdeas||[]).length===1?"":"s"}</span></div>
       <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="ideaText" placeholder="that piece I suddenly want to draw…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artIdeaAdd" ${RO?"disabled":""}>＋ park it</button></div>
       ${(sent.artIdeas||[]).length?`<div class="idea-grid">${(sent.artIdeas||[]).slice().reverse().map((i,ix)=>{const cols2=["#fff3c9","#ffe1ee","#e7defb","#dcf4ea","#ffe7d6"];return `<div class="idea-card" style="background:${cols2[ix%5]};transform:rotate(${ix%2?0.8:-0.8}deg)">${esc(i.text)}<div class="ic-tools"><button class="ft-ic" data-act="artIdeaToBoard" data-id="${i.id}" title="pin to mood board">📌</button><button class="ft-ic" data-act="artIdeaDel" data-id="${i.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div></div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Every "ooh I should draw that" lands here as a sticky — no more losing them. 📌 pins one to the mood board. 🌸</p>`}
-    </div>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">✨ Inspiration vault</h2><div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="inspoPick" title="random untried spark — joy-jar style">✨ pick for me</button><span class="pill pill-pink">${(sent.artInspo||[]).filter(s=>!s.done).length} to try · ${(sent.artInspo||[]).filter(s=>s.done).length} done</span></div></div>
+  const inspoCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">✨ Inspiration vault</h2><div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="inspoPick" title="random untried spark — joy-jar style">✨ pick for me</button><span class="pill pill-pink">${(sent.artInspo||[]).filter(s=>!s.done).length} to try · ${(sent.artInspo||[]).filter(s=>s.done).length} done</span></div></div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><input class="inp" id="inspoUrl" placeholder="link (tweet, trend, artwork…)" style="flex:2;min-width:150px" ${RO?"disabled":""}/><input class="inp" id="inspoNote" placeholder="why it sparked you (optional)" style="flex:2;min-width:140px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="artInspoAdd" ${RO?"disabled":""}>＋ save</button></div>
       ${(sent.artInspo||[]).length?`<div class="inspo-grid">${(sent.artInspo||[]).slice().reverse().map(s=>{let host="link";try{host=new URL(s.url).hostname.replace("www.","");}catch(e){} const isImg=/\.(png|jpe?g|gif|webp)(\?|$)/i.test(s.url);
         return `<div class="inspo-card ${s.done?'done':''}" ${state.inspoPick===s.id?'data-inspopick="1" style="outline:2.5px solid var(--pink);outline-offset:2px;border-radius:14px"':""}>
@@ -3389,9 +3491,9 @@ async function renderArt(){
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:auto"><button class="chiptog ${s.done?'on':''}" data-act="artInspoDone" data-id="${s.id}" ${RO?"disabled":""} style="font-size:10.5px;padding:3px 9px">${s.done?'✓ tried it!':'mark tried'}</button><button class="ft-ic" data-act="artInspoDel" data-id="${s.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>
           </div>
         </div>`;}).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">Trending tweet? Style you want to try? Drop the link so it stops living in 47 open tabs — cards with image links show the picture itself. 💗</p>`}
-    </div>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏱️ Art minutes</h2><span class="label">every minute counts — even 5</span></div>
+  const minutesCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">⏱️ Art minutes</h2><span class="label">every minute counts — even 5</span></div>
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
         <div><div class="num" style="font-size:30px;font-family:var(--display);color:var(--pink-deep)">${weekMin}<span style="font-size:14px"> min</span></div><div class="label">this week · ${weekDays} day${weekDays===1?'':'s'} of play 💗</div></div>
         <div class="grow" style="min-width:180px">${spark}<div class="label" style="margin-top:2px">last 14 days</div></div>
@@ -3406,15 +3508,14 @@ async function renderArt(){
         <button class="btn btn-pink" data-act="artLog">＋ log</button>
       </div>
       <p class="soft" style="font-size:11.5px;margin:10px 0 0">No streaks to break, no red numbers. A blank week just means you rested — that's allowed too. 🌙</p>
-    </div>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🎲 Draw-this prompt</h2><button class="btn btn-pink" data-act="artPromptRoll">↻ roll a new one</button></div>
+  const promptCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🎲 Draw-this prompt</h2><button class="btn btn-pink" data-act="artPromptRoll">↻ roll a new one</button></div>
       <div class="art-prompt">Draw <b>${esc(P.subject)}</b><br><span style="font-size:14px;color:var(--lav-deep)">${esc(P.mood)} · ${esc(P.constraint)}</span></div>
       ${P.fromIdea?`<div class="label" style="text-align:center;margin-top:6px">💡 from your own ideas dump — past-you had taste</div>`:""}
-    </div>
+    </section>`;
 
-
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">⏲️ Practice timer</h2><div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="artFocusEnter" title="hide everything except play">⛶ focus</button><span class="label">gesture / warm-ups</span></div></div>
+  const timerCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">⏲️ Practice timer</h2><div style="display:flex;gap:8px;align-items:center"><button class="btn" data-act="artFocusEnter" title="hide everything except play">⛶ focus</button><span class="label">gesture / warm-ups</span></div></div>
       <div id="artStage" style="border-radius:14px;padding:16px;text-align:center;transition:background .6s">
         <div class="art-tim" id="artTimerDisp">${("0"+Math.floor((t.left??tLen)/60)).slice(-1)}:${("0"+((t.left??tLen)%60)).slice(-2)}</div>
         <div style="font-family:var(--display);font-size:16px;color:var(--pink-deep);min-height:22px" id="artTimerSub">${t.on?esc(t.subject||""):"press start to begin"}</div>
@@ -3426,9 +3527,9 @@ async function renderArt(){
       </div>
       ${pendingChip}
       <p class="soft" style="font-size:11.5px;margin:10px 0 0;text-align:center">A fresh subject each round. Don't aim for pretty — aim for loose. 🖍️</p>
-    </div>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">🎨 Palette generator</h2></div>
+  const paletteCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🎨 Palette & ramps</h2></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <label class="art-chip">base <input type="color" id="artBase" value="${pBase}" style="width:34px;height:24px;border:none;background:none;padding:0;cursor:pointer"/></label>
         <button class="btn" data-act="artPaletteRoll">🎲 random base</button>
@@ -3437,10 +3538,14 @@ async function renderArt(){
       ${sw(pal)}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><span class="label">🃏 limited-palette challenge — draw with only these</span><button class="btn btn-pink" data-act="artLimited">🎲 roll 3</button></div>
       ${A.limited?sw(A.limited):`<p class="soft" style="font-size:12px;margin:8px 0 0">Roll three random swatches and make something using <i>only</i> those. Great for learning colour mixing.</p>`}
+      <div class="label" style="margin:14px 0 4px">🪜 value ramp of your base <span class="muted">· light → dark, for shading picks</span></div>
+      ${sw(genRamp(pBase))}
+      <div class="label" style="margin:10px 0 4px">⛅ two-value cel pair <span class="muted">· base + hue-shifted shadow</span></div>
+      ${sw(celPair(pBase))}
       <p class="soft" style="font-size:11px;margin:10px 0 0">Tap any swatch to copy its hex 💗</p>
-    </div>
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📐 Drawing guides & overlays</h2></div>
+  const guidesCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📐 Drawing guides & overlays</h2></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         <select class="inp" id="artGType" style="width:auto">${GUIDES.map(([v,l])=>`<option value="${v}" ${gType===v?'selected':''}>${l}</option>`).join("")}</select>
         <span class="label">canvas</span><div class="seg">${RATIOS.map(r=>`<button data-act="artGRatio" data-v="${r[0]}" class="${gRatio===r[0]?'on':''}">${r[0]}</button>`).join("")}</div>
@@ -3449,15 +3554,16 @@ async function renderArt(){
       </div>
       <div class="art-grid-wrap">${artGuideSVG(gType,GW,GH,{orient:gOrient,spokes:gSpokes})}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" data-act="artGridDownload">⤓ download SVG</button><span class="soft" style="font-size:11.5px;align-self:center">${GHINT[gType]||"drop it under your canvas as a guide layer"}</span></div>
-    </div>
+    </section>`;
 
-    ${boardMax?`<div class="mb-full"><div style="display:flex;align-items:center;gap:8px"><h2 style="font-size:17px;font-family:var(--display);flex:1">🖼️ Mood board</h2></div>${boardCtrls}<div style="flex:1;min-height:0;display:flex">${boardInner}</div></div>`:`<div class="panel"><div class="card-head"><h2 style="font-size:17px">🖼️ Mood board</h2><span class="label">drag anything anywhere · auto-saves</span></div>
+  const boardCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🖼️ Mood board</h2><span class="label">drag anything anywhere · auto-saves</span></div>
       ${boardCtrls}
       ${boardInner}
       <p class="soft" style="font-size:11.5px;margin:10px 0 0">Paste image links, jot notes, drop colour chips — then drag them into a layout. Grab the ◢ corner to resize. 🌸</p>
-    </div>`}
+    </section>`;
 
-    <div class="panel"><div class="card-head"><h2 style="font-size:17px">📚 Tools & tutorials</h2><span class="label">your own library</span></div>
+  const packNew=ART_PACK.filter(p=>!res.some(r=>r.url===p.url)).length;
+  const libraryCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📚 Tools & tutorials</h2>${packNew?`<button class="btn btn-pink" data-act="artResPack" ${RO?"disabled":""} title="adds the research-verified pose/anatomy/colour links — all free, all checked alive">🌟 add research pack (${packNew})</button>`:`<span class="label">your own library</span>`}</div>
       <div id="artResList" style="display:flex;flex-direction:column;gap:6px">${res.map(r=>`<div data-resid="${r.id}" style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);background:#fff;border-radius:8px"><span class="res-grip" data-resgrip title="drag to reorder">⠿</span><span>${resTags[r.tag]||"🔗"}</span><a href="${esc(r.url)}" target="_blank" rel="noopener" class="grow" style="font-size:13px;color:var(--lav-deep);text-decoration:none">${esc(r.title)} ↗</a><button class="ft-ic" data-act="artResDel" data-id="${r.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <input class="inp" id="artResTitle" placeholder="title" style="flex:1;min-width:120px"/>
@@ -3465,8 +3571,18 @@ async function renderArt(){
         <select class="inp" id="artResTag" style="width:auto">${Object.keys(resTags).map(k=>`<option value="${k}">${resTags[k]} ${k}</option>`).join("")}</select>
         <button class="btn btn-pink" data-act="artResAdd">＋ save</button>
       </div>
-    </div>
-  </div>`;
+    </section>`;
+
+  /* the studio is a modular grid now (like Home) — every card movable, resizable, hideable via ＋cards */
+  const ALABEL={hero:"Permission slip 🌸",challenges:"Challenges 🌱",prompt:"Draw-this prompt 🎲",minutes:"Art minutes ⏱️",timer:"Practice timer ⏲️",heads:"100-of-anything 💯",ideas:"Ideas dump 💡",inspo:"Inspiration vault ✨",emote:"Emote previewer 🟣",value:"Value checker ◐",palette:"Palette & ramps 🎨",specs:"Platform specs 📏",live2d:"Live2D cut prep 🧩",guides:"Guides & overlays 📐",board:"Mood board 🖼️",library:"Tools & tutorials 📚"};
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <h2 style="font-size:22px;font-family:var(--display)">🎨 Art & creativity</h2>
+      <span class="label">just for you · play is allowed 🌸</span>
+    </div>`+modularPage("art", ALABEL, [
+      ["hero",heroCard],["challenges",challengesCard],["prompt",promptCard],["minutes",minutesCard],["timer",timerCard],["heads",headsCard],
+      ["ideas",ideasCard],["inspo",inspoCard],["emote",emoteCard],["value",valueCard],["palette",paletteCard],["specs",specsCard],
+      ["live2d",live2dCard],["guides",guidesCard],["board",boardCard],["library",libraryCard],
+    ], {hero:12,guides:12,board:12,inspo:12,_:6});
 }
 
 /* practice timer — global interval so it survives re-renders; updates the DOM by id */
@@ -4071,7 +4187,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4327,6 +4443,24 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
+  /* === research-pack studio tools (2026-06-10) === */
+  if(act==="artEmotePick"){ const f=document.getElementById("emoteFile"); if(f)f.click(); return; }
+  if(act==="artEmoteClear"){ if(state.art)state.art.emote=null; render(); return; }
+  if(act==="artNotanPick"){ const f=document.getElementById("notanFile"); if(f)f.click(); return; }
+  if(act==="artNotanClear"){ if(state.art)state.art.notan=null; render(); return; }
+  if(act==="artNotanSteps"){ state.art=state.art||{}; state.art.notanSteps=parseInt(el.dataset.v)||3; render(); setTimeout(artNotanPaint,80); return; }
+  if(act==="artCountInc"){ const cur=((await DB.daily(SENTINEL)).artCount)||{label:"heads",n:0,goal:100}; const n2=(cur.n||0)+1;
+    await DB.saveDaily(SENTINEL,nn=>({...nn,artCount:{...(nn.artCount||{label:"heads",goal:100}),n:((nn.artCount||{}).n||0)+1}}));
+    if(n2===(cur.goal||100)) toast("💯 "+n2+" "+cur.label+"!! THE WHOLE CHALLENGE. absolute legend 🎉🐙"); else if(n2%25===0) toast("🎉 "+n2+" "+cur.label+" — that's a real pile of practice 💗"); else if(n2%10===0) toast("✨ "+n2+" down!");
+    render(); return; }
+  if(act==="artCountEdit"){ state.art=state.art||{}; state.art.countEdit=!state.art.countEdit; render(); return; }
+  if(act==="artCountSave"){ const lb=((document.getElementById("cnt_label")||{}).value||"heads").trim().slice(0,30)||"heads"; const gl=Math.max(5,Math.min(1000,parseInt((document.getElementById("cnt_goal")||{}).value)||100));
+    await DB.saveDaily(SENTINEL,nn=>({...nn,artCount:{...(nn.artCount||{n:0}),label:lb,goal:gl}})); if(state.art)state.art.countEdit=false; render(); return; }
+  if(act==="artCountReset"){ await DB.saveDaily(SENTINEL,nn=>({...nn,artCount:{...(nn.artCount||{label:"heads",goal:100}),n:0}})); if(state.art)state.art.countEdit=false; toast("fresh page — the practice you did still happened 💗"); render(); return; }
+  if(act==="l2dToggle"){ const k=el.dataset.k; const nm=((document.getElementById("l2dName")||{}).value||"").slice(0,80);
+    await DB.saveDaily(SENTINEL,nn=>{ const c2=nn.live2dCheck||{name:"",items:{}}; const it={...(c2.items||{})}; it[k]=!it[k]; return {...nn,live2dCheck:{name:nm||c2.name||"",items:it}}; }); render(); return; }
+  if(act==="l2dReset"){ await DB.saveDaily(SENTINEL,nn=>({...nn,live2dCheck:{name:"",items:{}}})); toast("🧩 fresh checklist for the next model"); render(); return; }
+  if(act==="artResPack"){ await DB.saveDaily(SENTINEL,nn=>{ const cur=(nn.artResources&&nn.artResources.length)?nn.artResources.slice():DEFAULT_ART_RES.slice(); const add=ART_PACK.filter(p=>!cur.some(r=>r.url===p.url)).map(p=>({id:"r"+uid().slice(0,8),...p})); return {...nn,artResources:[...cur,...add]}; }); toast("🌟 research pack added — every link verified alive + free 💗"); render(); return; }
   if(act==="goTab"){ if(el.dataset.tab&&TABS.some(t=>t[0]===el.dataset.tab)) setTab(el.dataset.tab); return; }
   if(act==="artStartNow"){ state.art=state.art||{}; if(!state.art.timer)state.art.timer={len:120,round:0,left:120}; state.art.focus=true; if(state.tab!=="art")state.tab="art"; toast("Yes! Go play. Future-you says thank you 💗"); artTimerStart(); return; }
   if(act==="artFocusEnter"){ state.art=state.art||{}; state.art.focus=true; render(); return; }
@@ -4741,6 +4875,8 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
   if(e.target&&!RO&&e.target.id==="bipNote"){ const v=e.target.value.slice(0,200); DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),bip:{...((n.care||{}).bip||{}),note:v}}})).catch(()=>{}); }
   if(e.target&&!RO&&e.target.dataset&&e.target.dataset.rhy){ const k=e.target.dataset.rhy, v=e.target.value; DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),rhythm:{...((n.care||{}).rhythm||{}),[k]:v}}})).catch(()=>{}); }
+  if(e.target&&e.target.id==="emoteFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.emote={data:rd.result,size:f.size,name:f.name}; render(); }; rd.readAsDataURL(f); }
+  if(e.target&&e.target.id==="notanFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.notan={data:rd.result}; render(); setTimeout(artNotanPaint,80); }; rd.readAsDataURL(f); }
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
   if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
   if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
@@ -4910,6 +5046,7 @@ async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
  if(state.tab==="clients"&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
+ if(state.tab==="art"&&state.art&&state.art.notan){ try{artNotanPaint();}catch(e){} }
  if(state.tab==="art"&&state.inspoPick&&!state._inspoScrolled){ state._inspoScrolled=true; const pk=document.querySelector("[data-inspopick]"); if(pk)try{pk.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){} }
  const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } if(state.tab==="art"&&state.art&&state.art.timer&&state.art.timer.on){ if(!_artInt)_artInt=setInterval(artTick,1000); artPaint(); } }
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
