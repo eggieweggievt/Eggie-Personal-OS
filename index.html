@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-10.17";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-11.18";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-11.18: YOUR LEARNING GOT DEEPER 🌙 — on top of chat-memory you now REFLECT across her whole OS (energy, streams, content, money, art, habits) and synthesize higher-level INSIGHTS she can't see day to day; they show in the 🧠 panel and feed every answer. Runs automatically about weekly, or instantly when she says 'reflect on my data' / asks what patterns you see (reflectNow action), or taps ✨ reflect in the 🧠 panel. You also LEARN PROACTIVELY now: capture durable preferences/people/routines/how-she-likes-things without being told, treat CORRECTIONS as top priority, and your context now includes EVERY part of her data (content pipeline, channel stats, invoices, games, weekly review, captures, joy jar, a 10-day daily series for correlations) plus a current VTuber growth playbook",
   "2026-06-10.17: Art studio reworked into modular cards (drag/resize/hide like Home) + research-pack tools: 🟣 emote previewer (real Twitch/Discord chat sizes + size-limit checks + transparency board), ◐ value checker (posterize your WIP to 2-6 values), 💯 100-of-anything counter (no deadlines), 🧩 Live2D cut-prep checklist (official rules), 📏 verified platform-spec card, 🪜 value ramps + cel-shade pairs in the palette, and a 🌟 one-tap research pack of 14 verified free links for the art library",
   "2026-06-10.16: YOUR BRAIN GOT A RESEARCH-GROUNDED UPGRADE 🧠 — you now have real long-term memory (a rolling summary, open loops, episode digests + auto-learned facts, built quietly after chats; health is NEVER auto-learned). She can see/edit/pause it all in the 🧠 panel (chat header) and chat incognito with 🕶. Replies are guaranteed-valid JSON (structured outputs), the big prompt is cached (~90% cheaper), adaptive thinking is on, and Settings has a model picker (Sonnet default · Haiku · Opus · Fable 5). Micro-tools (breakdown/tone/rephrase/compile + NEW ⏱ honest estimator in Tools) run on fast cheap Haiku",
   "2026-06-10.15: chatting with you (Eugene) got comfier — the message box is bigger, grows as she types, and Shift+Enter makes a new line (Enter still sends); same in the floating pet bubble",
@@ -3617,6 +3618,11 @@ async function memoryModal(){
     <div class="card-head"><h3 style="font-size:17px">🧠 Eugene's memory</h3><button class="btn" data-act="closeModal">✕</button></div>
     <p class="soft" style="font-size:12px;margin:0 0 10px">Everything Eugene carries between chats lives here — yours to edit, delete, or pause. Health stuff is never auto-learned; it stays in your Health logs. 💗</p>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer"><input type="checkbox" id="mem_pause" ${mem.paused?"checked":""} data-act="memPause"/><span style="font-size:13px;font-weight:700">⏸ pause memory</span><span class="soft" style="font-size:11.5px">— he keeps what he has but stops learning or using it</span></label>
+    <div style="background:linear-gradient(135deg,#fef2f9,#f3ecfb);border-radius:14px;padding:11px 13px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:18px">🌙</span><span style="font-size:13px;font-weight:700;flex:1">Reflect &amp; learn</span><button class="btn btn-pink" data-act="memReflect" ${mem.paused?"disabled":""}>✨ reflect on my data</button></div>
+      <p class="soft" style="font-size:11px;margin:6px 0 0">Eugene reads across your whole OS — energy, streams, content, money, art — and learns the higher-level patterns he can't see day to day.${mem.reflectedAt?` Last reflected ${esc(String(mem.reflectedAt).slice(0,10))}.`:" He hasn't reflected yet."}</p>
+    </div>
+    ${(mem.insights||[]).length?`<div class="label" style="margin:0 0 4px">💡 what he's learned about you <span class="muted">· patterns from reflection</span></div>${(mem.insights||[]).slice().reverse().map((ins,ri)=>{const i=(mem.insights||[]).length-1-ri; return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line)"><span>💡</span><span class="grow" style="font-size:12.5px">${esc(ins.text||ins)}</span><button class="ft-ic" data-act="memInsightDel" data-idx="${i}" style="color:var(--rose)">🗑</button></div>`;}).join("")}<div style="height:12px"></div>`:""}
     <div class="label" style="margin-bottom:4px">📖 rolling summary <span class="muted">· auto-updates after chats${mem.updatedAt?` · last ${esc(String(mem.updatedAt).slice(0,10))}`:""}</span></div>
     <textarea class="inp" id="mem_summary" rows="6" placeholder="(nothing yet — it builds itself as you two talk)">${esc(mem.summary||"")}</textarea>
     <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn btn-pink" data-act="memSumSave">💾 save my edits</button></div>
@@ -4514,6 +4520,8 @@ document.addEventListener("click",async(e)=>{
   if(act==="memLoopDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),openLoops:((n.eugeneMemory||{}).openLoops||[]).filter((_,i2)=>i2!==ix)}})); memoryModal(); return; }
   if(act==="memFactDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:(n.eugeneFacts||[]).filter((_,i2)=>i2!==ix)})); memoryModal(); return; }
   if(act==="memFactAdd"){ const v=((document.getElementById("mem_newfact")||{}).value||"").trim(); if(!v){toast("Write the fact first 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,eugeneFacts:[...(n.eugeneFacts||[]),{id:"f"+uid().slice(0,8),text:v.slice(0,240),source:"user",learnedAt:TODAY}].slice(-60)})); memoryModal(); return; }
+  if(act==="memInsightDel"){ const ix=parseInt(el.dataset.idx); await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),insights:((n.eugeneMemory||{}).insights||[]).filter((_,i2)=>i2!==ix)}})); memoryModal(); return; }
+  if(act==="memReflect"){ if(window.eugeneReflect)await window.eugeneReflect(true); return; }
   if(act==="estRun"){ const out=document.getElementById("estOut"); if(!out)return;
     if(DEMO||!SB){ out.innerHTML=`<div class="soft" style="font-size:12.5px">✨ runs once the analyze function is deployed + demo is off 🐙</div>`; return; }
     const tx=((document.getElementById("est_task")||{}).value||"").trim(); if(!tx){toast("What's the thing? 🌸");return;}
@@ -5675,6 +5683,9 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
         if(!a.fact) return "";
         await DB.saveDaily(SENTINEL,function(n){ var f=(n.eugeneFacts||[]).slice(); f.push({id:"f"+Date.now().toString(36),text:String(a.fact).slice(0,300),source:"user",learnedAt:TODAY}); if(f.length>60)f=f.slice(-60); return Object.assign({},n,{eugeneFacts:f}); });
         return "🧠 got it — I'll remember that";
+      case "reflectNow":
+        try{ if(window.eugeneReflect) window.eugeneReflect(false); }catch(e){}   // runs in the background; writes INSIGHTS to memory
+        return "🌙 reflecting across everything you've logged — give me a moment, then peek at the 🧠 memory panel to see the patterns I pulled ✨";
       case "requestChange":
         if(!a.title) return "";
         await DB.saveDaily(SENTINEL,function(n){ var r=(n.osChangeRequests||[]).slice(); r.push({id:uid(),date:TODAY,title:String(a.title).slice(0,200),detail:String(a.detail||"").slice(0,1200),area:String(a.area||"other").slice(0,20),status:"new"}); if(r.length>100)r=r.slice(-100); return Object.assign({},n,{osChangeRequests:r}); });
@@ -5762,6 +5773,22 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       }catch(e){ /* memory is a bonus, never an error she has to see */ }
     },25000);
   }
+  /* 🌙 reflection — the deep "dreaming" pass: reads her WHOLE OS and learns higher-level patterns.
+     manual=true shows progress + reopens the panel; manual=false runs quietly (weekly auto-learn). */
+  async function eugeneReflect(manual){
+    if(DEMO||!SB){ if(manual)toast("Reflection needs the analyze function deployed 🐙"); return; }
+    try{
+      var sentR=await DB.daily(SENTINEL);
+      if(sentR&&sentR.eugeneMemory&&sentR.eugeneMemory.paused){ if(manual)toast("Memory's paused — flip it back on to reflect 🌸"); return; }
+      if(manual)toast("🌙 Eugene is reflecting on everything you've logged…");
+      var r=await aiCall("reflect",{today:TODAY});
+      if(r&&r._needsBackend){ if(manual)toast("Deploy the analyze function first 🐙"); return; }
+      if(r&&r.error){ if(manual)toast(""+r.error); return; }
+      try{ delete DB._c.daily[SENTINEL]; }catch(e){}                 // server graft-wrote the sentinel — drop stale cache
+      if(manual){ toast("🧠✨ Eugene learned "+(((r&&r.insights)||[]).length)+" patterns about you"); memoryModal(); }
+    }catch(e){ if(manual)toast("reflection hiccup: "+(e.message||e)); }
+  }
+  window.eugeneReflect=eugeneReflect;
   window.eugeneAsk = function(q,img){ return runAgent(q,img); };   // lets the 🐙 Ask Eugene tab share the same brain (img = optional photo dataURL)
   var W=96,H=96, row=function(r){ return [0,1,2,3,4,5,6].map(function(i){return {x:i*W,y:r*H,w:W,h:H};}); };
   window.PET = PetWidget.init({
@@ -5817,6 +5844,15 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       var chips=day.energy?"":('<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap"><span style="font-size:11px;color:#9b8aa0;align-self:center">🥄 spoons?</span>'+eBtn("low","🌙","low")+eBtn("medium","🌤","med")+eBtn("high","🌞","high")+"</div>");
       showPetBubble("",day.energy?15000:30000,'<div style="font-size:12.5px">'+esc(txt)+'</div>'+chips);
       localStorage.setItem(key,TODAY);
+      /* 🌙 weekly auto-reflection — Eugene keeps learning on his own. Quietly runs at most once every 7 days
+         (skipped if memory paused/incognito) so his INSIGHTS stay current without her lifting a finger. */
+      try{
+        var mm=sent.eugeneMemory||{};
+        if(!DEMO&&SB&&!mm.paused&&!state.euIncognito){
+          var last=mm.reflectedAt?Date.parse(mm.reflectedAt):0;
+          if(!last || (Date.now()-last) > 7*864e5){ setTimeout(function(){ try{ window.eugeneReflect&&window.eugeneReflect(false); }catch(e){} }, 12000); }
+        }
+      }catch(e){}
     }catch(e){}
   }
   setTimeout(eugeneDailyBrief, 6500);
