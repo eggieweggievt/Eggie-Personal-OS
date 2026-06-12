@@ -840,11 +840,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.31";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.32";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.32: HOME NOW HAS THE FULL MIFU MOCK-UP SPINE in BOTH modes 🏠 — welcome banner (avatar, live clock, mode title), one-tap TODAY'S CHECK-INS (health: meds AM/PM, weighed-in, journaled, moved, water, slept well · creator: streamed, video, short, made art, emails, sponsor work — some tick themselves from her real logs), a warm greeting header, ✨ EGG JEAN NOTICED (client-side gentle observations — never grades), 🌸 SUGGESTED FOCUS (tappable next steps + 'You've got this, Eggie!'), and 💗 health snapshot card (health mode). Health OS now keeps its OWN home layout (homeH) separate from Creator's — arrange each independently",
   "2026-06-12.31: HOME GOT THE MIFU TREATMENT 🏠 — new mix-and-match cards: 🐙 octopus profile (energy taps), 🎮 gacha dailies (her game list, one-tap checks + week bars), ✅ daily habits regrouped by energy tier (🥄/🌤/🌞 — low-spoon days can stop at 🥄), 💡 content opportunities (upcoming game events → one-tap content ideas), 🧳 event prep (auto-appears for calendar events ≤21d, checklist + seed basics), ⚖️ weight trend mini. Retired unused cards (creator/session/journal/ship/sponsors/pipeline). Also: Ask Egg Jean is pinned to the END of the tab bar in BOTH modes, and the tab-switch double-refresh flash is fixed (grids lay out before paint + renders can't stack)",
   "2026-06-12.30: THE OS HAS TWO MODES NOW — tap the logo to swap between 🎬 Creator OS and 💗 Health OS (choice remembered; your navigate action flips modes automatically). Health mode gained two tabs ported from the Mifu build: 🍽 Food (photo/words → friendly AI macro estimate, protein+fibre bars, ⭐ favourites, water, week view — zero diet culture, missed meals are info not grades) and 🏃 Fitness (trend-first weigh-ins with a rolling 4-entry average — never react to one morning, treadmill/walk/stretch logs, 🌟 non-scale victories to celebrate LOUDLY, week dots not streaks, 🧭 journey card). New actions: logFood, logWeight, logWorkout, addNSV. Withings scale auto-sync ports in when her scale arrives",
   "2026-06-12.29: each client now has a FULL calendar on their page 📅 — Week + Month views, a recurring 🗓️ stream schedule, rich events (title, time, multi-day end date, colour, note), and drag-to-move events between days in Month view — just like her own calendar, scoped to that client; needs due show as 🔴. Add events for a client via addClientEvent, and their upcoming dates show in your context per client",
@@ -1220,6 +1221,108 @@ async function renderCore(){
     view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
+/* === Mifu mock-up structure (2026-06-12): welcome banner · check-ins · noticed · suggested focus, per mode === */
+function homeBanner(){
+  const h=OS_MODE==="health";
+  return `<section class="panel" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:linear-gradient(135deg,#fff5fa,#f4effc);margin-bottom:14px">
+    <img src="favicon.png" alt="" style="width:74px;height:74px;border-radius:999px;border:3px solid #f3d9ec;flex:0 0 auto"/>
+    <div class="grow" style="min-width:170px">
+      <div class="label">Welcome to</div>
+      <div style="font-family:var(--display);font-size:26px;line-height:1.15">Eggie's ${h?"Health OS 💗":"Creator OS 🎬"}</div>
+      <div class="soft" style="font-size:12.5px;margin-top:2px">Egg Jean is here to ${h?"support":"help"} you. 💜</div>
+    </div>
+    <div style="text-align:right">
+      <div id="homeClock" style="font-family:var(--display);font-size:38px;line-height:1">${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}</div>
+      <div class="label" style="margin-top:2px">${new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}</div>
+    </div></section>`;
+}
+function homeCheckins(day,sent){
+  const ck=day.checkins||{};
+  const water=((day.health||{}).water||0)>0;
+  const weighed=(sent.weightLog||[]).some(w=>w.date===TODAY);
+  const moved=(((day.fitness||{}).sessions)||[]).length>0;
+  const art=(sent.artLog||[]).some(e2=>e2.date===TODAY&&Number(e2.min)>0);
+  const T=(key,icon,label,on,act2,tab)=>`<button class="soft-card" data-act="${act2||"checkin"}" ${act2?"":`data-id="${key}"`} ${tab?`data-tab="${tab}"`:""} ${RO&&!tab?"disabled":""} style="text-align:center;cursor:pointer;font-family:inherit;border:1.5px solid ${on?"#eb9cc3":"var(--line)"};${on?"background:#fff0f7;":""}padding:12px 6px">
+      <div style="font-size:21px">${icon}</div><div style="font-size:11.5px;font-weight:700;margin-top:4px;color:${on?"var(--pink-deep)":"var(--ink)"}">${label}</div>${on?`<div style="font-size:10px;color:var(--pink-deep)">✓ done</div>`:""}</button>`;
+  const tiles=OS_MODE==="health"
+    ? [T("medsAM","💊","Meds AM",ck.medsAM),T("medsPM","💊","Meds PM",ck.medsPM),
+       T("weighed","⚖️","Weighed in",weighed,weighed?null:"goTab",weighed?null:"fitness"),
+       T("journaled","📓","Journaled",ck.journaled),
+       T("moved","🏃","Moved a bit",moved,moved?null:"goTab",moved?null:"fitness"),
+       T("water","💧","Drank water",water,water?null:"goTab",water?null:"food"),
+       T("sleptWell","😴","Slept well",ck.sleptWell)]
+    : [T("streamed","🔴","Streamed",!!day.streamDay),T("upVideo","📼","Uploaded video",ck.upVideo),T("upShort","🎬","Uploaded short",ck.upShort),
+       T("madeArt","🎨","Made art",art||ck.madeArt,art?"goTab":null,art?"art":null),
+       T("emails","✉️","Replied to emails",ck.emails),T("sponsors","🤝","Sponsor work",ck.sponsors)];
+  return `<section class="panel" style="margin-bottom:14px"><div class="label" style="margin-bottom:8px">today's check-ins</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px">${tiles.join("")}</div>
+    <p class="soft" style="font-size:11px;text-align:center;margin:8px 0 0">✨ tap one when it happens — some tick themselves from your logs. never homework 💗</p></section>`;
+}
+/* gentle client-side noticings — observations, never grades (no AI call: instant + free) */
+function homeNotices(mode,day,sent,content,rows7){
+  const out=[]; const by={}; (rows7||[]).forEach(r=>by[r.date]=r.notes);
+  const dayN=ds=>ds===TODAY?day:(by[ds]||{});
+  const lastDays=n=>{ const a=[]; for(let i=0;i<n;i++){ const d2=new Date(TODAY+"T00:00"); d2.setDate(d2.getDate()-i); a.push(d2.toLocaleDateString("en-CA")); } return a; };
+  if(mode==="health"){
+    const T2=foodTargets(sent);
+    const under=lastDays(2).filter(ds=>{ const f=(dayN(ds).food)||[]; return f.length&&f.reduce((a,x)=>a+(+x.protein||0),0)<T2.protein; }).length;
+    if(under>=2) out.push({i:"🍳",t:"protein's been shy of target a couple of days — a snacky boost today?",tab:"food"});
+    const wl=(sent.weightLog||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+    if(wl.length>=2){ const d2=Math.round((wl[wl.length-1].w-wl[wl.length-2].w)*10)/10; if(d2!==0) out.push({i:"⚖️",t:`weight drifted ${d2>0?"up":"down"} ${Math.abs(d2)} since last weigh-in — bodies just do that, the trend is what counts`,tab:"fitness"}); }
+    const slp=lastDays(3).map(ds=>+(dayN(ds).health||{}).sleepH||0).filter(Boolean);
+    if(slp.length>=2&&slp.every(s2=>s2<7)) out.push({i:"🌙",t:"sleep's been under 7h a few nights — extra softness today",tab:"care"});
+    const movedDays=lastDays(4).filter(ds=>((dayN(ds).fitness||{}).sessions||[]).length).length;
+    if(!movedDays) out.push({i:"🌱",t:"no movement logged in a few days — a 5-minute stretch absolutely counts (and rest counts too)",tab:"fitness"});
+    const water=(day.health||{}).water||0; const hh=new Date().getHours();
+    if(hh>=14&&water<3) out.push({i:"💧",t:`water's at ${water} cup${water===1?"":"s"} — little sips, POTS bodies love them`,tab:"food"});
+    const urges=((day.health||{}).bfrb||[]).filter(b=>b.k==="urge").length; if(urges) out.push({i:"🌟",t:`you rode out ${urges} picking urge${urges===1?"":"s"} today — that's the hard skill, celebrate it`});
+  } else {
+    const art=(sent.artLog||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+    const lastArt=art.length?Math.floor((new Date(TODAY+"T00:00")-new Date(art[art.length-1].date+"T00:00"))/86400000):null;
+    if(lastArt!=null&&lastArt>=7) out.push({i:"🎨",t:`it's been ${lastArt} days since you drew just-for-you — the studio misses you (zero pressure)`,tab:"art"});
+    else if(lastArt!=null&&lastArt<=1) out.push({i:"🎨",t:"you made art recently — past-you says thanks 💗"});
+    const streamed=lastDays(7).filter(ds=>dayN(ds).streamDay).length;
+    if(streamed>=2) out.push({i:"💜",t:`you've streamed ${streamed} day${streamed===1?"":"s"} this week!`});
+    const pub=(content||[]).filter(c=>!c.parent_id&&c.published_at).map(c=>String(c.published_at).slice(0,10)).sort();
+    if(pub.length){ const dgo=Math.floor((new Date(TODAY+"T00:00")-new Date(pub[pub.length-1]+"T00:00"))/86400000); if(dgo>=7) out.push({i:"📼",t:`last upload was ${dgo} days ago — just a flag, not a deadline`,tab:"content"}); }
+    const unread=(sent.inbox||[]).filter(m=>!m.read).length;
+    if(unread) out.push({i:"📨",t:`${unread} client note${unread===1?"":"s"} waiting in the inbox`,tab:"clients"});
+    const odInv=(sent.invoices||[]).filter(iv=>iv.status!=="paid"&&iv.due&&iv.due<TODAY).length;
+    if(odInv) out.push({i:"🧾",t:`an invoice is past due — a 2-minute check might close the loop`,tab:"income"});
+  }
+  return out.slice(0,5);
+}
+function cardNoticed(mode,day,sent,content,rows7){
+  const n=homeNotices(mode,day,sent,content,rows7);
+  return `<section class="panel"><div class="card-head"><span class="label">✨ Egg Jean noticed</span></div>
+    ${n.length?n.map(x=>`<div style="display:flex;gap:9px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line)"><span>${x.i}</span><span class="grow" style="font-size:12.5px">${esc(x.t)}</span>${x.tab?`<button class="btn" data-act="goTab" data-tab="${x.tab}" style="padding:2px 9px">→</button>`:""}</div>`).join("")
+      :`<p class="soft" style="font-size:12.5px;margin:0">nothing to flag — today's just yours 🌸</p>`}
+    <p class="soft" style="font-size:10.5px;margin:8px 0 0">observations, never grades 💗</p></section>`;
+}
+function cardFocus(mode,day,sent,content,rows7){
+  const n=homeNotices(mode,day,sent,content,rows7).filter(x=>x.tab).slice(0,3);
+  return `<section class="panel" style="background:linear-gradient(135deg,#fef2f9,#f4effc)"><div class="card-head"><span class="label">🌸 suggested focus</span></div>
+    ${n.length?n.map(x=>`<button class="hbtn" data-act="goTab" data-tab="${x.tab}" style="display:flex;gap:9px;align-items:center;width:100%;margin-top:5px;text-align:left"><span>${x.i}</span><span class="grow" style="font-size:12.5px">${esc(x.t)}</span><span style="color:var(--pink-deep)">›</span></button>`).join("")
+      :`<p class="soft" style="font-size:12.5px;margin:0">no suggestions — follow your nose today 🐙</p>`}
+    <p style="text-align:center;font-family:var(--display);font-size:14px;margin:12px 0 0;color:var(--pink-deep)">You've got this, Eggie! ✨</p></section>`;
+}
+function cardHealthSnap(day,sent){
+  const h=day.health||{}; const T2=foodTargets(sent);
+  const fd=(day.food||[]); const prot=Math.round(fd.reduce((a,x)=>a+(+x.protein||0),0));
+  const water=h.water||0, waterT=Math.max(1,(sent.healthTargets||{}).water||8);
+  const mv=(((day.fitness||{}).sessions)||[]).reduce((a,x)=>a+(+x.min||0),0);
+  const wl=(sent.weightLog||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+  const wd=wl.length>=2?Math.round((wl[wl.length-1].w-wl[wl.length-2].w)*10)/10:null;
+  const unit=(sent.appConfig||{}).weightUnit||"lb";
+  const bar=(label,v,t,suffix,col)=>`<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)"><span style="width:96px;font-size:12px" class="soft">${label}</span><span style="font-size:12.5px;font-weight:700;min-width:74px">${v}${suffix?` / ${t}${suffix}`:""}</span><div class="grow" style="height:8px;border-radius:99px;background:#f3eefb;overflow:hidden"><span style="display:block;height:100%;border-radius:99px;width:${Math.max(0,Math.min(100,Math.round(v/(t||1)*100)))}%;background:${col}"></span></div></div>`;
+  return `<section class="panel"><div class="card-head"><span class="label">💗 today's health snapshot</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)"><span style="width:96px;font-size:12px" class="soft">weight trend</span><span style="font-size:12.5px;font-weight:700">${wd==null?"—":(wd===0?"steady":(wd>0?"up ":"down ")+Math.abs(wd)+" "+unit)}</span><span class="soft" style="font-size:11px">vs last weigh-in · trend > any one day</span></div>
+    ${bar("protein",prot,T2.protein,"g","linear-gradient(90deg,#ec7faf,#a98fe0)")}
+    ${bar("water",water,waterT," cups","linear-gradient(90deg,#9fc7f0,#7fc8a9)")}
+    ${bar("movement",mv,30," min","linear-gradient(90deg,#a98fe0,#9fc7f0)")}
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0"><span style="width:96px;font-size:12px" class="soft">sleep</span><span style="font-size:12.5px;font-weight:700">${h.sleepH?h.sleepH+"h":"—"}</span><span class="soft" style="font-size:11px">${h.sleepH?(h.sleepH>=7?"lovely 🌙":"a gentle day then 💗"):"log it on 💗 Health"}</span></div>
+    <button class="btn" data-act="goTab" data-tab="health" style="margin-top:8px">view full health stats →</button></section>`;
+}
 /* === Mifu-style home cards (2026-06-12 home rework) === */
 function cardProfile(day){
   const energy=day.energy||"";
@@ -1304,12 +1407,14 @@ async function renderHome(){
     /* 2026-06-12 Mifu-style additions (legacy creator/session/journal/ship/sponsors/pipeline cards retired) */
     profile:()=>cardProfile(day), gacha:()=>cardGacha(day,goals,rows7), opportunities:()=>cardOpportunities(goals),
     weightMini:()=>cardWeightMini(goals), eventPrep:()=>cardEventPrep(goals),
+    noticed:()=>cardNoticed(OS_MODE,day,goals,content,rows7), focus:()=>cardFocus(OS_MODE,day,goals,content,rows7),
+    healthSnap:()=>cardHealthSnap(day,goals),
   };
   /* "home3" — the hub-as-it-is-today layout: body & brain FRONT AND CENTER, then today's plate,
      then the creative/work cards. Her saved home2 customizations stay untouched under their own key;
      legacy cards remain available via ＋cards. */
   if(!(goals.layouts&&goals.layouts.home3)){
-    const seed={order:["wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals"],size:{},min:{},hidden:{channel:true}};
+    const seed={order:["noticed","focus","wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals"],size:{},min:{},hidden:{channel:true},mifu1:true};
     goals.layouts=Object.assign({},goals.layouts||{},{home3:seed});
     DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home3:seed})})).catch(()=>{});
     SENT=goals;
@@ -1319,9 +1424,23 @@ async function renderHome(){
     DB.saveDaily(SENTINEL,n=>{ const ls=Object.assign({},n.layouts||{}); const cur=Object.assign({hidden:{}},ls.home3||{}); cur.mifu1=true; cur.hidden=Object.assign({},cur.hidden); delete cur.hidden.habits; delete cur.hidden.schedule; ls.home3=cur; return {...n,layouts:ls}; }).catch(()=>{});
     SENT=goals;
   }
-  const DEF=["wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals","channel"];
+  /* 💗 Health OS gets its OWN home layout (separate order/hidden from the creator home) */
+  if(OS_MODE==="health" && !(goals.layouts&&goals.layouts.homeH)){
+    const seedH={order:["healthSnap","noticed","focus","wellbeing","habits","weightMini","eventPrep","plate","braindump","goals"],size:{},min:{},hidden:{}};
+    goals.layouts=Object.assign({},goals.layouts||{},{homeH:seedH});
+    DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{homeH:seedH})})).catch(()=>{});
+    SENT=goals;
+  }
+  const HKEY=OS_MODE==="health"?"homeH":"home3";
+  const DEF=OS_MODE==="health"
+    ? ["healthSnap","noticed","focus","wellbeing","habits","weightMini","eventPrep","profile","today","plate","braindump","goals"]
+    : ["noticed","focus","wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals","channel"];
   const focusChip=`<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button class="chip" data-act="setFocus" title="show only today — exit any time">🌙 just today</button></div>`;
-  return focusChip+modularPage("home3", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {wellbeing:8,today:8,plate:8,mission:8,profile:4,gacha:4,habits:4,opportunities:4,eventPrep:4,weightMini:4,clientsToday:4,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
+  /* the Mifu mock-up spine: welcome banner → check-ins → greeting → the mix-and-match grid */
+  const spine=homeBanner()+homeCheckins(day,goals)
+    +`<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 10px"><h2 style="font-size:23px;font-family:var(--display)">🐙 ${greeting()}, Eggie!</h2><span class="label">${new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} · today at a glance</span></div>`;
+  const HLAB=Object.fromEntries(DEF.map(k=>[k,WLABEL[k]||k]));   // ＋cards only offers this mode's cards
+  return spine+focusChip+modularPage(HKEY, HLAB, DEF.map(k=>[k,WIDGETS[k]()]), {wellbeing:8,today:8,plate:8,mission:8,noticed:6,focus:6,healthSnap:6,profile:4,gacha:4,habits:4,opportunities:4,eventPrep:4,weightMini:4,clientsToday:4,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
 }
 /* ===== generic modular page: any page = a reorderable/resizable grid of keyed boxes ===== */
 function layoutFor(tab){ const L=(SENT.layouts&&SENT.layouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
@@ -1361,7 +1480,7 @@ function layoutHome(){
     if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
   });
 }
-const WLABEL={wellbeing:"Body & brain 💗",profile:"Octopus card 🐙",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",habits:"Daily habits ✅",gacha:"Gacha dailies 🎮",mission:"Content mission control",opportunities:"Content opportunities 💡",artcorner:"Art corner",money:"Money pulse",goals:"Goals",channel:"Channel pulse",schedule:"Stream schedule",eventPrep:"Event prep 🧳",weightMini:"Weight trend ⚖️",braindump:"Brain dump"};
+const WLABEL={wellbeing:"Body & brain 💗",profile:"Octopus card 🐙",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",habits:"Daily habits ✅",gacha:"Gacha dailies 🎮",mission:"Content mission control",opportunities:"Content opportunities 💡",artcorner:"Art corner",money:"Money pulse",goals:"Goals",channel:"Channel pulse",schedule:"Stream schedule",eventPrep:"Event prep 🧳",weightMini:"Weight trend ⚖️",braindump:"Brain dump",noticed:"Egg Jean noticed ✨",focus:"Suggested focus 🌸",healthSnap:"Health snapshot 💗"};
 /* merge-update one page's layout block on the sentinel row */
 async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.layouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,layouts}; }); }
 let _mcTab="home", _mcLabels=WLABEL;
@@ -4546,7 +4665,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent","checkin"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4826,6 +4945,9 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
   /* 🏠 Mifu-style home widgets */
+  if(act==="checkin"){ if(id==="streamed"){ await DB.saveDaily(TODAY,n=>({...n,streamDay:!n.streamDay})); }
+    else { await DB.saveDaily(TODAY,n=>{ const ck={...(n.checkins||{})}; ck[id]=!ck[id]; return {...n,checkins:ck}; }); }
+    render(); return; }
   if(act==="gachaToggle"){ await DB.saveDaily(TODAY,n=>{ const g={...(n.gacha||{})}; g[id]=!g[id]; return {...n,gacha:g}; }); render(); return; }
   if(act==="gachaEdit"){ state.gachaEdit=!state.gachaEdit; render(); return; }
   if(act==="gachaAdd"){ const v=((document.getElementById("gachaNew")||{}).value||"").trim(); if(!v){toast("which game? 🌸");return;}
@@ -5504,7 +5626,7 @@ function postRender(){ const c=document.getElementById("clock"); if(c)c.textCont
  if(state.tab==="art"&&state.inspoPick&&!state._inspoScrolled){ state._inspoScrolled=true; const pk=document.querySelector("[data-inspopick]"); if(pk)try{pk.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){} }
  const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } if(state.tab==="art"&&state.art&&state.art.timer&&state.art.timer.on){ if(!_artInt)_artInt=setInterval(artTick,1000); artPaint(); } }
 addEventListener("resize",()=>{ if(document.querySelector(".grid-modular")){ clearTimeout(window._lhT); window._lhT=setTimeout(()=>{try{layoutHome();}catch(e){}},150); } });
-setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
+setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); const hc=document.getElementById("homeClock");if(hc)hc.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});},1000);
 applySettings();
 authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lockdown SQL is run)
 /* ===== glowing sakura petal cursor trail (pink + white) ===== */
