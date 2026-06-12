@@ -872,11 +872,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.34";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.35";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.35: 🌸 Sakura mode is now HERMETIC — in that mode the bar shows ONLY the Clients hub (no Home/Planner/Calendar/you — none of her personal anything), for her AND managers. Cycling to 🌸 lands straight on Clients; leaving it returns to the tab's own mode",
   "2026-06-12.34: 🌸 SAKURA IS A TEAM SPACE NOW — a third mode (logo cycles 🎬 → 💗 → 🌸) holding the client hub, and OTHER MANAGERS can sign in with their own accounts: they land locked to the Clients tab and can never see her health/money/memory (RLS + UI both enforce it; you don't answer managers either). Clients+inbox moved to a shared team row via the one-time '🌸 move it' banner; the Discord /sakura command, relay, and your own client knowledge all follow it automatically",
   "2026-06-12.33: double-refresh hunted harder — repaints are now IDEMPOTENT: if a stray duplicate render produces identical content, the screen doesn't repaint at all (no flicker, no scroll jump). A quiet [render] line in the browser console traces any survivors",
   "2026-06-12.32: HOME NOW HAS THE FULL MIFU MOCK-UP SPINE in BOTH modes 🏠 — welcome banner (avatar, live clock, mode title), one-tap TODAY'S CHECK-INS (health: meds AM/PM, weighed-in, journaled, moved, water, slept well · creator: streamed, video, short, made art, emails, sponsor work — some tick themselves from her real logs), a warm greeting header, ✨ EGG JEAN NOTICED (client-side gentle observations — never grades), 🌸 SUGGESTED FOCUS (tappable next steps + 'You've got this, Eggie!'), and 💗 health snapshot card (health mode). Health OS now keeps its OWN home layout (homeH) separate from Creator's — arrange each independently",
@@ -916,7 +917,11 @@ function setOsMode(m){ OS_MODE=MODES.includes(m)?m:"creator"; try{ localStorage.
 function modeFor(t){ return HEALTH_ONLY.includes(t)?"health":SAKURA_ONLY.includes(t)?"sakura":CREATOR_ONLY.includes(t)?"creator":null; }
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
-function setTab(t){ if(IS_MGR){ state.tab="clients"; render(); return; } const m=modeFor(t); if(m&&m!==OS_MODE) setOsMode(m); /* navigating to a tab from another mode flips the mode with you */ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
+function setTab(t){ if(IS_MGR){ state.tab="clients"; render(); return; }
+  /* Sakura is hermetic: leaving it for ANY non-client tab returns to that tab's own mode (shared tabs → creator) */
+  if(OS_MODE==="sakura"&&t!=="clients") setOsMode(modeFor(t)||"creator");
+  else { const m=modeFor(t); if(m&&m!==OS_MODE) setOsMode(m); }
+  state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
 document.addEventListener("pointerdown",e=>{ if(state.moreOpen && !e.target.closest("#nav")){ state.moreOpen=false; render(); } },true);
 /* pull fresh server-side changes (inbox, client reminders) when you come back to the tab */
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && !DEMO && SB){ try{ delete DB._c.daily[SENTINEL]; }catch(e){} try{render();}catch(e){} } });
@@ -1184,10 +1189,11 @@ async function renderCore(){
   if(IS_MGR&&OS_MODE!=="sakura") setOsMode("sakura");
   try{ document.body.dataset.osmode=OS_MODE; }catch(e){}
   const _mp=document.getElementById("modePill"); if(_mp) _mp.textContent=IS_MGR?"🌸 team":OS_MODE==="health"?"💗 health":OS_MODE==="sakura"?"🌸 sakura":"🎬 creator";
-  const _hideByMode=OS_MODE==="health"?[...CREATOR_ONLY,...SAKURA_ONLY]:OS_MODE==="sakura"?[...CREATOR_ONLY,...HEALTH_ONLY]:[...HEALTH_ONLY,...SAKURA_ONLY];
-  let _vtabs=_tabs.filter(([t])=>!_hideByMode.includes(t));
-  if(IS_MGR) _vtabs=_tabs.filter(([t])=>t==="clients");
-  const MORE_TABS=IS_MGR?[]:OS_MODE==="creator"?["optimize","script","review","settings"]:["settings"];
+  /* 🌸 Sakura is HERMETIC: clients only — none of her personal tabs exist there (for her OR managers) */
+  if(OS_MODE==="sakura"&&state.tab!=="clients") state.tab="clients";
+  const _hideByMode=OS_MODE==="health"?[...CREATOR_ONLY,...SAKURA_ONLY]:[...HEALTH_ONLY,...SAKURA_ONLY];
+  let _vtabs=(OS_MODE==="sakura"||IS_MGR)?_tabs.filter(([t])=>t==="clients"):_tabs.filter(([t])=>!_hideByMode.includes(t));
+  const MORE_TABS=(IS_MGR||OS_MODE==="sakura")?[]:OS_MODE==="creator"?["optimize","script","review","settings"]:["settings"];
   const _egg=_vtabs.find(([t])=>t==="eugene");   // Egg Jean rides at the END of the bar in BOTH modes
   const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t)&&t!=="eugene");
   const more=_vtabs.filter(([t])=>MORE_TABS.includes(t));
@@ -1277,13 +1283,13 @@ async function renderCore(){
 /* ===================== HOME ===================== */
 /* === Mifu mock-up structure (2026-06-12): welcome banner · check-ins · noticed · suggested focus, per mode === */
 function homeBanner(){
-  const h=OS_MODE==="health", sk=OS_MODE==="sakura";
+  const h=OS_MODE==="health";
   return `<section class="panel" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:linear-gradient(135deg,#fff5fa,#f4effc);margin-bottom:14px">
     <img src="favicon.png" alt="" style="width:74px;height:74px;border-radius:999px;border:3px solid #f3d9ec;flex:0 0 auto"/>
     <div class="grow" style="min-width:170px">
       <div class="label">Welcome to</div>
-      <div style="font-family:var(--display);font-size:26px;line-height:1.15">Eggie's ${sk?"Sakura OS 🌸":h?"Health OS 💗":"Creator OS 🎬"}</div>
-      <div class="soft" style="font-size:12.5px;margin-top:2px">${sk?"The management hub — your talent, taken care of. 🌸":"Egg Jean is here to "+(h?"support":"help")+" you. 💜"}</div>
+      <div style="font-family:var(--display);font-size:26px;line-height:1.15">Eggie's ${h?"Health OS 💗":"Creator OS 🎬"}</div>
+      <div class="soft" style="font-size:12.5px;margin-top:2px">Egg Jean is here to ${h?"support":"help"} you. 💜</div>
     </div>
     <div style="text-align:right">
       <div id="homeClock" style="font-family:var(--display);font-size:38px;line-height:1">${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}</div>
@@ -1291,7 +1297,6 @@ function homeBanner(){
     </div></section>`;
 }
 function homeCheckins(day,sent){
-  if(OS_MODE==="sakura") return "";          // the team hub keeps its home simple
   const ck=day.checkins||{};
   const water=((day.health||{}).water||0)>0;
   const weighed=(sent.weightLog||[]).some(w=>w.date===TODAY);
@@ -1486,17 +1491,10 @@ async function renderHome(){
     DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{homeH:seedH})})).catch(()=>{});
     SENT=goals;
   }
-  if(OS_MODE==="sakura" && !(goals.layouts&&goals.layouts.homeS)){
-    const seedS={order:["clientsToday","noticed","focus","today","plate","braindump","goals"],size:{},min:{},hidden:{}};
-    goals.layouts=Object.assign({},goals.layouts||{},{homeS:seedS});
-    DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{homeS:seedS})})).catch(()=>{});
-    SENT=goals;
-  }
-  const HKEY=OS_MODE==="health"?"homeH":OS_MODE==="sakura"?"homeS":"home3";
+  /* (Sakura mode has NO home — it's hermetic, clients only. Home exists in creator + health.) */
+  const HKEY=OS_MODE==="health"?"homeH":"home3";
   const DEF=OS_MODE==="health"
     ? ["healthSnap","noticed","focus","wellbeing","habits","weightMini","eventPrep","profile","today","plate","braindump","goals"]
-    : OS_MODE==="sakura"
-    ? ["clientsToday","noticed","focus","profile","today","plate","braindump","goals"]
     : ["noticed","focus","wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals","channel"];
   const focusChip=`<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button class="chip" data-act="setFocus" title="show only today — exit any time">🌙 just today</button></div>`;
   /* the Mifu mock-up spine: welcome banner → check-ins → greeting → the mix-and-match grid */
@@ -5036,7 +5034,8 @@ document.addEventListener("click",async(e)=>{
     toast("💡 parked in the pipeline as an idea 🌸"); render(); return; }
   if(act==="osMode"){ if(IS_MGR)return;
     setOsMode(MODES[(MODES.indexOf(OS_MODE)+1)%MODES.length]);   // 🎬 → 💗 → 🌸 → 🎬
-    const m2=modeFor(state.tab); if(m2&&m2!==OS_MODE) state.tab=OS_MODE==="health"?"health":OS_MODE==="sakura"?"clients":"home";
+    if(OS_MODE==="sakura") state.tab="clients";                  // sakura is hermetic — it IS the clients hub
+    else { const m2=modeFor(state.tab); if((m2&&m2!==OS_MODE)||state.tab==="clients") state.tab=OS_MODE==="health"?"health":"home"; }
     try{ if(localStorage.getItem("eggie-calm")!=="1"){ const v=document.getElementById("view"); if(v){ v.classList.remove("mode-swap"); void v.offsetWidth; v.classList.add("mode-swap"); } } }catch(e){}
     toast(OS_MODE==="health"?"💗 Health OS — body & brain first":OS_MODE==="sakura"?"🌸 Sakura OS — the management hub":"🎬 Creator OS — let's make things"); render(); return; }
   /* 🍽 food */
