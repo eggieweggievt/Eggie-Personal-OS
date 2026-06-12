@@ -901,11 +901,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.43";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.44";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.44: the 👥 Your managers card on Clients now always shows for Eggie — with honest empty states ('no requests yet' vs 'run the signup SQL first') instead of hiding until the first request",
   "2026-06-12.43: client calendar tidied — capped width (no more stretching across huge screens), denser month cells, and ✓ all / ✕ none buttons beside the client chips",
   "2026-06-12.42: 🌸 SAKURA GREW A FULL SUITE — the mode now has THREE tabs: Clients, 🗒 Tasks (every client's needs in one planner — list grouped by client/due/priority or a board, filters for client/priority/due/search, quick-add with priority), and 📅 Calendar (everyone's events, recurring streams and need-dues on one week/month view — per-client show/hide chips, type toggles, drag-to-move, tap-a-day picks the client). PLUS managers now SELF-SIGNUP: 'request an account' on the sign-in page → email confirm → they wait in a lobby until Eggie taps ✓ approve on the Clients tab's 👥 card (pause/remove any time; unapproved accounts can read nothing)",
   "2026-06-12.41: tab switches are now INSTANT — the entrance fade was the last ingredient of the 'double refresh' (old page lingers → blinks out → fades in from blank = looks like loading twice). No animation at all now, exactly like her OC-Hub. Combined with .40's same-frame bar+view, a switch is one clean cut",
@@ -3556,14 +3557,19 @@ async function renderClients(){
   const CLABEL={three:"Today's three ☀️",inbox:"Inbox 📨",pulse:"At a glance 🌸",roster:"Roster & needs 👥"};
   /* 🌸 one-time: move the client hub into the shared team row so manager accounts can work it */
   const migBanner=(!DEMO&&SB&&!IS_MGR&&!sent._sakMigrated&&!RO)?`<div class="panel" style="background:linear-gradient(135deg,#fff0f7,#ffe9f3);margin-bottom:14px"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="font-size:22px">🌸</span><div class="grow" style="min-width:200px"><b style="font-size:13.5px">Make Sakura a team space</b><div class="soft" style="font-size:12px;margin-top:2px">Moves clients + inbox to a shared row so manager accounts can sign in and work the hub — they'll never see anything else of yours. One tap, one time. (Then run the team SQL + add their accounts.)</div></div><button class="btn btn-pink" data-act="sakMigrate">🌸 move it</button></div></div>`:"";
-  /* 👥 manager approvals (Eggie only): self-signed-up managers wait here for her ✓ */
+  /* 👥 manager approvals (Eggie only): self-signed-up managers wait here for her ✓ — the card is
+     ALWAYS visible to her so she knows where approvals will land (with honest empty states). */
   let teamPanel="";
-  if(!IS_MGR&&!DEMO&&SB&&SESSION){ try{
-    const {data:mgrs}=await SB.from("managers").select("email,approved,requested_at").order("requested_at",{ascending:true});
-    if(mgrs&&mgrs.length) teamPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👥 Your managers</h2><span class="label">${mgrs.filter(m=>m.approved).length} active · ${mgrs.filter(m=>!m.approved).length} waiting</span></div>
-      ${mgrs.map(m=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(m.email)}</span>${m.approved?`<span class="pill pill-mint">✓ active</span><button class="btn" data-act="mgrRevoke" data-id="${esc(m.email)}" style="padding:2px 9px">⏸ pause</button>`:`<span class="pill pill-peach">waiting</span><button class="btn btn-pink" data-act="mgrApprove" data-id="${esc(m.email)}" style="padding:2px 9px">✓ approve</button>`}<button class="ft-ic" data-act="mgrDel" data-id="${esc(m.email)}" style="color:var(--rose)">🗑</button></div>`).join("")}
-      <p class="soft" style="font-size:11px;margin:8px 0 0">Managers request access from the sign-in page — approve them here and they're in. Pausing locks them out instantly; 🗑 removes the request (delete their login itself in Supabase → Auth if you want it fully gone).</p></div>`;
-  }catch(e){} }
+  if(!IS_MGR&&!DEMO&&SB&&SESSION){
+    let mgrs=null, tableMissing=false;
+    try{ const {data,error}=await SB.from("managers").select("email,approved,requested_at").order("requested_at",{ascending:true}); if(error)tableMissing=true; else mgrs=data||[]; }catch(e){ tableMissing=true; }
+    const rows=(mgrs&&mgrs.length)?mgrs.map(m=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(m.email)}</span>${m.approved?`<span class="pill pill-mint">✓ active</span><button class="btn" data-act="mgrRevoke" data-id="${esc(m.email)}" style="padding:2px 9px">⏸ pause</button>`:`<span class="pill pill-peach">waiting</span><button class="btn btn-pink" data-act="mgrApprove" data-id="${esc(m.email)}" style="padding:2px 9px">✓ approve</button>`}<button class="ft-ic" data-act="mgrDel" data-id="${esc(m.email)}" style="color:var(--rose)">🗑</button></div>`).join("")
+      :tableMissing?`<p class="soft" style="font-size:12.5px;margin:0">⚠️ The team table isn't set up yet — run <b>eggie-os-team-signup.sql</b> in the Supabase SQL Editor, and flip ON "Allow new users to sign up" (Authentication → Sign In / Providers). Then this card comes alive.</p>`
+      :`<p class="soft" style="font-size:12.5px;margin:0">No requests yet 🌸 Managers tap "🌸 Sakura manager? request an account" on the sign-in page — they'll appear right here for your ✓.</p>`;
+    teamPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👥 Your managers</h2>${(mgrs&&mgrs.length)?`<span class="label">${mgrs.filter(m=>m.approved).length} active · ${mgrs.filter(m=>!m.approved).length} waiting</span>`:""}</div>
+      ${rows}
+      ${(mgrs&&mgrs.length)?`<p class="soft" style="font-size:11px;margin:8px 0 0">Approve = they're in next load · ⏸ pause locks them out instantly · 🗑 removes the request (delete the login itself in Supabase → Auth to fully erase it).</p>`:""}</div>`;
+  }
   return migBanner+teamPanel+modularPage("clients", CLABEL, [["three",todays3],["inbox",inboxPanel],["pulse",pulse],["roster",roster]], {three:6,inbox:6,pulse:12,roster:12,_:6});
 }
 /* CL3: saved message snippets — recurring messages stop being compositions ({name} = their first name) */
