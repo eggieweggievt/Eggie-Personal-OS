@@ -69,18 +69,39 @@ async function findClient(userId: string, by: { name?: string; channelId?: strin
   return null;
 }
 
-/* ---------- sentinel JSON helpers (server-side twin of the web app's DB layer) ---------- */
-async function loadSent(userId: string): Promise<any> {
+/* ---------- sentinel JSON helpers (server-side twin of the web app's DB layer) ----------
+   🌸 once the app has migrated, the client hub (clients/inbox/autoNeedsWk) lives on the shared
+   "sakura" team row — these helpers merge/split transparently so every caller stays unchanged. */
+const SAK_UID = "sakura", SAK_KEYS = ["clients", "inbox", "autoNeedsWk"];
+async function loadRow(userId: string): Promise<any> {
   const { data } = await sb().from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", SENTINEL).maybeSingle();
   try { return data?.notes ? JSON.parse(data.notes) : {}; } catch { return {}; }
 }
-async function saveSent(userId: string, mut: (n: any) => any) {
-  const n = await loadSent(userId);
-  const out = mut(n) || n;
+async function writeRow(userId: string, out: any) {
   await sb().from("daily_logs").upsert(
     { user_id: userId, log_date: SENTINEL, notes: JSON.stringify(out), updated_at: new Date().toISOString() },
     { onConflict: "user_id,log_date" },
   );
+}
+async function loadSent(userId: string): Promise<any> {
+  const n = await loadRow(userId);
+  if (userId === OWNER) {
+    const sak = await loadRow(SAK_UID);
+    if (sak._sakMigrated) { SAK_KEYS.forEach((k) => { n[k] = sak[k]; }); n._sakMigrated = true; }
+  }
+  return n;
+}
+async function saveSent(userId: string, mut: (n: any) => any) {
+  const n = await loadSent(userId);
+  const out = mut(n) || n;
+  if (userId === OWNER && out._sakMigrated) {
+    const sak = await loadRow(SAK_UID);
+    let sakChanged = false;
+    SAK_KEYS.forEach((k) => { if (JSON.stringify(out[k]) !== JSON.stringify(sak[k])) { sak[k] = out[k]; sakChanged = true; } delete out[k]; });
+    delete out._sakMigrated;
+    if (sakChanged) { sak._sakMigrated = true; await writeRow(SAK_UID, sak); }
+  }
+  await writeRow(userId, out);
 }
 
 /* ---------- server-side action executor (mirror of the web app's, core subset) ---------- */
