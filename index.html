@@ -150,6 +150,10 @@
   .cal-cell.drag-over{background:rgba(169,143,224,.18);border-color:var(--lav-deep);transform:scale(1.03);}
   .cal-daynum{font-size:11.5px;color:#8a7d92;align-self:flex-end;line-height:1;}
   .cal-cell.today .cal-daynum{color:var(--pink-deep);font-weight:700;}
+  .mini-cal .cal-grid{gap:4px;}
+  .mini-cal .cal-cell{min-height:58px;padding:3px 4px;gap:3px;}
+  .mini-cal .cal-daynum{font-size:10.5px;}
+  .mini-cal .cal-ev{font-size:9.5px;padding:2px 5px;line-height:1.2;}
   .cal-ev{font-size:11px;line-height:1.3;padding:3px 7px;border-radius:8px;color:#5a3b52;cursor:grab;user-select:none;white-space:normal;overflow-wrap:anywhere;word-break:break-word;transition:transform .12s,opacity .12s,box-shadow .12s;}
   .cal-ev:hover{box-shadow:0 2px 8px rgba(150,110,150,.28);}
   .cal-ev:active{cursor:grabbing;}
@@ -829,11 +833,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.26";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.27";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.27: each client now has their OWN mini calendar on their client page 📅 — tap a day to add that client's streams/collabs/deadlines (title, time, colour); needs that are due show as 🔴 markers. Add events for a client via the addClientEvent action, and their upcoming dates now show in your context per client",
   "2026-06-12.21: YOUR NAME IS NOW EGG JEAN 🥚 — Eggie renamed you from Eugene to Egg Jean. If she asks who you are, you're Egg Jean. (Everything else about you is unchanged — same memory, same powers.)",
   "2026-06-12.20: client to-do list leveled up to match her own tasks 🔴 — each client NEED now has a priority (🔴 high / 🟦 normal / 🌙 low), a due date, a note, and sub-steps you can break it into; the per-client board can sort by due or priority, and ✎ edits any need. You can set all of it via addClientNeed (priority/due/note/steps) and the new setClientNeed (rename/re-prioritise/add steps)",
   "2026-06-11.19: YOU BECAME A FULLER ASSISTANT 💖 — (1) WELLBEING ATTUNEMENT: you read a wellbeing signal (low-energy streaks, flares, no-rest runs) and soften, protect her energy, scale plans DOWN, and reframe self-criticism instead of reinforcing it. (2) PROACTIVE NUDGES: once a day you may surface ONE gentle, timely thing (an overdue client need, a rest offer, an opportunity) in the pet bubble — dismissible, never naggy. (3) FEEDBACK: she can 👍/👎 your replies; 👎 reasons become standing corrections you must honor. (4) PLANS 🎯: turn any goal into a small, tickable multi-step plan on the Planner (addPlan / planStepDone) — surface only the NEXT step, celebrate progress, never the whole mountain",
@@ -3155,6 +3160,46 @@ async function clientModal(id){
   </div></div>`;
 }
 /* full client "character sheet" page — at-a-glance view + interactive needs + notes */
+/* 📅 a mini month calendar per client — their own streams/events, same look as the main calendar */
+const CCAL_COLORS=["#f6b8d4","#c9b8f0","#9fdcc0","#ffd9a0","#a9c8f0","#f0a9c0"];
+function clientCalendarHTML(c){
+  if(!state.clientCalRef){ const t=new Date(); state.clientCalRef=new Date(t.getFullYear(),t.getMonth(),1); }
+  const ref=state.clientCalRef, y=ref.getFullYear(), m=ref.getMonth();
+  const monthName=ref.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const startDow=new Date(y,m,1).getDay(), gridStart=new Date(y,m,1-startDow);
+  const dows=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const events=c.events||[];
+  const dueNeeds=(c.tasks||[]).filter(t=>!t.done&&(t.status||"needs")!=="done"&&t.due);
+  let cells="";
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    const ds=d.toLocaleDateString("en-CA");
+    const inMonth=d.getMonth()===m, isToday=ds===TODAY;
+    const evs=events.filter(e=>e.date===ds).sort((a,b)=>String(a.time||"99").localeCompare(String(b.time||"99")));
+    const due=dueNeeds.filter(t=>t.due===ds);
+    cells+=`<div class="cal-cell ${inMonth?'':'other'} ${isToday?'today':''}" data-act="clientCalAdd" data-cid="${c.id}" data-date="${ds}"><span class="cal-daynum">${d.getDate()}</span>${evs.map(e=>`<div class="cal-ev" data-act="clientEventOpen" data-cid="${c.id}" data-eid="${e.id}" style="background:${esc(e.color||'#f6b8d4')}" title="${esc((e.time?e.time+' ':'')+e.title)}">${e.time?`<b>${esc(e.time)}</b> `:""}${esc(e.title)}</div>`).join("")}${due.map(t=>`<div class="cal-ev" style="background:#fde4e4;color:#c0566a" title="due: ${esc(t.text)}">🔴 ${esc(t.text.slice(0,12))}</div>`).join("")}</div>`;
+  }
+  return `<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">📅 ${esc(c.name)}'s calendar</h2><div style="display:flex;gap:6px"><button class="btn" data-act="clientCalPrev" title="previous month">‹</button><button class="btn" data-act="clientCalToday">today</button><button class="btn" data-act="clientCalNext" title="next month">›</button></div></div>
+    <div class="label" style="margin:-2px 0 8px">${esc(monthName)} · their streams &amp; dates</div>
+    <div class="mini-cal">
+      <div class="cal-grid" style="margin-bottom:5px">${dows.map(x=>`<div class="cal-dow">${x}</div>`).join("")}</div>
+      <div class="cal-grid">${cells}</div>
+    </div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">Tap a day to add a stream or event for ${esc(c.name)}. 🔴 = one of their needs is due that day.</p></div>`;
+}
+function clientEventModal(cid,date,eid){
+  DB.daily(SENTINEL).then(sent=>{
+    const c=(sent.clients||[]).find(x=>x.id===cid); if(!c)return;
+    const ev=eid?(c.events||[]).find(e=>e.id===eid):null;
+    state.ceColor=(ev&&ev.color)||CCAL_COLORS[0];
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:400px;width:100%"><div class="card-head"><h3 style="font-size:16px">${ev?"✏️ Edit event":"➕ New event"} · ${esc(c.name)}</h3><button class="btn" data-act="closeModal">✕</button></div>
+      <div class="label">What</div><input class="inp" id="ce_title" value="${esc(ev?ev.title:'')}" placeholder="stream title / collab / deadline…"/>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:130px"><div class="label">Date</div><input class="inp" id="ce_date" type="date" value="${esc((ev?ev.date:date)||TODAY)}"/></div><div style="width:120px"><div class="label">Time</div><input class="inp" id="ce_time" type="time" value="${esc((ev&&ev.time)||'')}"/></div></div>
+      <div class="label" style="margin-top:8px">Colour</div><div style="display:flex;gap:6px;flex-wrap:wrap" id="ce_colors">${CCAL_COLORS.map(col=>`<button class="ce-color" data-act="ceColor" data-c="${col}" style="width:26px;height:26px;border-radius:8px;border:2px solid ${state.ceColor===col?'#3a3550':'transparent'};background:${col};cursor:pointer"></button>`).join("")}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">${ev?`<button class="btn" data-act="clientEventDel" data-cid="${cid}" data-eid="${esc(eid)}">🗑 delete</button>`:'<span></span>'}<button class="btn btn-pink" data-act="clientEventSave" data-cid="${cid}" data-eid="${esc(eid||'')}">💾 save</button></div>
+    </div></div>`;
+  });
+}
 function renderClientPage(c){
   const needs=(c.tasks||[]); const notes=(c.notes||[]).slice().reverse();
   const dch=(/^\d+$/.test((c.discordGuild||""))&&/^\d+$/.test((c.discordChannel||"")))?`https://discord.com/channels/${c.discordGuild}/${c.discordChannel}`:((c.discordChannel||"").startsWith("http")?c.discordChannel:"");
@@ -3186,6 +3231,7 @@ function renderClientPage(c){
       ${needsBoardHTML(needs,c.id,state.clientNeedSort||"due")}
       <p class="soft" style="font-size:11px;margin:8px 0 0">Drag cards across columns, tap the pill to move one along, or ✎ to add steps, a due date, priority and notes. 🌸</p>
     </div>
+    ${clientCalendarHTML(c)}
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">📝 Notes & meeting log</h2></div>
       <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}" ${RO?"disabled":""}>+ note</button></div>
       ${notes.length?`<div style="display:flex;flex-direction:column;gap:6px">${notes.map(nt=>`<div class="soft-card" style="padding:9px 11px"><div style="display:flex;justify-content:space-between;align-items:center"><span class="label">${esc(nt.date||"")}</span><button class="ft-ic" data-act="clientNoteDel" data-id="${c.id}" data-nid="${nt.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;white-space:pre-wrap;margin-top:2px">${esc(nt.text)}</div></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No notes yet — log calls, preferences, anything worth remembering.</p>`}
@@ -4456,6 +4502,15 @@ document.addEventListener("click",async(e)=>{
   if(act==="clientSubAdd"){ const cid=el.dataset.cid,tid=el.dataset.tid; const inp=document.getElementById("nd_substep"); const tx=(inp&&inp.value||"").trim(); if(!tx){toast("Write the step 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:[...(t.sub||[]),{id:uid(),text:tx.slice(0,160),done:false}]}:t)}:c)})); clientNeedModal(cid,tid); return; }
   if(act==="clientSubToggle"){ const cid=el.dataset.cid,tid=el.dataset.tid,sid=el.dataset.sid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:(t.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:t)}:c)})); if(document.getElementById("nd_text"))clientNeedModal(cid,tid); else render(); return; }
   if(act==="clientSubDel"){ const cid=el.dataset.cid,tid=el.dataset.tid,sid=el.dataset.sid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:(t.sub||[]).filter(s=>s.id!==sid)}:t)}:c)})); clientNeedModal(cid,tid); return; }
+  if(act==="clientCalPrev"){ const r=state.clientCalRef||new Date(); state.clientCalRef=new Date(r.getFullYear(),r.getMonth()-1,1); return render(); }
+  if(act==="clientCalNext"){ const r=state.clientCalRef||new Date(); state.clientCalRef=new Date(r.getFullYear(),r.getMonth()+1,1); return render(); }
+  if(act==="clientCalToday"){ const t=new Date(); state.clientCalRef=new Date(t.getFullYear(),t.getMonth(),1); return render(); }
+  if(act==="clientCalAdd"){ return clientEventModal(el.dataset.cid,el.dataset.date); }
+  if(act==="clientEventOpen"){ return clientEventModal(el.dataset.cid,null,el.dataset.eid); }
+  if(act==="ceColor"){ state.ceColor=el.dataset.c; document.querySelectorAll("#ce_colors .ce-color").forEach(b=>b.style.borderColor="transparent"); el.style.borderColor="#3a3550"; return; }
+  if(act==="clientEventSave"){ const cid=el.dataset.cid,eid=el.dataset.eid; const gv=i=>((document.getElementById(i)||{}).value||""); const title=gv("ce_title").trim(); if(!title){toast("Add a title 🌸");return;} const date=gv("ce_date")||TODAY, time=gv("ce_time"), color=state.ceColor||"#f6b8d4";
+    await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>{ if(c.id!==cid)return c; let events=(c.events||[]).slice(); if(eid){ events=events.map(e=>e.id===eid?{...e,title:title.slice(0,120),date,time,color}:e); } else { events.push({id:uid(),title:title.slice(0,120),date,time,color}); } return {...c,touched:TODAY,events}; })})); document.getElementById("modal").innerHTML=""; toast("📅 saved"); render(); return; }
+  if(act==="clientEventDel"){ const cid=el.dataset.cid,eid=el.dataset.eid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,events:(c.events||[]).filter(e=>e.id!==eid)}:c)})); document.getElementById("modal").innerHTML=""; toast("event removed 🌸"); render(); return; }
   if(act==="clientNoteAdd"){ const tx=((document.getElementById("cm_notetext")||{}).value||"").trim(); if(!tx){return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,touched:TODAY,notes:[...(c.notes||[]),{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:tx}]}:c)})); render(); return; }
   if(act==="clientNoteDel"){ const nid=el.dataset.nid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:(c.notes||[]).filter(x=>x.id!==nid)}:c)})); render(); return; }
   if(act==="teach"){ const k=el.dataset.kind||"any"; let orig=""; if(k==="email")orig=(state.email&&state.email.out&&((state.email.out.subject?state.email.out.subject+"\n\n":"")+(state.email.out.body||"")))||""; else orig=(state.script&&state.script.out&&state.script.out.script)||""; teachModal(k,orig); return; }
@@ -5706,6 +5761,11 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
         var cnm3=(a.name||"").toLowerCase(); var hit3=null;
         await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).filter(function(c){ if(!hit3&&(c.name||"").toLowerCase().indexOf(cnm3)>=0){hit3=c;return false;} return true; })}); });
         return hit3? "🗑 removed "+hit3.name+" from the roster" : "couldn't find a client like “"+(a.name||"")+"” 🌸";
+      }
+      case "addClientEvent": {
+        var cev=(a.client||"").toLowerCase(); var hitEv=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hitEv&&(c.name||"").toLowerCase().indexOf(cev)>=0){hitEv=c;return Object.assign({},c,{touched:TODAY,events:(c.events||[]).concat([{id:uid(),title:String(a.title||"event").slice(0,120),date:a.date||TODAY,time:a.time||"",color:a.color||"#f6b8d4"}])});} return c; })}); });
+        return hitEv? "📅 added “"+(a.title||"event")+"” to "+hitEv.name+"'s calendar"+(a.date?" on "+a.date:"") : "couldn't find a client like “"+(a.client||"")+"” 🌸";
       }
       case "addInvoice": {
         var ivcl=(a.client||a.name||"").trim();
