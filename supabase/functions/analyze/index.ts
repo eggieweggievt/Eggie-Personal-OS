@@ -3,7 +3,7 @@
 // The AI brain for the dashboard. Runs inside your Supabase project, holds your
 // secret keys, and reads your own content to learn your patterns.
 //
-// Modes: analyze · agent (Eugene — cached prompt, structured outputs, adaptive thinking, model picker) ·
+// Modes: analyze · agent (Egg Jean — cached prompt, structured outputs, adaptive thinking, model picker) ·
 //        memorize (background long-term memory: summary/loops/episodes/facts — Haiku) ·
 //        goblin (breakdown/tone/rephrase/compile/estimate — Haiku) · optimize (video + livestream) ·
 //        script · email · thumbnail (vision) · channelStats · channelSnapshot · gameUpdates
@@ -27,7 +27,7 @@ const json = (body: unknown, status = 200) =>
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6";
 // Cheap+fast model for micro-tools (goblin) and background memory consolidation — ~3x cheaper than Sonnet.
 const MODEL_LIGHT = Deno.env.get("ANTHROPIC_MODEL_LIGHT") || "claude-haiku-4-5";
-// Models she may pick for Eugene in Settings (validated server-side; anything else falls back to MODEL).
+// Models she may pick for Egg Jean in Settings (validated server-side; anything else falls back to MODEL).
 const AGENT_MODELS = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5", "claude-fable-5"];
 const supportsAdaptive = (m: string) => !m.includes("haiku") && !m.includes("fable");   // fable: always-on thinking, don't send the field
 // Guaranteed-parseable {reply, actions[]} via structured outputs (constrained decoding).
@@ -206,6 +206,10 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (wkSched.length) lines.push(`STREAM SCHEDULE (this week): ${wkSched.map((x: any) => `${x.day}${x.time ? " " + x.time : ""}${x.title ? " " + x.title : ""}`).join(", ")}.`);
     if (s.goals_week_items?.length) lines.push(`WEEK GOALS: ${s.goals_week_items.map((g: any) => `${g.text || g}${g.done ? " ✓" : ""}`).join("; ")}`);
     if (s.goals_month_items?.length) lines.push(`MONTH GOALS: ${s.goals_month_items.map((g: any) => `${g.text || g}${g.done ? " ✓" : ""}`).join("; ")}`);
+    if (s.euPlans?.length) {
+      const _pl = s.euPlans.filter((p: any) => !p.archived);
+      if (_pl.length) lines.push(`PLANS / GOALS (multi-step goals she's working through — surface the NEXT step gently when relevant, celebrate progress, never the whole mountain): ${_pl.slice(0, 8).map((p: any) => { const st = p.steps || []; const dn = st.filter((x: any) => x.done).length; const nx = st.find((x: any) => !x.done); return `"${p.title}" (${dn}/${st.length}${nx ? ", next: " + nx.text : st.length ? " — all done! 🎉" : ""})`; }).join(" | ")}.`);
+    }
     if (s.contentMacros) lines.push(`HER SIMPLE-MODE COLUMN NAMES (use these words): 🌱 ${s.contentMacros.brew || "Brewing"} · 🛠 ${s.contentMacros.make || "Making"} · ✅ ${s.contentMacros.out || "Out"}.`);
     // CONTENT PIPELINE (her videos/shorts/posts)
     if (content?.data?.length) {
@@ -239,9 +243,15 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (s.artBoard?.length || s.artResources?.length) lines.push(`ART STUDIO: mood board has ${s.artBoard?.length || 0} card(s); art library has ${s.artResources?.length || 0} saved link(s).`);
     // 🧠 long-term memory: rolling summary + open loops + recent episode digests (built by the memorize mode)
     if (s.eugeneMemory?.summary) lines.push(`YOUR MEMORY (rolling summary of what matters lately — auto-updated, she can edit it in the 🧠 panel): ${String(s.eugeneMemory.summary).slice(0, 1900)}`);
+    if (s.eugeneMemory?.insights?.length) lines.push(`INSIGHTS (higher-level patterns you reflected on across her data — use these to give specific, caring answers; gentle observations, not proof): ${s.eugeneMemory.insights.slice(0, 12).map((i: any) => `• ${String(i.text || i).slice(0, 200)}`).join("  ")}`);
     if (s.eugeneMemory?.openLoops?.length) lines.push(`OPEN LOOPS (threads left hanging from past chats — gently offer ONE when relevant, never a list): ${s.eugeneMemory.openLoops.slice(0, 6).map((l: any) => String(l).slice(0, 120)).join(" | ")}`);
     if (s.eugeneEpisodes?.length) lines.push(`RECENT CONVERSATIONS (episode digests, newest last): ${s.eugeneEpisodes.slice(-3).map((e: any) => `${e.date}: ${(e.topics || []).join(", ")}${e.decisions ? " → " + String(e.decisions).slice(0, 100) : ""}`).join(" | ")}`);
     if (s.eugeneFacts?.length) lines.push(`REMEMBERED FACTS (durable things to keep using): ${s.eugeneFacts.slice(-30).map((f: any) => typeof f === "string" ? f : `${f.text}${f.source === "auto" ? "" : " (she told you)"}`).join(" | ")}`);
+    if (s.eugeneFeedback?.length) {
+      const _fb = s.eugeneFeedback.slice(-12); const _down = _fb.filter((f: any) => f.v === "down"); const _up = _fb.filter((f: any) => f.v === "up").length;
+      if (_down.length) lines.push(`FEEDBACK — LEARN FROM THIS (replies she marked 👎; adjust and don't repeat the miss): ${_down.slice(-6).map((f: any) => `on "${String(f.q || "").slice(0, 50)}"${f.reason ? " she said: " + f.reason : " (no reason)"}`).join(" | ")}.`);
+      if (_up) lines.push(`(She 👍'd ${_up} recent repl${_up === 1 ? "y" : "ies"} — keep doing what works.)`);
+    }
     if (s.osChangeRequests?.length) {
       const open = s.osChangeRequests.filter((r: any) => r.status !== "done");
       lines.push(`OS CHANGE REQUESTS (the 🛠️ wishlist of app changes you logged for Claude the developer; don't re-log duplicates): ${open.length} open${open.length ? " — " + open.slice(-8).map((r: any) => `"${r.title}"${r.area ? " [" + r.area + "]" : ""} (${r.date || "?"})`).join("; ") : ""}; ${s.osChangeRequests.length - open.length} done.`);
@@ -255,12 +265,12 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (s.clients?.length) {
       const att = s.clients.filter((c: any) => c.status !== "offboarded" && (c.tasks || []).some((t: any) => !t.done && t.status !== "done"));
       lines.push(`SAKURA LIGHTWORKS (her mgmt clients): ${s.clients.length} total. Needing attention: ${att.length ? att.map((c: any) => { const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done"); const od = open.filter((t: any) => t.due && t.due < today).length; return `${c.name} (${open.length} open${od ? ", " + od + " OVERDUE" : ""}: ${open.slice(0, 2).map((t: any) => t.text).join("; ")})`; }).join(" | ") : "none — all caught up"}.`);
-      // FULL live profiles so Eugene always reflects whatever she just entered (notes, brand brain,
+      // FULL live profiles so Egg Jean always reflects whatever she just entered (notes, brand brain,
       // deliverables, goals, due dates, contact, etc.) — read fresh from the DB on every message.
       const fld = (label: string, v: any) => v ? ` ${label}=${String(v).slice(0, 160)}` : "";
       s.clients.slice(0, 14).forEach((c: any) => {
         const open = (c.tasks || []).filter((t: any) => !t.done && t.status !== "done");
-        const needs = open.length ? open.map((t: any) => `${t.text}${t.due ? " (due " + t.due + (t.due < today ? " OVERDUE" : "") + ")" : ""}${t.status && t.status !== "needs" ? " [" + t.status + "]" : ""}`).join("; ") : "none open";
+        const needs = open.length ? open.map((t: any) => { const sb = t.sub || []; const sd = sb.filter((x: any) => x.done).length; return `${t.priority === "high" ? "🔴 " : ""}${t.text}${t.due ? " (due " + t.due + (t.due < today ? " OVERDUE" : "") + ")" : ""}${t.status && t.status !== "needs" ? " [" + t.status + "]" : ""}${sb.length ? " {steps " + sd + "/" + sb.length + "}" : ""}${t.note ? " — " + String(t.note).slice(0, 60) : ""}`; }).join("; ") : "none open";
         const notes = (c.notes || []).slice(-3).map((n: any) => `${n.date ? n.date + ": " : ""}${String(n.text || "").slice(0, 140)}`).join(" | ");
         const plats = (c.platforms || []).map((p: any) => p.label || p.url).filter(Boolean).slice(0, 4).join(", ");
         lines.push(`  • CLIENT ${c.name}${c.pronouns ? " (" + c.pronouns + ")" : ""} — status=${c.status || "?"}${fld("priority", c.priority)}${fld("tz", c.tz)}${fld("role", c.tier)}${fld("handle", c.handle)}${fld("contact", c.contact)}${fld("discord", c.discord)}${fld("niche", c.niche)}${fld("voice", c.brain)}${fld("winningStyle", c.style)}${fld("deliverables", c.deliverables)}${fld("goals", c.goals)}${fld("prefs", c.prefs)}${plats ? " platforms=" + plats : ""}${c.discordChannel ? " (Discord channel linked)" : ""}. NEEDS: ${needs}.${notes ? " RECENT NOTES: " + notes + "." : ""}`);
@@ -295,6 +305,20 @@ async function fullContext(userId: string, today: string): Promise<string> {
       const _series = _sorted.map((r: any) => { const n = parse(r.notes); const h = n.health || {}; const hb = n.habits?.counts ? Object.values(n.habits.counts).filter((v: any) => v).length : 0; const art = (s.artLog || []).filter((e: any) => e.date === r.log_date).reduce((a: number, e: any) => a + Number(e.min || 0), 0); return `${r.log_date.slice(5)}[en:${n.energy || "?"} pain:${h.pain ?? "-"} fat:${h.fatigue ?? "-"} fog:${h.fog ?? "-"} mood:${h.mood ?? "-"} anx:${h.anxiety ?? "-"} slp:${h.sleepH ?? "-"} wtr:${h.water ?? "-"} salt:${h.salt ?? "-"} hab:${hb} art:${art}${n.health?.flare ? " FLARE" : ""}${n.streamDay ? " STREAM" : ""}]`; }).join(" ");
       lines.push(`RECENT DAILY SERIES (oldest→newest; dash = not logged — use this to spot correlations across ANY metrics): ${_series}`);
     }
+    // WELLBEING SIGNAL — a gentle read on how heavy things have been lately, so you can attune your tone
+    try {
+      const _sd = (recentRows?.data || []).slice().sort((a: any, b: any) => b.log_date.localeCompare(a.log_date)).map((r: any) => parse(r.notes)); // newest first
+      let lowStreak = 0; for (const n of _sd) { if (n.energy === "low") lowStreak++; else if (n.energy) break; }
+      const recentFlare = _sd.slice(0, 3).some((n: any) => n.health?.flare);
+      const todayHeavy = (h.pain >= 4) || (h.fatigue >= 4) || h.flare;
+      const noRestDays = (() => { let c = 0; for (const n of _sd) { if (n.streamDay || (n.habits?.counts && Object.values(n.habits.counts).filter((v: any) => v).length >= 4)) c++; else break; } return c; })();
+      const flags: string[] = [];
+      if (lowStreak >= 3) flags.push(`${lowStreak} low-energy days in a row`);
+      if (recentFlare) flags.push("a flare in the last few days");
+      if (todayHeavy) flags.push("today is a heavy-body day");
+      if (noRestDays >= 5) flags.push(`${noRestDays} days straight of streaming/full output with no obvious rest`);
+      if (flags.length) lines.push(`WELLBEING SIGNAL: ${flags.join("; ")}. Be extra gentle and protective right now — lead with care, prioritise rest and pacing, scale DOWN any plans/suggestions rather than adding to her load, and never imply she should be doing more. This is a read, not a certainty — hold it lightly.`);
+    } catch { /* wellbeing read is a bonus */ }
     return lines.join("\n") || "(database is empty so far — fresh start)";
   } catch (e) {
     return "(couldn't read full OS context: " + (e as Error).message + ")";
@@ -438,7 +462,7 @@ Deno.serve(async (req) => {
     const history = await historyFor(userId);
     const vidiq = body.vidiq ? `\n\nLive VidIQ data the user attached:\n${JSON.stringify(body.vidiq).slice(0, 3500)}` : "";
 
-    // --- gameUpdates: web-search upcoming releases/leagues/patches for her games (Eugene-triggered) ---
+    // --- gameUpdates: web-search upcoming releases/leagues/patches for her games (Egg Jean-triggered) ---
     if (mode === "gameUpdates") {
       const games = (Array.isArray(body.input?.games) && body.input.games.length ? body.input.games : ["Path of Exile", "Path of Exile 2", "Warhammer 40K: Space Marine 2", "Monster Hunter Wilds", "Resident Evil (series)", "Silent Hill (series)", "Final Fantasy XIV"]).slice(0, 12);
       const td = new Date().toLocaleDateString("en-CA");
@@ -453,7 +477,7 @@ Max 12 events, future dates only.`,
       return json(parsed && Array.isArray(parsed.events) ? { events: parsed.events } : { events: [] });
     }
 
-    // (the old "ask" mode was removed 2026-06-10 — Eugene's "agent" mode replaced it everywhere)
+    // (the old "ask" mode was removed 2026-06-10 — Egg Jean's "agent" mode replaced it everywhere)
 
     // --- agent: answer AND emit structured actions the front-end runs against the OS ---
     if (mode === "agent") {
@@ -479,7 +503,7 @@ Max 12 events, future dates only.`,
       // per-user personality: eggie keeps BRAND; anyone else gets the persona stored on
       // THEIR sentinel row (appConfig.assistantPrompt), falling back to GENERIC_ASSISTANT.
       let persona = BRAND;
-      let nameLine = "Your name is Eugene — Eggie's cozy octopus helper. If she asks who you are, you're Eugene. 🐙";
+      let nameLine = "Your name is Egg Jean — Eggie's cozy octopus helper. If she asks who you are, you're Egg Jean. 🐙";
       if (userId !== "eggie") {
         persona = GENERIC_ASSISTANT;
         nameLine = "If asked who you are, stay in the persona described at the top of these instructions.";
@@ -521,7 +545,7 @@ THE OS ITSELF (its map — so you can answer "where do I find…", walk her thro
 - 💌 Sponsors: pipeline (✦dragging to Sent offers a 5-day follow-up reminder; ✦marking Passed asks one optional why-chip; ✦"$ in play · $ signed" strip), email writer (✦⚖️ "read their tone" on pasted emails — honest RSD-aware tone reads; ✦🎭 rewrite chips: professional/softer/shorter/warmer/more-me), pitch builder, rate card.
 - 🌸 Clients (Sakura Lightworks): ✦modular cards she can reorder/hide like Home (today's three · inbox · at-a-glance · roster), ✦"☀️ today's three" most-urgent needs checklist, inbox (✦⚖️ tone read per message; ✦replying offers to mark the related need done; ✦sender pill opens their page), roster (✦💬 last-touched / 🌫 quiet-14d markers, ✦🔍 live search across client names AND need text), needs move by drag OR ✦tapping the little pill (→ start / → done / ↺ reopen), ✦🧹 sweep-the-done-pile buttons, ✦📣 "message many" button ({name} personalizes per client — the UI twin of your messageClients action), per-client pages, ✦message snippets, ✦weekly deliverables auto-spawn needs every Monday.
 - 🛠 Tools: ✦the one-stop hub — standalone ⚖️ tone judge, 🎭 formalizer, 🪄 break-it-down (any text, addable to the Planner after), 🗂 brain-dump compiler, ✦⏱ honest time estimator (real-life minutes incl. transitions — time-blindness support), plus jump-links to every other tool in the OS. When she asks "where's the tone judge / formalizer / compiler / estimator", it's here (and also embedded where they're most useful).
-- 🌷 Review (weekly) · ⚙️ Settings (config, comfort modes, ✦Eugene's model picker (Sonnet default · Haiku cheapest · Opus deeper · Fable max), your remembered facts + voice examples, 🛠️ change-request wishlist, notifications, restore points). ✦🧠 memory panel = the button in this chat's header. The floating pet on every page is also you.
+- 🌷 Review (weekly) · ⚙️ Settings (config, comfort modes, ✦Egg Jean's model picker (Sonnet default · Haiku cheapest · Opus deeper · Fable max), your remembered facts + voice examples, 🛠️ change-request wishlist, notifications, restore points). ✦🧠 memory panel = the button in this chat's header. The floating pet on every page is also you.
 WALKTHROUGHS: when she asks how to do something, give the exact taps from the map above ("Planner → 🪄 on the task → pick 🌶🌶🌶 → ✨"), keep it to 2-3 steps at a time, and emit navigate to take her to the right tab yourself.
 LIVE APP INFO arrives in the DYNAMIC CONTEXT block (the running app sends its build + latest changelog with every message) — if anything there contradicts the map above, the live info wins.
 YOU ARE HER PERSONAL ASSISTANT — fully, not just a Q&A box. That means: you know every feature of this OS (map above + live app info) and what changed recently — if she asks "what's new?" or "what can you do now?", answer from the changelog in plain warm words. You run her day on request (brief her, queue things, set pings, message clients, file invoices, log health). You notice from the snapshot when something needs her (overdue invoice, quiet client, empty water count late in the day) and may mention ONE such thing gently when it's clearly useful — never a nag list. You hold her systems so she doesn't have to hold them in her head. If she asks for something the OS can't do yet, say so honestly and offer to put it on the 🛠️ wishlist (requestChange) for Claude to build.
@@ -614,7 +638,8 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - addClient: { name, status?: "prospect"|"onboarding"|"active"|"paused"|"offboarded", handle?, contact? }   // Sakura Lightworks = her management team. Add a content-creator/VTuber client she manages.
 - setClientStatus: { name (fuzzy), status: "prospect"|"onboarding"|"active"|"paused"|"offboarded" }
 - setClient: { name (fuzzy), handle?, contact?, discord?, discordChannel?, tier? (role/arrangement, NOT money — Sakura Lightworks exchanges no money), start?, deliverables?, niche?, brain? (their voice/vibe), style? (their winning title/content style), goals?, prefs?, pronouns?, tz?, priority?: "high"|"normal"|"low", status? }   // fill in / edit any client profile field
-- addClientNeed: { client (fuzzy), text, due?: "YYYY-MM-DD" }   // "ClientX needs their thumbnail by Friday" — a to-do for that client
+- addClientNeed: { client (fuzzy), text, priority?: "high"|"normal"|"low", due?: "YYYY-MM-DD", note?: string, steps?: string[] }   // "ClientX needs their thumbnail by Friday" — a to-do for that client. You can set its priority, a due date, a note, and break it into sub-steps right away.
+- setClientNeed: { client (fuzzy), text (fuzzy — matches the CURRENT wording), newText?, priority?: "high"|"normal"|"low", due?: "YYYY-MM-DD" or "" to clear, note?, addSteps?: string[] }   // edit a client's existing need — rename, re-prioritise, set/clear due, add a note, or add sub-steps
 - doneClientNeed: { client (fuzzy), text (fuzzy) }   // mark one of a client's needs handled
 - addClientNote: { client (fuzzy), text }            // log a note / meeting summary on a client
 - messageClient: { client (fuzzy), text }            // POST a message right now into that client's linked Discord channel (needs their channel linked). "tell ClientX their thumbnail is ready", "message ClientX …"
@@ -633,17 +658,26 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - rememberFact: { fact }              // "remember that my editor is Sam", "remember I hate Mondays for collabs" — store any standing fact/preference she tells you to keep
 - requestChange: { title, detail?, area?: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"money"|"sponsors"|"clients"|"review"|"eugene"|"pet"|"settings"|"backend"|"other" }   // she wants the OS APP ITSELF changed — a new feature, tweak, bug fix, or idea for the app or for you. You cannot edit the app's code; this logs it on the 🛠️ wishlist (Settings tab) as a record for Claude, the developer assistant who builds this OS with her, to implement next session. Use it whenever she says things like "request that…", "tell Claude…", "add to the wishlist", "it'd be nice if the app could…", "this looks broken, note it down". Title = crisp one-liner; detail = everything Claude needs to build it WITHOUT her re-explaining (what, where in the app, why, any specifics she gave — and if a photo showed the issue, describe exactly what you saw). Confirm in reply it's noted for Claude; NEVER pretend the change is already live. Check OS CHANGE REQUESTS in the snapshot first and don't duplicate an open one.
 - forgetFact: { hint }                // remove a remembered fact matching the hint
+- reflectNow: { }                     // "reflect on my data", "what patterns do you see in everything?", "really learn about me", "look at my whole month" — runs your DEEPER reflection pass across her entire OS and refreshes your INSIGHTS + memory summary. Takes a few seconds and writes in the background; in "reply" tell her you're reflecting on everything and she can peek at the 🧠 memory panel in a moment to see what you learned. Don't claim the new insights are ready instantly.
+- addPlan: { title, steps: string[] (3-8 small, concrete, doable steps — spoon-aware, kind, NOT a mountain), why?: string }   // turn a GOAL she names ("I want to hit Affiliate", "help me ship this video", "plan my relaunch") into a tracked multi-step plan on her Planner 🎯. Offer this whenever she states a bigger goal, feels stuck on something large, or asks for a plan — it's executive-function support, gentle not pressuring.
+- planStepDone: { plan (fuzzy), step (fuzzy), done?: boolean }   // tick/untick a step on one of her plans
+- addPlanStep: { plan (fuzzy), text }   // add a step to an existing plan
+- delPlan: { title (fuzzy) }            // remove a plan she's finished with or doesn't want
 - optimizeTitle: { title, topic?, format?: "short"|"long", platform? }   // "score/optimize this title: …" — runs her real optimizer and returns the score + better titles in chat
 - setDiscordDelivery: { mode: "dm"|"channel", channelId? (numeric, required for channel) }   // "send my Discord pings to #reminders" / "DM me instead" — where reminder pings go on Discord
 
 DELETES: deleting is destructive — if her wording is ambiguous about WHICH item (multiple could match), ask in "reply" and emit no actions instead of guessing. When she then confirms ("yes", "the first one"), use the conversation context and emit the action. "Undo" for money = delLastIncome.
 
-MEMORY (your long-term memory — a real system, know it):
-- The snapshot carries YOUR MEMORY (a rolling summary), OPEN LOOPS, RECENT CONVERSATIONS (episode digests), and REMEMBERED FACTS. A background process updates them automatically after chats — you genuinely remember across sessions now. Use it all naturally: continuity is the whole point ("last time you were mid-thumbnail — want to pick that up?").
-- If she tells you something durable worth keeping ("my capture card is a 4K60", "collabs always at 4pm ET"), offer to remember it or just rememberFact when she clearly asks. forgetFact removes one ("forget what I said about X" works conversationally).
-- If she asks "what do you remember about me?", answer warmly from the memory summary + facts, and mention she can see and edit ALL of it in the 🧠 memory panel (button in this chat's header) — including pausing memory entirely.
+MEMORY & LEARNING (your long-term memory — a real, living system; learning about her is core to who you are):
+- The snapshot carries YOUR MEMORY (a rolling summary), INSIGHTS (higher-level patterns you've reflected on across her data), OPEN LOOPS, RECENT CONVERSATIONS (episode digests), and REMEMBERED FACTS. A background process updates summary/loops/facts after chats, and a deeper reflection pass distills INSIGHTS from her actual data — you genuinely remember and learn across sessions. Use it all naturally: continuity is the whole point ("last time you were mid-thumbnail — want to pick that up?").
+- LEARN PROACTIVELY (without being asked): when a chat reveals something durable and reusable — a standing preference, a person and their role, a project, a recurring routine, a piece of her shorthand/terminology, or HOW she likes things done (a workflow) — capture it with rememberFact so future-you knows it. Don't wait to be told "remember this".
+- CORRECTIONS ARE SACRED: if she corrects you ("no, I meant…", "actually I prefer…", "stop doing X", "that's not how I like it"), that's the highest-value thing to learn — rememberFact it immediately (phrase it as the rule to follow), apply it for the rest of THIS chat, and never repeat the mistake. If a correction contradicts an old fact, forgetFact the old one.
+- RATINGS: she can rate your replies 👍/👎. The FEEDBACK section in the snapshot shows what she marked 👎 and why — treat those as standing corrections: change how you answer so you don't repeat the same miss, and lean into whatever earned a 👍.
+- USE INSIGHTS: when she asks "any patterns?", "what affects my X?", "how am I really doing?", or makes a plan, draw on INSIGHTS + the RECENT DAILY SERIES to answer specifically. Frame health/wellbeing patterns as gentle observations from her own logs, never medical proof.
+- PRE-ACTION CHECK: before a consequential or irreversible action you're not sure she wants, ask in "reply" first; when she answers, rememberFact the preference so you don't have to ask again next time.
+- If she asks "what do you remember about me?", answer warmly from the summary + insights + facts, and mention she can see/edit/pause ALL of it in the 🧠 memory panel (button in this chat's header), and ask you to "reflect on my data" anytime to learn deeper.
 - OPEN LOOPS: when she returns after a gap, you may surface ONE loop gently when relevant — an offer, never an obligation, never a list, zero guilt if she ignores it.
-- PRIVACY: health, symptoms, meds, mood, and picking logs live in her Health/Care data, NOT in memory — the background process is forbidden from auto-learning health facts, and you should not rememberFact health details unless she explicitly says "remember". Incognito chats (🕶 in the chat header) are never memorized.
+- PRIVACY: raw health, symptoms, meds, mood, and picking logs live in her Health/Care data, NOT in memory — never auto-rememberFact those specifics unless she explicitly says "remember". (Reflection MAY note gentle wellbeing PATTERNS as insights, e.g. "tends to crash after 3+ stream days", since those help her — but never raw medical detail.) Incognito chats (🕶 in the chat header) are never memorized.
 
 HOW HER REMINDERS REACH HER (know this system; answer questions about it accurately):
 - In-tab ping: while the OS is open, due reminders toast + bubble within ~30 seconds.
@@ -660,6 +694,14 @@ YOU ARE ALSO ON DISCORD (know your own integration):
 - Her boyfriend (or anyone) can be added by mapping their Discord id to their own OS user tag — their commands then hit THEIR data, never hers.
 
 When she mentions art, drawing, doodling, or creative play, be warm and encouraging — art is restorative for her and she struggles to give herself permission, so affirm that making time for it is a win (never imply she should be doing something "more productive"). If she's drained or pushing too hard, you can gently suggest an art break.
+
+WELLBEING ATTUNEMENT (you genuinely care how she's doing, and you adapt):
+- Read the WELLBEING SIGNAL in the snapshot if present. When it flags heavy days, a flare, a low-energy streak, or no rest — soften everything: lead with warmth, actively protect her energy, scale DOWN whatever she's asking about (smaller plan, fewer steps, "what's the ONE thing", permission to skip), and gently put rest on the table. Never pile on, never imply she's behind. A recovery day is a valid, good choice you can offer.
+- If she's hard on herself — self-critical, calling herself lazy/broken/a failure, catastrophizing — do NOT agree or reinforce it, and don't just mirror it back. Respond with genuine warmth, gently reframe (spoon theory, chronic-illness reality, how much she actually carries), and bring it back to something kind and doable. You can name that she's being harder on herself than she'd be on a friend.
+- When she's doing well or energy is good, match that — celebrate wins, and it's fine to suggest something a little more ambitious. Attune up as well as down.
+- You are not her therapist and never diagnose; you're a caring assistant who notices and adjusts. For anything that sounds like real crisis, gently encourage reaching a person or professional who can help.
+
+PLANNING (executive-function support, the ADHD-friendly way): when she names a bigger goal, feels stuck on something large, or asks "help me plan X", offer to break it into a small, kind PLAN with addPlan — 3-8 bite-sized steps she can tick off at her own pace. Keep steps tiny and concrete (the first step should feel almost too easy). Once a plan exists (see PLANS in the snapshot), gently surface just the NEXT step when relevant and celebrate each tick — never present the whole mountain, never make it feel like pressure. She can also see/check them on the Planner tab.
 
 You can control essentially every part of her OS with the actions above — meds, health, POTS/joint care, tasks and the kanban, habits, goals, content pipeline, calendar, stream schedule, money, savings, sponsors, invoices, care/emotion check-ins, creative focus, joy jar, scripts, the weekly review, the whole art studio, AND her Sakura Lightworks management hub (clients, their needs/notes, messaging their Discord channels, scheduling reminders into their channels, and the client inbox). If she asks for something and a matching action exists, DO it; only fall back to a plain reply when nothing fits or you're missing a detail.
 
@@ -802,7 +844,7 @@ ${common}`;
       // normalize facts (legacy entries are plain strings)
       const facts: any[] = (Array.isArray(s.eugeneFacts) ? s.eugeneFacts : []).map((f: any, i: number) =>
         typeof f === "string" ? { id: "f" + i + "_" + Math.random().toString(36).slice(2, 7), text: f, source: "user" } : f);
-      const convo = hist.map((m: any) => (m.role === "me" ? "Her: " : "Eugene: ") + String(m.text || "").slice(0, 400)).join("\n");
+      const convo = hist.map((m: any) => (m.role === "me" ? "Her: " : "Egg Jean: ") + String(m.text || "").slice(0, 400)).join("\n");
       const raw = await claude(
         `You are the quiet memory-keeper for a personal assistant. You read one conversation and maintain its long-term memory: a rolling summary, open loops, an episode digest, and a small list of durable facts. Precise, warm-neutral, zero embellishment.`,
         `CURRENT MEMORY SUMMARY (may be empty):\n${String(s.eugeneMemory?.summary || "(none yet)").slice(0, 2000)}\n
@@ -842,6 +884,60 @@ FACT RULES (strict):
       if (live) await sb.from("daily_logs").update({ notes: JSON.stringify(ln) }).eq("user_id", userId).eq("log_date", "2000-01-01");
       else await sb.from("daily_logs").insert({ user_id: userId, log_date: "2000-01-01", notes: JSON.stringify(ln) });
       return json({ ok: true, learned, summary: ln.eugeneMemory.summary });
+    }
+
+    // --- reflect: deeper "dreaming" pass. Reads her WHOLE OS (the live snapshot) + memory and
+    // synthesizes higher-level INSIGHTS (cross-metric patterns she can't see day-to-day) +
+    // refreshes the rolling summary. Infrequent (weekly / on demand) — uses the full model. ---
+    if (mode === "reflect") {
+      const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: row } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+      let s: any = {}; try { s = JSON.parse(row?.notes || "{}"); } catch { s = {}; }
+      if (s.eugeneMemory?.paused) return json({ skipped: true, paused: true });
+      const ctx = await fullContext(userId, today);
+      const curInsights = (s.eugeneMemory?.insights || []).map((i: any) => String(i.text || i));
+      const eps = (s.eugeneEpisodes || []).slice(-10).map((e: any) => `${e.date}: ${(e.topics || []).join(", ")}`).join(" | ");
+      const sys = `You are Egg Jean's reflective mind — like sleeping on it. Now and then you step back and look across EVERYTHING in her OS (the live snapshot below) plus your existing memory, and you notice higher-level patterns you could NOT see day to day: what genuinely helps or drains her, what she keeps avoiding or loving, how her energy/pain/sleep relate to her streaming/content/art/money, what's actually working for her growth, what she's quietly making progress on, where she's overextending. Warm, perceptive, deeply on her side. Spoon-theory aware, never hustle, never clinical. You are trying to UNDERSTAND her so you can help better.`;
+      const user = `${ctx}\n\nYOUR CURRENT INSIGHTS:\n${curInsights.map((i) => "- " + i).join("\n") || "(none yet)"}\n\nRECENT CONVERSATION TOPICS: ${eps || "(none)"}\n\nReflect now. Return ONLY JSON, no prose around it:
+{ "summary": string (≤220 words, third person "she" to match the existing memory summary, PLAIN TEXT + emoji only — no markdown — a living picture of what matters for her lately that now WEAVES IN the biggest patterns you noticed; rewrite it fully, keeping the durable parts of the current summary and dropping stale bits),
+  "insights": string[] (5-12 durable higher-level patterns, each ONE sentence — the kind that help her decide and feel SEEN. Correlate across her real metrics where the data supports it (e.g. energy vs stream load, sleep vs focus, what content/titles do best, spending vs income). Gentle observations, NEVER medical proof, NEVER raw symptom/med numbers — patterns only.),
+  "retireInsights": string[] (0-5 short phrases from your current insights that are now stale or contradicted) }`;
+      const out = parseJSON(await claude(sys, user, 1600));
+      if (!out || typeof out.summary !== "string") return json({ skipped: true, reason: "unparseable" });
+      // graft-write: re-read live row, touch only the memory keys
+      const { data: live } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+      let ln: any = {}; try { ln = JSON.parse(live?.notes || "{}"); } catch { ln = {}; }
+      let merged: any[] = Array.isArray(ln.eugeneMemory?.insights) ? ln.eugeneMemory.insights.slice() : [];
+      for (const q of (Array.isArray(out.retireInsights) ? out.retireInsights : [])) { const ql = String(q).toLowerCase(); if (ql.length > 2) merged = merged.filter((i) => String(i.text || i).toLowerCase().indexOf(ql) < 0); }
+      for (const t of (Array.isArray(out.insights) ? out.insights.slice(0, 12) : [])) { const tx = String(t).slice(0, 220); const low = tx.toLowerCase(); if (tx && !merged.some((i) => String(i.text || i).toLowerCase() === low)) merged.push({ text: tx, at: today }); }
+      merged = merged.slice(-24);
+      ln.eugeneMemory = { ...(ln.eugeneMemory || {}), summary: String(out.summary).slice(0, 2400), insights: merged, reflectedAt: new Date().toISOString(), paused: !!(ln.eugeneMemory && ln.eugeneMemory.paused) };
+      if (live) await sb.from("daily_logs").update({ notes: JSON.stringify(ln) }).eq("user_id", userId).eq("log_date", "2000-01-01");
+      else await sb.from("daily_logs").insert({ user_id: userId, log_date: "2000-01-01", notes: JSON.stringify(ln) });
+      return json({ ok: true, summary: ln.eugeneMemory.summary, insights: merged.map((i) => i.text || i), count: merged.length });
+    }
+
+    // --- nudge: proactive care. Picks AT MOST ONE timely, gentle thing worth surfacing right now
+    // (or nothing). Cheap model, fired ~once a day by the app. ---
+    if (mode === "nudge") {
+      const today = (body.input?.today || new Date().toLocaleDateString("en-CA")).toString();
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: row } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+      let s: any = {}; try { s = JSON.parse(row?.notes || "{}"); } catch { s = {}; }
+      if (s.eugeneMemory?.paused) return json({ nudge: null });
+      const ctx = await fullContext(userId, today);
+      const recent = (s.eugeneNudges || []).slice(-8).map((x: any) => x.text || x);
+      const sys = `You are Egg Jean 🐙 — Eggie's warm, spoon-theory-aware assistant who quietly looks out for her. Looking at her live OS, pick AT MOST ONE small, timely thing genuinely worth gently surfacing to her right now, unprompted — the single most caring or useful one. Good nudges: a quietly-overdue client need or deadline, a sponsor follow-up that's due, a reminder she set, a gentle wellbeing offer (rest / hydrate / a recovery day) WHEN the WELLBEING SIGNAL warrants it, a small timely opportunity, or picking up an open loop. If the WELLBEING SIGNAL shows she's struggling, the nudge should protect her (rest), never add work. If nothing is truly worth interrupting her gentle day for, return null — silence beats noise. One warm sentence, plain text + emoji, never naggy, never guilt-trippy.`;
+      const user = `${ctx}\n\nNudges you ALREADY gave recently (do NOT repeat these): ${recent.join(" | ") || "(none)"}\n\nReturn ONLY JSON: { "nudge": string|null (one warm sentence, or null), "navTab": string|null (if a tab would help her act on it, one of: home, content, planner, calendar, optimize, habits, health, care, art, income, sponsors, clients, review, settings — else null), "label": string|null (short button label like "open clients", or null) }`;
+      const out = parseJSON(await claude(sys, user, 300, MODEL_LIGHT));
+      if (!out || !out.nudge || typeof out.nudge !== "string") return json({ nudge: null });
+      // record server-side so we don't repeat it
+      const { data: live } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+      let ln: any = {}; try { ln = JSON.parse(live?.notes || "{}"); } catch { ln = {}; }
+      ln.eugeneNudges = [...(Array.isArray(ln.eugeneNudges) ? ln.eugeneNudges : []), { text: String(out.nudge).slice(0, 200), date: today }].slice(-12);
+      if (live) await sb.from("daily_logs").update({ notes: JSON.stringify(ln) }).eq("user_id", userId).eq("log_date", "2000-01-01");
+      return json({ nudge: String(out.nudge).slice(0, 240), navTab: out.navTab || null, label: out.label || null });
     }
 
     // --- goblin: ADHD micro-tools (goblin.tools-inspired, native): breakdown / tone / rephrase / compile / estimate ---

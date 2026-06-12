@@ -1,6 +1,6 @@
 // =============================================================================
 // Eggie OS — "discord" Edge Function 🐙💬
-// Eugene on Discord: an HTTP-interactions bot (no always-on server needed).
+// Egg Jean on Discord: an HTTP-interactions bot (no always-on server needed).
 // Discord POSTs signed interactions here; slow AI work runs as a background
 // task after a deferred "thinking…" reply.
 //
@@ -262,7 +262,7 @@ async function patchOriginal(appId: string, token: string, content: string) {
   });
 }
 const COMMANDS = [
-  { name: "ask", description: "Ask Eugene anything — your OS, the web, or just chat 🐙", options: [{ type: 3, name: "question", description: "what do you want to know / do?", required: true }] },
+  { name: "ask", description: "Ask Egg Jean anything — your OS, the web, or just chat 🐙", options: [{ type: 3, name: "question", description: "what do you want to know / do?", required: true }] },
   { name: "remind", description: "Set a reminder in plain words (\"tomorrow at 3pm to send the invoice\") ⏰", options: [{ type: 3, name: "about", description: "what + when, any wording", required: true }] },
   { name: "task", description: "Add a task to your planner 🗒️", options: [{ type: 3, name: "text", description: "the task", required: true }] },
   { name: "capture", description: "Brain-dump a thought before it escapes 🐙", options: [{ type: 3, name: "text", description: "the thought", required: true }] },
@@ -435,7 +435,7 @@ Deno.serve(async (req) => {
       })();
       // @ts-ignore — Supabase edge runtime global
       if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(work);
-      return json({ type: 5 }); // "Eugene is thinking…"
+      return json({ type: 5 }); // "Egg Jean is thinking…"
     }
   }
   return json({ type: 4, data: { content: "hmm, I don't know that one 🌸", flags: 64 } });
