@@ -869,11 +869,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.37";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.38";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.38: the phantom-repaint stakeout — the console [render] trace now NAMES THE EXACT FUNCTION that triggered every repaint, so the next occurrence identifies its culprit outright",
   "2026-06-12.37: the tab-reload investigation continues — renders are now loop-proof (a runaway chain can't spiral and crash the tab anymore), and the broken manifest/notification icon 404 is fixed (was pointing at a screenshot that isn't in the repo)",
   "2026-06-12.36: the 'double refresh' is (truly) found — it was the tab-switch entrance animation staggering each section in .06-.22s apart, which read as the page loading twice once pages grew several sections; tab switches are now ONE smooth fade",
   "2026-06-12.35: 🌸 Sakura mode is now HERMETIC — in that mode the bar shows ONLY the Clients hub (no Home/Planner/Calendar/you — none of her personal anything), for her AND managers. Cycling to 🌸 lands straight on Clients; leaving it returns to the tab's own mode",
@@ -1175,6 +1176,7 @@ async function runDailyEngines(sent){
 /* render() coalesces concurrent calls — two near-simultaneous renders used to double-run the
    entrance animation ("the page refreshes twice"). One runs; extras fold into a single follow-up. */
 async function render(){
+  try{ render._caller=new Error().stack||""; }catch(e){ render._caller=""; }
   if(render._busy){ render._again=true; return; }
   render._busy=true;
   try{ await renderCore(); }
@@ -1259,7 +1261,7 @@ async function renderCore(){
     // with unchanged data), skip the swap entirely — no image re-decode flicker, no scroll-pin, no
     // "the page refreshed twice". Only genuinely-changed content ever repaints.
     const skipSwap = !tabChanged && view._lastHTML===html;
-    try{ console.debug("[render]",state.tab,skipSwap?"(no change — swap skipped)":"painted",new Date().toISOString().slice(11,23)); }catch(e){}
+    try{ const who=((render._caller||"").split("\n").slice(2,5).map(s2=>s2.trim().replace(/^at /,"")).filter(s2=>!/renderCore|^render /.test(s2)).slice(0,2).join(" ← "))||"?"; console.debug("[render]",state.tab,skipSwap?"(no change — swap skipped)":"PAINTED",new Date().toISOString().slice(11,23),"· called by:",who); }catch(e){}
     if(!skipSwap){
       view.innerHTML=html;                                  // single swap — no "loading…" flash on re-renders
       // span modular grids SYNCHRONOUSLY (before this frame paints) — the old RAF-only pass let the
