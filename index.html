@@ -829,11 +829,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-11.19";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.20";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.20: client to-do list leveled up to match her own tasks 🔴 — each client NEED now has a priority (🔴 high / 🟦 normal / 🌙 low), a due date, a note, and sub-steps you can break it into; the per-client board can sort by due or priority, and ✎ edits any need. You can set all of it via addClientNeed (priority/due/note/steps) and the new setClientNeed (rename/re-prioritise/add steps)",
   "2026-06-11.19: YOU BECAME A FULLER ASSISTANT 💖 — (1) WELLBEING ATTUNEMENT: you read a wellbeing signal (low-energy streaks, flares, no-rest runs) and soften, protect her energy, scale plans DOWN, and reframe self-criticism instead of reinforcing it. (2) PROACTIVE NUDGES: once a day you may surface ONE gentle, timely thing (an overdue client need, a rest offer, an opportunity) in the pet bubble — dismissible, never naggy. (3) FEEDBACK: she can 👍/👎 your replies; 👎 reasons become standing corrections you must honor. (4) PLANS 🎯: turn any goal into a small, tickable multi-step plan on the Planner (addPlan / planStepDone) — surface only the NEXT step, celebrate progress, never the whole mountain",
   "2026-06-11.18: YOUR LEARNING GOT DEEPER 🌙 — on top of chat-memory you now REFLECT across her whole OS (energy, streams, content, money, art, habits) and synthesize higher-level INSIGHTS she can't see day to day; they show in the 🧠 panel and feed every answer. Runs automatically about weekly, or instantly when she says 'reflect on my data' / asks what patterns you see (reflectNow action), or taps ✨ reflect in the 🧠 panel. You also LEARN PROACTIVELY now: capture durable preferences/people/routines/how-she-likes-things without being told, treat CORRECTIONS as top priority, and your context now includes EVERY part of her data (content pipeline, channel stats, invoices, games, weekly review, captures, joy jar, a 10-day daily series for correlations) plus a current VTuber growth playbook",
   "2026-06-10.17: Art studio reworked into modular cards (drag/resize/hide like Home) + research-pack tools: 🟣 emote previewer (real Twitch/Discord chat sizes + size-limit checks + transparency board), ◐ value checker (posterize your WIP to 2-6 values), 💯 100-of-anything counter (no deadlines), 🧩 Live2D cut-prep checklist (official rules), 📏 verified platform-spec card, 🪜 value ramps + cel-shade pairs in the palette, and a 🌟 one-tap research pack of 14 verified free links for the art library",
@@ -2991,18 +2992,28 @@ function avatarToDataURL(file){ return new Promise((res,rej)=>{ const img=new Im
 }
 /* needs board markup shared by the combined board + the client page — drag OR tap-to-advance */
 function needCycleLbl(k){ return k==="needs"?"→ start":k==="doing"?"→ done":"↺ reopen"; }
+function needPrioDot(p){ return p==="high"?'<span title="high priority">🔴</span> ':p==="low"?'<span title="low priority">🌙</span> ':''; }
 function needCardHTML(t,cid,cname){ const k=t.status||(t.done?"done":"needs"); const od=t.due&&t.due<TODAY&&k!=="done";
+  const sub=t.sub||[]; const subDone=sub.filter(s=>s.done).length;
   return `<div class="citem" draggable="true" data-act="dragClientTask" data-id="${t.id}" data-cid="${cid}" data-clq="${esc(((cname||"")+" "+(t.text||"")).toLowerCase())}">
-    ${cname?`<div data-act="clientOpen" data-id="${cid}" style="cursor:pointer"><div style="font-size:11px;font-weight:700;color:var(--lav-deep)">${esc(cname)}</div><div style="font-size:12.5px;margin-top:2px;${k==='done'?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</div></div>`
-      :`<div style="display:flex;align-items:flex-start;gap:6px"><button class="check ${k==='done'?'on':''}" data-act="clientTaskDone" data-id="${cid}" data-tid="${t.id}" ${RO?"disabled":""} style="padding:0;flex:0 0 auto;margin-top:1px"></button><span class="grow" style="font-size:12.5px;${k==='done'?'text-decoration:line-through;opacity:.55':''}">${esc(t.text)}</span></div>`}
-    <div style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:wrap">
+    ${cname?`<div data-act="clientOpen" data-id="${cid}" style="cursor:pointer"><div style="font-size:11px;font-weight:700;color:var(--lav-deep)">${esc(cname)}</div><div style="font-size:12.5px;margin-top:2px;${k==='done'?'text-decoration:line-through;opacity:.55':''}">${needPrioDot(t.priority)}${esc(t.text)}</div></div>`
+      :`<div style="display:flex;align-items:flex-start;gap:6px"><button class="check ${k==='done'?'on':''}" data-act="clientTaskDone" data-id="${cid}" data-tid="${t.id}" ${RO?"disabled":""} style="padding:0;flex:0 0 auto;margin-top:1px"></button><span class="grow" style="font-size:12.5px;${k==='done'?'text-decoration:line-through;opacity:.55':''}">${needPrioDot(t.priority)}${esc(t.text)}</span></div>`}
+    ${t.note?`<div class="soft" style="font-size:11px;margin-top:3px;${cname?"":"padding-left:22px"}">${esc(t.note)}</div>`:""}
+    ${!cname&&sub.length?`<div style="margin:5px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:2px">${sub.map(s=>`<div style="display:flex;align-items:center;gap:6px"><button class="check ${s.done?'on':''}" data-act="clientSubToggle" data-cid="${cid}" data-tid="${t.id}" data-sid="${s.id}" ${RO?"disabled":""} style="padding:0;flex:0 0 auto;transform:scale(.82)"></button><span style="font-size:11.5px;${s.done?'text-decoration:line-through;opacity:.5':''}">${esc(s.text)}</span></div>`).join("")}</div>`:""}
+    <div style="display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap">
       ${t.due?`<span class="pill ${od?'':'pill-gray'}" ${od?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}
+      ${sub.length?`<span class="pill pill-mint" title="steps done">✓${subDone}/${sub.length}</span>`:""}
       <button class="pill pill-lav" data-act="needCycle" data-id="${t.id}" data-cid="${cid}" ${RO?"disabled":""} style="cursor:pointer;border:none" title="move it along — no dragging needed">${needCycleLbl(k)}</button>
-      ${!cname?`<button class="ft-ic" data-act="clientTaskDel" data-id="${cid}" data-tid="${t.id}" style="color:var(--rose);margin-left:auto">🗑</button>`:""}
+      ${!cname?`<button class="ft-ic" data-act="clientNeedEdit" data-cid="${cid}" data-tid="${t.id}" title="edit — priority, due, steps, notes" style="margin-left:auto">✎</button><button class="ft-ic" data-act="clientTaskDel" data-id="${cid}" data-tid="${t.id}" style="color:var(--rose)">🗑</button>`:""}
     </div></div>`; }
-function needsBoardHTML(tasks,cid){ /* cid=""+cname per task → combined board; cid set → single client */
+function needsBoardHTML(tasks,cid,sort){ /* cid=""+cname per task → combined board; cid set → single client */
+  sort=sort||"due";
+  const prioRank={high:0,normal:1,low:2};
+  const cmp = sort==="priority"
+    ? (a,b)=>(prioRank[a.priority||"normal"]-prioRank[b.priority||"normal"])||String(a.due||"9999").localeCompare(String(b.due||"9999"))
+    : (a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"));
   return `<div class="kanban" style="grid-template-columns:repeat(3,minmax(160px,1fr))">${CLIENT_NEED.map(([k,l])=>{
-    const col=tasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999")));
+    const col=tasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort(cmp);
     return `<div class="kcol" data-act="dropClientNeed" data-status="${k}" ${cid?`data-cid="${cid}"`:""} ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px"><span>${l}</span><span style="display:flex;gap:6px;align-items:center">${k==="done"&&col.length?`<button class="ft-ic" data-act="needsClearDone" ${cid?`data-cid="${cid}"`:""} title="sweep the done pile away" ${RO?"disabled":""}>🧹</button>`:""}<span>${col.length}</span></span></div>${col.map(t=>needCardHTML(t,cid||t._cid,cid?"":t._cname)).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
   }).join("")}</div>`; }
 async function renderClients(){
@@ -3169,10 +3180,10 @@ function renderClientPage(c){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px">
       ${info("🧠 Niche",c.niche)}${info("🎙️ Voice & vibe",c.brain)}${info("🏆 Winning style",c.style)}${info("💼 Deliverables",c.deliverables)}${info("🎯 Goals",c.goals)}${info("💗 Preferences",c.prefs)}${info("📇 Contact",c.contact)}${info("💬 Discord",c.discord)}
     </div>
-    <div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">🔴 What they need</h2></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="cm_tasktext" placeholder="they need…" style="flex:1;min-width:140px" ${RO?"disabled":""}/><input class="inp" id="cm_taskdue" type="date" style="width:auto" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientTaskAdd" data-id="${c.id}" ${RO?"disabled":""}>+ need</button></div>
-      ${needsBoardHTML(needs,c.id)}
-      <p class="soft" style="font-size:11px;margin:8px 0 0">Drag cards across columns, or just tap the little pill to move one along. 🌸</p>
+    <div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">🔴 What they need</h2><div style="display:flex;gap:6px;align-items:center"><span class="label">sort</span><div class="seg">${[["due","📅 due"],["priority","🔴 priority"]].map(([v,l])=>`<button data-act="clientNeedSort" data-v="${v}" class="${(state.clientNeedSort||"due")===v?'on':''}">${l}</button>`).join("")}</div></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="cm_tasktext" placeholder="they need…" style="flex:1;min-width:130px" ${RO?"disabled":""}/><select class="inp" id="cm_taskprio" style="width:auto" ${RO?"disabled":""}><option value="normal">🟦 Normal</option><option value="high">🔴 High</option><option value="low">🌙 Low</option></select><input class="inp" id="cm_taskdue" type="date" style="width:auto" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientTaskAdd" data-id="${c.id}" ${RO?"disabled":""}>+ need</button></div>
+      ${needsBoardHTML(needs,c.id,state.clientNeedSort||"due")}
+      <p class="soft" style="font-size:11px;margin:8px 0 0">Drag cards across columns, tap the pill to move one along, or ✎ to add steps, a due date, priority and notes. 🌸</p>
     </div>
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">📝 Notes & meeting log</h2></div>
       <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}" ${RO?"disabled":""}>+ note</button></div>
@@ -3181,6 +3192,21 @@ function renderClientPage(c){
   </div>`;
 }
 async function setClientTaskStatus(cid,tid,status){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,touched:TODAY,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,status,done:status==="done"}:t)}:c)})); }
+/* ✎ edit a single client need — priority, due, note, and break it into steps (parity with her own tasks) */
+async function clientNeedModal(cid,tid){
+  const sent=await DB.daily(SENTINEL); const c=(sent.clients||[]).find(x=>x.id===cid); if(!c)return; const t=(c.tasks||[]).find(x=>x.id===tid); if(!t)return;
+  const sub=t.sub||[];
+  document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:460px;width:100%;max-height:90vh;overflow:auto">
+    <div class="card-head"><h3 style="font-size:16px">✎ ${esc(c.name||"Client")} · edit need</h3><button class="btn" data-act="closeModal">✕</button></div>
+    <div class="label">What they need</div><input class="inp" id="nd_text" value="${esc(t.text||"")}"/>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="grow" style="min-width:120px"><div class="label">Priority</div><select class="inp" id="nd_prio">${[["normal","🟦 Normal"],["high","🔴 High"],["low","🌙 Low"]].map(([v,l])=>`<option value="${v}" ${(t.priority||"normal")===v?"selected":""}>${l}</option>`).join("")}</select></div><div style="width:160px"><div class="label">Due</div><input class="inp" id="nd_due" type="date" value="${esc(t.due||"")}"/></div></div>
+    <div class="label" style="margin-top:8px">Note / detail</div><textarea class="inp" id="nd_note" rows="2" placeholder="any specifics…">${esc(t.note||"")}</textarea>
+    <div class="label" style="margin:12px 0 4px">Steps <span class="muted">· break the deliverable down</span></div>
+    ${sub.length?`<div style="display:flex;flex-direction:column;gap:4px">${sub.map(s=>`<div style="display:flex;align-items:center;gap:8px"><button class="check ${s.done?'on':''}" data-act="clientSubToggle" data-cid="${cid}" data-tid="${tid}" data-sid="${s.id}" style="padding:0;flex:0 0 auto"></button><span class="grow" style="font-size:12.5px;${s.done?'text-decoration:line-through;opacity:.55':''}">${esc(s.text)}</span><button class="ft-ic" data-act="clientSubDel" data-cid="${cid}" data-tid="${tid}" data-sid="${s.id}" style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No steps yet.</p>`}
+    <div style="display:flex;gap:6px;margin-top:6px"><input class="inp" id="nd_substep" placeholder="break it into a step…" style="flex:1"/><button class="btn" data-act="clientSubAdd" data-cid="${cid}" data-tid="${tid}">＋</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px"><button class="btn" data-act="clientTaskDel" data-id="${cid}" data-tid="${tid}">🗑 delete need</button><button class="btn btn-pink" data-act="clientNeedSave" data-cid="${cid}" data-tid="${tid}">💾 save</button></div>
+  </div></div>`;
+}
 /* 🔍 roster/board search — pure DOM show/hide (no re-render, so the input never loses focus) */
 window.clientQ=function(v){ const q=String(v||"").trim().toLowerCase(); state.clientQ=q;
   document.querySelectorAll("[data-clq]").forEach(el=>{ el.style.display=(!q||el.dataset.clq.includes(q))?"":"none"; });
@@ -4420,9 +4446,15 @@ document.addEventListener("click",async(e)=>{
   if(act==="clientAvatarUpload"){ const f=document.getElementById("cm_avatarFile"); if(f)f.click(); return; }
   if(act==="clientAvatarClear"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,avatar:""}:c)})); clientModal(id); render(); return; }
   if(act==="clientDel"){ await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).filter(c=>c.id!==id)})); document.getElementById("modal").innerHTML=""; state.clientPage=null; toast("Client removed 🌸"); render(); return; }
-  if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,touched:TODAY,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",due:due||"",done:false}]}:c)})); render(); return; }
+  if(act==="clientTaskAdd"){ const tx=((document.getElementById("cm_tasktext")||{}).value||"").trim(); const due=((document.getElementById("cm_taskdue")||{}).value)||""; const prio=((document.getElementById("cm_taskprio")||{}).value)||"normal"; if(!tx){toast("What do they need? 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,touched:TODAY,tasks:[...(c.tasks||[]),{id:uid(),text:tx,status:"needs",priority:prio,due:due||"",done:false,sub:[]}]}:c)})); render(); return; }
   if(act==="clientTaskDone"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,touched:TODAY,tasks:(c.tasks||[]).map(t=>{ if(t.id!==tid)return t; const nd=!(t.status==="done"); return {...t,status:nd?"done":"needs",done:nd}; })}:c)})); render(); return; }
-  if(act==="clientTaskDel"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).filter(t=>t.id!==tid)}:c)})); render(); return; }
+  if(act==="clientTaskDel"){ const tid=el.dataset.tid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,tasks:(c.tasks||[]).filter(t=>t.id!==tid)}:c)})); const md=document.getElementById("modal"); if(md&&document.getElementById("nd_text"))md.innerHTML=""; render(); return; }
+  if(act==="clientNeedSort"){ state.clientNeedSort=el.dataset.v; render(); return; }
+  if(act==="clientNeedEdit"){ clientNeedModal(el.dataset.cid,el.dataset.tid); return; }
+  if(act==="clientNeedSave"){ const cid=el.dataset.cid,tid=el.dataset.tid; const gv=i=>((document.getElementById(i)||{}).value||""); const tx=gv("nd_text").trim(); if(!tx){toast("Needs a description 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,touched:TODAY,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,text:tx.slice(0,200),priority:gv("nd_prio")||"normal",due:gv("nd_due"),note:gv("nd_note").slice(0,400)}:t)}:c)})); document.getElementById("modal").innerHTML=""; toast("Saved 🌸"); render(); return; }
+  if(act==="clientSubAdd"){ const cid=el.dataset.cid,tid=el.dataset.tid; const inp=document.getElementById("nd_substep"); const tx=(inp&&inp.value||"").trim(); if(!tx){toast("Write the step 🌸");return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:[...(t.sub||[]),{id:uid(),text:tx.slice(0,160),done:false}]}:t)}:c)})); clientNeedModal(cid,tid); return; }
+  if(act==="clientSubToggle"){ const cid=el.dataset.cid,tid=el.dataset.tid,sid=el.dataset.sid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:(t.sub||[]).map(s=>s.id===sid?{...s,done:!s.done}:s)}:t)}:c)})); if(document.getElementById("nd_text"))clientNeedModal(cid,tid); else render(); return; }
+  if(act==="clientSubDel"){ const cid=el.dataset.cid,tid=el.dataset.tid,sid=el.dataset.sid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,tasks:(c.tasks||[]).map(t=>t.id===tid?{...t,sub:(t.sub||[]).filter(s=>s.id!==sid)}:t)}:c)})); clientNeedModal(cid,tid); return; }
   if(act==="clientNoteAdd"){ const tx=((document.getElementById("cm_notetext")||{}).value||"").trim(); if(!tx){return;} await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,touched:TODAY,notes:[...(c.notes||[]),{id:uid(),date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}),text:tx}]}:c)})); render(); return; }
   if(act==="clientNoteDel"){ const nid=el.dataset.nid; await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===id?{...c,notes:(c.notes||[]).filter(x=>x.id!==nid)}:c)})); render(); return; }
   if(act==="teach"){ const k=el.dataset.kind||"any"; let orig=""; if(k==="email")orig=(state.email&&state.email.out&&((state.email.out.subject?state.email.out.subject+"\n\n":"")+(state.email.out.body||"")))||""; else orig=(state.script&&state.script.out&&state.script.out.script)||""; teachModal(k,orig); return; }
@@ -5623,8 +5655,15 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       }
       case "addClientNeed": {
         var cnm=(a.client||"").toLowerCase(); var hit=null;
-        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{tasks:(c.tasks||[]).concat([{id:uid(),text:a.text||"need",status:"needs",due:a.due||"",done:false}])});} return c; })}); });
-        return hit? "🔴 noted: "+hit.name+" needs “"+(a.text||"")+"”"+(a.due?" by "+a.due:"") : "couldn't find a client like “"+(a.client||"")+"” 🌸";
+        var subs=(Array.isArray(a.steps)?a.steps:[]).slice(0,10).map(function(t){return {id:uid(),text:String(t).slice(0,160),done:false};});
+        var pr=(["high","normal","low"].indexOf(a.priority)>=0)?a.priority:"normal";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if(!hit&&(c.name||"").toLowerCase().indexOf(cnm)>=0){hit=c;return Object.assign({},c,{touched:TODAY,tasks:(c.tasks||[]).concat([{id:uid(),text:a.text||"need",status:"needs",priority:pr,due:a.due||"",note:String(a.note||"").slice(0,400),sub:subs,done:false}])});} return c; })}); });
+        return hit? "🔴 noted: "+hit.name+" needs “"+(a.text||"")+"”"+(pr==="high"?" 🔴":"")+(a.due?" by "+a.due:"")+(subs.length?" ("+subs.length+" steps)":"") : "couldn't find a client like “"+(a.client||"")+"” 🌸";
+      }
+      case "setClientNeed": {
+        var cnmE=(a.client||"").toLowerCase(), tnmE=(a.text||a.match||"").toLowerCase(); var hitE=null;
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{clients:(n.clients||[]).map(function(c){ if((c.name||"").toLowerCase().indexOf(cnmE)>=0){ return Object.assign({},c,{touched:TODAY,tasks:(c.tasks||[]).map(function(t){ if(!hitE&&(t.text||"").toLowerCase().indexOf(tnmE)>=0){ hitE=t; var o=Object.assign({},t); if(a.newText)o.text=String(a.newText).slice(0,200); if(a.priority&&["high","normal","low"].indexOf(a.priority)>=0)o.priority=a.priority; if(a.due!==undefined)o.due=a.due||""; if(a.note!==undefined)o.note=String(a.note).slice(0,400); if(Array.isArray(a.addSteps))o.sub=(o.sub||[]).concat(a.addSteps.slice(0,10).map(function(x){return {id:uid(),text:String(x).slice(0,160),done:false};})); return o; } return t; })}); } return c; })}); });
+        return hitE? "✏️ updated that need for "+(a.client||"") : "couldn't find that need 🌸";
       }
       case "doneClientNeed": {
         var cnm=(a.client||"").toLowerCase(), tnm=(a.text||"").toLowerCase(); var hit=null;
