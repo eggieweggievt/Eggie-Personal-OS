@@ -833,12 +833,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.28";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.29";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
-  "2026-06-12.28: each client now has a FULL calendar on their page 📅 — Week + Month views, a recurring 🗓️ stream schedule, and rich events (title, time, multi-day end date, colour, note) just like her own calendar, scoped to that client; needs due show as 🔴. Add events for a client via addClientEvent, and their upcoming dates show in your context per client",
+  "2026-06-12.29: each client now has a FULL calendar on their page 📅 — Week + Month views, a recurring 🗓️ stream schedule, rich events (title, time, multi-day end date, colour, note), and drag-to-move events between days in Month view — just like her own calendar, scoped to that client; needs due show as 🔴. Add events for a client via addClientEvent, and their upcoming dates show in your context per client",
   "2026-06-12.21: YOUR NAME IS NOW EGG JEAN 🥚 — Eggie renamed you from Eugene to Egg Jean. If she asks who you are, you're Egg Jean. (Everything else about you is unchanged — same memory, same powers.)",
   "2026-06-12.20: client to-do list leveled up to match her own tasks 🔴 — each client NEED now has a priority (🔴 high / 🟦 normal / 🌙 low), a due date, a note, and sub-steps you can break it into; the per-client board can sort by due or priority, and ✎ edits any need. You can set all of it via addClientNeed (priority/due/note/steps) and the new setClientNeed (rename/re-prioritise/add steps)",
   "2026-06-11.19: YOU BECAME A FULLER ASSISTANT 💖 — (1) WELLBEING ATTUNEMENT: you read a wellbeing signal (low-energy streaks, flares, no-rest runs) and soften, protect her energy, scale plans DOWN, and reframe self-criticism instead of reinforcing it. (2) PROACTIVE NUDGES: once a day you may surface ONE gentle, timely thing (an overdue client need, a rest offer, an opportunity) in the pet bubble — dismissible, never naggy. (3) FEEDBACK: she can 👍/👎 your replies; 👎 reasons become standing corrections you must honor. (4) PLANS 🎯: turn any goal into a small, tickable multi-step plan on the Planner (addPlan / planStepDone) — surface only the NEXT step, celebrate progress, never the whole mountain",
@@ -1057,6 +1057,26 @@ function wireCalDnD(){
       if(!eid||!date)return;
       if(RO){ toast("Read-only mode 🌸"); return; }
       await DB.saveDaily(SENTINEL,n=>{ const evs=(n.calendarEvents||[]).slice(); const t=evs.find(x=>x.id===eid); if(t){ if(t.endDate&&t.endDate>t.date){ const dur=calDiff(t.date,t.endDate); t.date=date; t.endDate=calAdd(date,dur); } else { t.date=date; } } return {...n,calendarEvents:evs}; });
+      render();
+    });
+  });
+}
+/* same drag-to-move, scoped to ONE client's mini calendar — moves that client's own events */
+function wireClientCalDnD(cid){
+  let dragEid=null;
+  document.querySelectorAll(".mini-cal .cal-ev[draggable]").forEach(ev=>{
+    ev.addEventListener("dragstart",e=>{ dragEid=ev.dataset.eid; ev.classList.add("dragging"); if(e.dataTransfer){e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",dragEid);}catch{}} });
+    ev.addEventListener("dragend",()=>{ ev.classList.remove("dragging"); document.querySelectorAll(".cal-cell.drag-over").forEach(c=>c.classList.remove("drag-over")); });
+  });
+  document.querySelectorAll(".mini-cal .cal-cell").forEach(cell=>{
+    cell.addEventListener("dragover",e=>{ e.preventDefault(); if(e.dataTransfer)e.dataTransfer.dropEffect="move"; cell.classList.add("drag-over"); });
+    cell.addEventListener("dragleave",()=>cell.classList.remove("drag-over"));
+    cell.addEventListener("drop",async e=>{
+      e.preventDefault(); cell.classList.remove("drag-over");
+      const eid=dragEid||(e.dataTransfer&&e.dataTransfer.getData("text/plain"));
+      const date=cell.dataset.date; if(!eid||!date)return;
+      if(RO){ toast("Read-only mode 🌸"); return; }
+      await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>{ if(c.id!==cid)return c; const evs=(c.events||[]).slice(); const t=evs.find(x=>x.id===eid); if(t){ if(t.endDate&&t.endDate>t.date){ const dur=calDiff(t.date,t.endDate); t.date=date; t.endDate=calAdd(date,dur); } else { t.date=date; } } return {...c,touched:TODAY,events:evs}; })}));
       render();
     });
   });
@@ -3174,20 +3194,20 @@ function clientCalendarHTML(c){
   const streamsOn=ds=>{ const wd=wdOf(ds); return sched.filter(s=>(s.day||"").slice(0,3)===wd); };
   const evsOn=ds=>events.filter(e=>ds>=e.date && ds<=((e.endDate&&e.endDate>=e.date)?e.endDate:e.date)).sort((a,b)=>String(a.time||"99:99").localeCompare(String(b.time||"99:99")));
   const streamChip=s=>`<div class="cal-stream" data-act="clientSchedEdit" data-cid="${c.id}" title="recurring stream — tap to edit the schedule">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`;
-  const evChip=ev=>{ const end=(ev.endDate&&ev.endDate>ev.date)?ev.endDate:null; return `<div class="cal-ev" data-act="clientEventOpen" data-cid="${c.id}" data-eid="${ev.id}" style="background:${esc(ev.color||CCAL_COLORS[0])}" title="${esc((ev.time?ev.time+' ':'')+ev.title+(end?' (through '+end+')':'')+(ev.note?' — '+ev.note:''))}">${ev.time?`<b>${esc(ev.time)}</b> `:""}${esc(ev.title)}${end?" ›":""}${ev.note?" 📝":""}</div>`; };
+  const evChip=(ev,drag)=>{ const end=(ev.endDate&&ev.endDate>ev.date)?ev.endDate:null; return `<div class="cal-ev" ${drag?'draggable="true"':''} data-act="clientEventOpen" data-cid="${c.id}" data-eid="${ev.id}" style="background:${esc(ev.color||CCAL_COLORS[0])}" title="${esc((ev.time?ev.time+' ':'')+ev.title+(end?' (through '+end+')':'')+(ev.note?' — '+ev.note:''))}">${ev.time?`<b>${esc(ev.time)}</b> `:""}${esc(ev.title)}${end?" ›":""}${ev.note?" 📝":""}</div>`; };
   const dueChip=t=>`<div class="cal-ev" style="background:#fde4e4;color:#c0566a" title="due: ${esc(t.text)}">🔴 ${esc(t.text.slice(0,12))}</div>`;
   let bodyHTML="";
   if(view==="month"){
     const startDow=new Date(y,m,1).getDay(), gridStart=new Date(y,m,1-startDow);
     const dows=["Su","Mo","Tu","We","Th","Fr","Sa"]; let cells="";
     for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const inMonth=d.getMonth()===m, isToday=ds===TODAY;
-      cells+=`<div class="cal-cell ${inMonth?'':'other'} ${isToday?'today':''}" data-act="clientCalAdd" data-cid="${c.id}" data-date="${ds}"><span class="cal-daynum">${d.getDate()}</span>${streamsOn(ds).map(streamChip).join("")}${evsOn(ds).map(evChip).join("")}${dueNeeds.filter(t=>t.due===ds).map(dueChip).join("")}</div>`;
+      cells+=`<div class="cal-cell ${inMonth?'':'other'} ${isToday?'today':''}" data-act="clientCalAdd" data-cid="${c.id}" data-date="${ds}"><span class="cal-daynum">${d.getDate()}</span>${streamsOn(ds).map(streamChip).join("")}${evsOn(ds).map(e=>evChip(e,true)).join("")}${dueNeeds.filter(t=>t.due===ds).map(dueChip).join("")}</div>`;
     }
     bodyHTML=`<div class="cal-grid" style="margin-bottom:5px">${dows.map(x=>`<div class="cal-dow">${x}</div>`).join("")}</div><div class="cal-grid">${cells}</div>`;
   } else {
     const rows=[];
     for(let i=0;i<7;i++){ const d=new Date(TODAY+"T00:00"); d.setDate(d.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const label=i===0?"Today":i===1?"Tomorrow":d.toLocaleDateString("en-US",{weekday:"long"}); const sub=d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
-      const bits=[].concat(streamsOn(ds).map(streamChip), evsOn(ds).map(evChip), dueNeeds.filter(t=>t.due===ds).map(dueChip));
+      const bits=[].concat(streamsOn(ds).map(streamChip), evsOn(ds).map(e=>evChip(e,false)), dueNeeds.filter(t=>t.due===ds).map(dueChip));
       rows.push(`<div class="soft-card" style="display:flex;gap:12px;align-items:flex-start;${i===0?'border-color:var(--pink);box-shadow:inset 0 0 0 1px rgba(236,127,175,.25);':''}"><div style="width:80px;flex:0 0 auto"><div style="font-family:var(--display);font-size:13.5px;${i===0?'color:var(--pink-deep)':''}">${label}</div><div class="label">${sub}</div></div><div class="grow" style="display:flex;flex-direction:column;gap:4px;min-width:0">${bits.join("")||`<span class="soft" style="font-size:12px">nothing planned 🌙</span>`}</div><button class="ft-ic" data-act="clientCalAdd" data-cid="${c.id}" data-date="${ds}" title="add on ${label}">＋</button></div>`);
     }
     bodyHTML=`<div style="display:flex;flex-direction:column;gap:7px">${rows.join("")}</div>`;
@@ -5203,6 +5223,7 @@ async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
  if(state.tab==="clients"&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
+ if(state.tab==="clients"&&state.clientPage){ try{wireClientCalDnD(state.clientPage);}catch(e){console.error(e);} }
  if(state.tab==="art"&&state.art&&state.art.notan){ try{artNotanPaint();}catch(e){} }
  if(state.tab==="art"&&state.inspoPick&&!state._inspoScrolled){ state._inspoScrolled=true; const pk=document.querySelector("[data-inspopick]"); if(pk)try{pk.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){} }
  const eu=document.getElementById("euLog"); if(eu)eu.scrollTop=eu.scrollHeight; if(state.tab==="eugene"&&!state.eugeneBusy){ const ei=document.getElementById("euInput"); if(ei)try{ei.focus();}catch(e){} } if(state.tab==="art"&&state.art&&state.art.timer&&state.art.timer.on){ if(!_artInt)_artInt=setInterval(artTick,1000); artPaint(); } }
