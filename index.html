@@ -840,11 +840,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.32";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.33";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.33: double-refresh hunted harder — repaints are now IDEMPOTENT: if a stray duplicate render produces identical content, the screen doesn't repaint at all (no flicker, no scroll jump). A quiet [render] line in the browser console traces any survivors",
   "2026-06-12.32: HOME NOW HAS THE FULL MIFU MOCK-UP SPINE in BOTH modes 🏠 — welcome banner (avatar, live clock, mode title), one-tap TODAY'S CHECK-INS (health: meds AM/PM, weighed-in, journaled, moved, water, slept well · creator: streamed, video, short, made art, emails, sponsor work — some tick themselves from her real logs), a warm greeting header, ✨ EGG JEAN NOTICED (client-side gentle observations — never grades), 🌸 SUGGESTED FOCUS (tappable next steps + 'You've got this, Eggie!'), and 💗 health snapshot card (health mode). Health OS now keeps its OWN home layout (homeH) separate from Creator's — arrange each independently",
   "2026-06-12.31: HOME GOT THE MIFU TREATMENT 🏠 — new mix-and-match cards: 🐙 octopus profile (energy taps), 🎮 gacha dailies (her game list, one-tap checks + week bars), ✅ daily habits regrouped by energy tier (🥄/🌤/🌞 — low-spoon days can stop at 🥄), 💡 content opportunities (upcoming game events → one-tap content ideas), 🧳 event prep (auto-appears for calendar events ≤21d, checklist + seed basics), ⚖️ weight trend mini. Retired unused cards (creator/session/journal/ship/sponsors/pipeline). Also: Ask Egg Jean is pinned to the END of the tab bar in BOTH modes, and the tab-switch double-refresh flash is fixed (grids lay out before paint + renders can't stack)",
   "2026-06-12.30: THE OS HAS TWO MODES NOW — tap the logo to swap between 🎬 Creator OS and 💗 Health OS (choice remembered; your navigate action flips modes automatically). Health mode gained two tabs ported from the Mifu build: 🍽 Food (photo/words → friendly AI macro estimate, protein+fibre bars, ⭐ favourites, water, week view — zero diet culture, missed meals are info not grades) and 🏃 Fitness (trend-first weigh-ins with a rolling 4-entry average — never react to one morning, treadmill/walk/stretch logs, 🌟 non-scale victories to celebrate LOUDLY, week dots not streaks, 🧭 journey card). New actions: logFood, logWeight, logWorkout, addNSV. Withings scale auto-sync ports in when her scale arrives",
@@ -1196,13 +1197,21 @@ async function renderCore(){
     else if(state.tab==="tools") html=await renderTools();
     else if(state.tab==="clients") html=await renderClients();
     else if(state.tab==="settings") html=await renderSettings();
-    view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
-    // span modular grids SYNCHRONOUSLY (before this frame paints) — the old RAF-only pass let the
-    // browser paint the unlaid grid first, then snap it into place = "the tab refreshes twice"
-    if(document.querySelector(".grid-modular")){ try{layoutHome();}catch(e){} }
+    // ✋ idempotent repaint: if a re-render produced EXACTLY the same HTML (a duplicate/stray render
+    // with unchanged data), skip the swap entirely — no image re-decode flicker, no scroll-pin, no
+    // "the page refreshed twice". Only genuinely-changed content ever repaints.
+    const skipSwap = !tabChanged && view._lastHTML===html;
+    try{ console.debug("[render]",state.tab,skipSwap?"(no change — swap skipped)":"painted",new Date().toISOString().slice(11,23)); }catch(e){}
+    if(!skipSwap){
+      view.innerHTML=html;                                  // single swap — no "loading…" flash on re-renders
+      // span modular grids SYNCHRONOUSLY (before this frame paints) — the old RAF-only pass let the
+      // browser paint the unlaid grid first, then snap it into place = "the tab refreshes twice"
+      if(document.querySelector(".grid-modular")){ try{layoutHome();}catch(e){} }
+    }
+    view._lastHTML=html;
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
-    else {
+    else if(!skipSwap){
       // Modular grids (Home/Care/Health/Money) get their true card heights 1-2 frames AFTER the
       // innerHTML swap (layoutHome assigns row-spans). A single synchronous scrollTo lands while
       // the grid is still collapsed and gets clamped → "checking anything teleports me to the top".
