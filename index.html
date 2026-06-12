@@ -869,11 +869,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.36";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.37";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.37: the tab-reload investigation continues — renders are now loop-proof (a runaway chain can't spiral and crash the tab anymore), and the broken manifest/notification icon 404 is fixed (was pointing at a screenshot that isn't in the repo)",
   "2026-06-12.36: the 'double refresh' is (truly) found — it was the tab-switch entrance animation staggering each section in .06-.22s apart, which read as the page loading twice once pages grew several sections; tab switches are now ONE smooth fade",
   "2026-06-12.35: 🌸 Sakura mode is now HERMETIC — in that mode the bar shows ONLY the Clients hub (no Home/Planner/Calendar/you — none of her personal anything), for her AND managers. Cycling to 🌸 lands straight on Clients; leaving it returns to the tab's own mode",
   "2026-06-12.34: 🌸 SAKURA IS A TEAM SPACE NOW — a third mode (logo cycles 🎬 → 💗 → 🌸) holding the client hub, and OTHER MANAGERS can sign in with their own accounts: they land locked to the Clients tab and can never see her health/money/memory (RLS + UI both enforce it; you don't answer managers either). Clients+inbox moved to a shared team row via the one-time '🌸 move it' banner; the Discord /sakura command, relay, and your own client knowledge all follow it automatically",
@@ -1177,7 +1178,15 @@ async function render(){
   if(render._busy){ render._again=true; return; }
   render._busy=true;
   try{ await renderCore(); }
-  finally{ render._busy=false; if(render._again){ render._again=false; render(); } }
+  finally{ render._busy=false;
+    if(render._again){ render._again=false;
+      // loop-proof: at most ONE chained follow-up per 400ms. If some bug ever made every render
+      // queue another, the old code would spiral until the tab crashed (and Chrome silently
+      // reloads a crashed tab — which looks exactly like "the page refreshed itself").
+      const _now=Date.now();
+      if(_now-(render._chainT||0)>400){ render._chainT=_now; render(); }
+    }
+  }
 }
 async function renderCore(){
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
@@ -6580,7 +6589,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
       if(!due.length) return;
       due.forEach(function(r){
         var nudge=(r.pings||0)>0?("🔁 nudge "+((r.pings||0)+1)+"/"+MAXP+" · "):"";
-        try{ if(window.Notification&&Notification.permission==="granted") new Notification("⏰ Egg Jean reminder",{body:nudge+r.text,icon:"pet-widget/Screenshot 2026-06-02 202234.png"}); }catch(e){}
+        try{ if(window.Notification&&Notification.permission==="granted") new Notification("⏰ Egg Jean reminder",{body:nudge+r.text,icon:"favicon.png"}); }catch(e){}
         toast("⏰ "+nudge+r.text);
       });
       showPetBubble("⏰ psst — "+due.map(function(r){return r.text;}).join(" · ")+" (tap ✓ on the Planner when it's handled 💗)",20000);
