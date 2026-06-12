@@ -140,9 +140,9 @@
   .meter>b{position:absolute;top:0;bottom:0;left:0;border-radius:999px;background:linear-gradient(90deg,var(--pink),var(--lav));}
   .meter.ok>b{background:linear-gradient(90deg,#7ed0b0,var(--mint));}
   /* ---- gentle page transition (auto-off in calm / reduce-motion via the rules below) ---- */
-  /* ONE smooth whole-page fade on tab switch. The old per-child stagger (each block arriving
-     .06-.22s apart) read as "the page refreshed twice" once pages grew several top-level blocks. */
-  #view.view-enter{ animation:viewIn .32s cubic-bezier(.22,.61,.36,1) both; }
+  /* Tab switches are INSTANT — no entrance animation. The fade-from-blank made every switch read
+     as "the page loaded twice" (old page lingers → blinks out → fades back in). Her OC-Hub switches
+     instantly and that's the correct feel. (.view-enter intentionally does nothing now.) */
   @keyframes viewIn{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
   @keyframes panelIn{ from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:none;} }
   /* ---- calendar ---- */
@@ -869,11 +869,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.40";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.41";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.41: tab switches are now INSTANT — the entrance fade was the last ingredient of the 'double refresh' (old page lingers → blinks out → fades in from blank = looks like loading twice). No animation at all now, exactly like her OC-Hub. Combined with .40's same-frame bar+view, a switch is one clean cut",
   "2026-06-12.40: the double refresh, ACTUALLY found (crash detector proved no crash; it struck on every tab switch): the tab BAR updated the instant she clicked while the page content arrived ~half a second later after the database reads — two visible beats. The bar and the view now land in the SAME frame: one beat, finally",
   "2026-06-12.39: THE 'DOUBLE REFRESH' MYSTERY IS SOLVED 🕵️ — the console stakeout proved the tab was actually CRASHING and Chrome silently reloaded it. Cause: the petal cursor trail + full-screen bubble canvas (GPU/DOM churn). Both are now OFF by default behind a '✨ Sparkles' toggle (Settings → comfort), and a crash detector announces any future silent reload in plain words instead of letting it look like a mystery refresh",
   "2026-06-12.38: the phantom-repaint stakeout — the console [render] trace now NAMES THE EXACT FUNCTION that triggered every repaint, so the next occurrence identifies its culprit outright",
@@ -928,7 +929,7 @@ document.addEventListener("pointerdown",e=>{ if(state.moreOpen && !e.target.clos
 /* pull fresh server-side changes (inbox, client reminders) when you come back to the tab */
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && !DEMO && SB){ try{ delete DB._c.daily[SENTINEL]; }catch(e){} try{render();}catch(e){} } });
 /* gentle fade/rise when a new tab's content loads in — calm mode + reduce-motion disable it automatically */
-function animateView(){ const v=document.getElementById("view"); if(!v)return; v.classList.remove("view-enter"); void v.offsetWidth; v.classList.add("view-enter"); clearTimeout(v._animT); v._animT=setTimeout(()=>v.classList.remove("view-enter"),750); }
+function animateView(){ /* intentionally nothing — tab switches are instant (build .41). The entrance fade was the final ingredient of the "double refresh" illusion. */ }
 
 /* ===================== CALENDAR ===================== */
 const CAL_COLORS=["#f6b8d4","#c9b8f0","#a9e0cb","#f6cba9","#b8d4f0"];
