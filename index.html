@@ -309,7 +309,7 @@
   .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
   body.eu-drop .eu-card{outline:2px dashed #ec7faf;outline-offset:-2px;}
   .eu-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,#ec7faf18,#a98fe018);}
-  .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#fff no-repeat url("pet-widget/Sprite Sheet.png");background-size:456px 722px;background-position:0 0;image-rendering:pixelated;flex:0 0 auto;}  /* frame (0,0) of the 768×1216 sheet, scaled to 38px */
+  .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#fff center/cover no-repeat url("pet-widget/egg-jean-icon.png");flex:0 0 auto;}
   .eu-log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0;}
   .eu-msg{font-size:14px;line-height:1.55;padding:10px 14px;border-radius:16px;max-width:82%;white-space:pre-wrap;word-break:break-word;}
   .eu-msg.me{align-self:flex-end;background:linear-gradient(135deg,#ec7faf,#a98fe0);color:#fff;border-bottom-right-radius:5px;}
@@ -829,7 +829,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.23";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.24";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
@@ -3709,7 +3709,7 @@ async function renderAssistantTab(){
   const card = `<div class="eu-card" style="${max?'flex:1':'height:calc(100vh - 210px);min-height:420px'}">
       <div class="eu-head">
         <div class="eu-av"></div>
-        <div style="flex:1"><div style="font-family:var(--display);font-size:17px">Egg Jean</div><div class="label" style="margin-top:1px">your octopus helper · web-connected 🌐</div></div>
+        <div style="flex:1"><div style="font-family:var(--display);font-size:17px">Egg Jean</div><div class="label" style="margin-top:1px">your cozy egg helper · web-connected 🌐</div></div>
         <button class="btn" data-act="memOpen" title="Egg Jean's memory — what he knows, edit or pause it">🧠</button>
         <button class="btn ${state.euIncognito?'btn-pink':''}" data-act="euIncognito" title="${state.euIncognito?'incognito ON — this chat won’t be remembered':'incognito — chat without it entering memory'}">🕶</button>
         <button class="btn" data-act="euSpeak" title="read replies aloud">${(function(){try{return localStorage.getItem("eugene-speak")==="1"}catch(e){return false}})()?'🔊':'🔇'}</button>
@@ -5890,7 +5890,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     sit:  {x:0,y:0,w:W,h:H},      // first frame (top-left) = idle/sit
     scale:1.6, faces:"right", speed:42, frameMs:130,
     leftClear:86, rightClear:96,  // keep clear of the 🗒️+ (bottom-left) and focus timer (bottom-right)
-    avatar:null,   // null → the chat-header icon is auto-cropped from the sprite sheet's first frame (Egg Jean's face)
+    avatar:"pet-widget/egg-jean-icon.png",   // round chat-header face icon (Egg Jean)
     title:"Egg Jean", subtitle:"your cozy egg helper — ask or search the web 🥚",
     accentFrom:"#ec7faf", accentTo:"#a98fe0",
     font:"inherit",
