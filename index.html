@@ -140,12 +140,9 @@
   .meter>b{position:absolute;top:0;bottom:0;left:0;border-radius:999px;background:linear-gradient(90deg,var(--pink),var(--lav));}
   .meter.ok>b{background:linear-gradient(90deg,#7ed0b0,var(--mint));}
   /* ---- gentle page transition (auto-off in calm / reduce-motion via the rules below) ---- */
-  #view.view-enter{ animation:viewIn .4s cubic-bezier(.22,.61,.36,1) both; }
-  #view.view-enter > *{ animation:panelIn .44s cubic-bezier(.22,.61,.36,1) both; }
-  #view.view-enter > *:nth-child(2){ animation-delay:.06s; }
-  #view.view-enter > *:nth-child(3){ animation-delay:.12s; }
-  #view.view-enter > *:nth-child(4){ animation-delay:.18s; }
-  #view.view-enter > *:nth-child(n+5){ animation-delay:.22s; }
+  /* ONE smooth whole-page fade on tab switch. The old per-child stagger (each block arriving
+     .06-.22s apart) read as "the page refreshed twice" once pages grew several top-level blocks. */
+  #view.view-enter{ animation:viewIn .32s cubic-bezier(.22,.61,.36,1) both; }
   @keyframes viewIn{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
   @keyframes panelIn{ from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:none;} }
   /* ---- calendar ---- */
@@ -872,11 +869,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.35";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.36";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.36: the 'double refresh' is (truly) found — it was the tab-switch entrance animation staggering each section in .06-.22s apart, which read as the page loading twice once pages grew several sections; tab switches are now ONE smooth fade",
   "2026-06-12.35: 🌸 Sakura mode is now HERMETIC — in that mode the bar shows ONLY the Clients hub (no Home/Planner/Calendar/you — none of her personal anything), for her AND managers. Cycling to 🌸 lands straight on Clients; leaving it returns to the tab's own mode",
   "2026-06-12.34: 🌸 SAKURA IS A TEAM SPACE NOW — a third mode (logo cycles 🎬 → 💗 → 🌸) holding the client hub, and OTHER MANAGERS can sign in with their own accounts: they land locked to the Clients tab and can never see her health/money/memory (RLS + UI both enforce it; you don't answer managers either). Clients+inbox moved to a shared team row via the one-time '🌸 move it' banner; the Discord /sakura command, relay, and your own client knowledge all follow it automatically",
   "2026-06-12.33: double-refresh hunted harder — repaints are now IDEMPOTENT: if a stray duplicate render produces identical content, the screen doesn't repaint at all (no flicker, no scroll jump). A quiet [render] line in the browser console traces any survivors",
