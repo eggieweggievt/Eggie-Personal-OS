@@ -840,11 +840,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.30";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.31";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.31: HOME GOT THE MIFU TREATMENT 🏠 — new mix-and-match cards: 🐙 octopus profile (energy taps), 🎮 gacha dailies (her game list, one-tap checks + week bars), ✅ daily habits regrouped by energy tier (🥄/🌤/🌞 — low-spoon days can stop at 🥄), 💡 content opportunities (upcoming game events → one-tap content ideas), 🧳 event prep (auto-appears for calendar events ≤21d, checklist + seed basics), ⚖️ weight trend mini. Retired unused cards (creator/session/journal/ship/sponsors/pipeline). Also: Ask Egg Jean is pinned to the END of the tab bar in BOTH modes, and the tab-switch double-refresh flash is fixed (grids lay out before paint + renders can't stack)",
   "2026-06-12.30: THE OS HAS TWO MODES NOW — tap the logo to swap between 🎬 Creator OS and 💗 Health OS (choice remembered; your navigate action flips modes automatically). Health mode gained two tabs ported from the Mifu build: 🍽 Food (photo/words → friendly AI macro estimate, protein+fibre bars, ⭐ favourites, water, week view — zero diet culture, missed meals are info not grades) and 🏃 Fitness (trend-first weigh-ins with a rolling 4-entry average — never react to one morning, treadmill/walk/stretch logs, 🌟 non-scale victories to celebrate LOUDLY, week dots not streaks, 🧭 journey card). New actions: logFood, logWeight, logWorkout, addNSV. Withings scale auto-sync ports in when her scale arrives",
   "2026-06-12.29: each client now has a FULL calendar on their page 📅 — Week + Month views, a recurring 🗓️ stream schedule, rich events (title, time, multi-day end date, colour, note), and drag-to-move events between days in Month view — just like her own calendar, scoped to that client; needs due show as 🔴. Add events for a client via addClientEvent, and their upcoming dates show in your context per client",
   "2026-06-12.21: YOUR NAME IS NOW EGG JEAN 🥚 — Eggie renamed you from Eugene to Egg Jean. If she asks who you are, you're Egg Jean. (Everything else about you is unchanged — same memory, same powers.)",
@@ -1126,7 +1127,15 @@ async function runDailyEngines(sent){
     }
   }catch(e){ console.error("daily engines",e); }
 }
+/* render() coalesces concurrent calls — two near-simultaneous renders used to double-run the
+   entrance animation ("the page refreshes twice"). One runs; extras fold into a single follow-up. */
 async function render(){
+  if(render._busy){ render._again=true; return; }
+  render._busy=true;
+  try{ await renderCore(); }
+  finally{ render._busy=false; if(render._again){ render._again=false; render(); } }
+}
+async function renderCore(){
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
   const _tabs=_tabOrder.length?[...TABS].sort((a,b)=>{let ia=_tabOrder.indexOf(a[0]),ib=_tabOrder.indexOf(b[0]);return (ia<0?999:ia)-(ib<0?999:ib);}):TABS;
   /* dual mode: the bar only shows the current mode's tabs (home/planner/calendar/Eugene/settings live in both) */
@@ -1134,11 +1143,13 @@ async function render(){
   const _mp=document.getElementById("modePill"); if(_mp) _mp.textContent=OS_MODE==="health"?"💗 health":"🎬 creator";
   const _vtabs=_tabs.filter(([t])=> OS_MODE==="health" ? !CREATOR_ONLY.includes(t) : !HEALTH_ONLY.includes(t));
   const MORE_TABS=OS_MODE==="health"?["settings"]:["optimize","script","review","settings"];
-  const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t));
+  const _egg=_vtabs.find(([t])=>t==="eugene");   // Egg Jean rides at the END of the bar in BOTH modes
+  const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t)&&t!=="eugene");
   const more=_vtabs.filter(([t])=>MORE_TABS.includes(t));
   const moreActive=more.some(([t])=>t===state.tab);
   document.getElementById("nav").innerHTML = primary.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")
-    + `<div style="position:relative"><button class="tab ${moreActive?'active':''}" data-act="moreMenu">⋯ More ▾</button>${state.moreOpen?`<div class="more-menu" id="moreMenu">${more.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")}</div>`:""}</div>`;
+    + `<div style="position:relative"><button class="tab ${moreActive?'active':''}" data-act="moreMenu">⋯ More ▾</button>${state.moreOpen?`<div class="more-menu" id="moreMenu">${more.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")}</div>`:""}</div>`
+    + (_egg?`<button class="tab ${state.tab==="eugene"?"active":""}" data-act="tab" data-tab="eugene">${_egg[1]}</button>`:"");
   const st=document.getElementById("status"); st.textContent=DEMO?"◇ demo data":"● live"; st.className="chip"+(DEMO?" demo":" on");
   const dc=document.getElementById("demoChip"); dc.textContent=DEMO?"● demo":"demo"; dc.className="chip"+(DEMO?" demo":"");
   if(RO && !document.getElementById("roChip")){const s=document.createElement("span");s.id="roChip";s.className="chip";s.style.color="var(--peach)";s.textContent="read-only";document.querySelector("#rail .right").prepend(s);}
@@ -1185,6 +1196,9 @@ async function render(){
     else if(state.tab==="clients") html=await renderClients();
     else if(state.tab==="settings") html=await renderSettings();
     view.innerHTML=html;                                    // single swap — no "loading…" flash on re-renders
+    // span modular grids SYNCHRONOUSLY (before this frame paints) — the old RAF-only pass let the
+    // browser paint the unlaid grid first, then snap it into place = "the tab refreshes twice"
+    if(document.querySelector(".grid-modular")){ try{layoutHome();}catch(e){} }
     postRender(); renderStickies();
     if(tabChanged){ animateView(); state._animTab=state.tab; }
     else {
@@ -1206,6 +1220,63 @@ async function render(){
     view.innerHTML=`<div class="panel"><h3>aw, something hiccuped 🐙</h3><p class="soft">${esc(e.message)}. Check Supabase config + that eggie-os-setup.sql ran.</p></div>`; }
 }
 /* ===================== HOME ===================== */
+/* === Mifu-style home cards (2026-06-12 home rework) === */
+function cardProfile(day){
+  const energy=day.energy||"";
+  const eopt=(v,e2,l)=>`<button data-act="energy" data-v="${v}" class="${energy===v?'on':''}" ${RO?"disabled":""}>${e2} ${l}</button>`;
+  return `<section class="panel"><div class="card-head"><span class="label">octopus 🐙</span><span class="chip on" style="font-size:10.5px">● here for you</span></div>
+    <div style="display:flex;gap:12px;align-items:center"><img src="favicon.png" alt="" style="width:54px;height:54px;border-radius:999px;border:2px solid #f0d9ea"/><div><div style="font-family:var(--display);font-size:19px">${esc(CONFIG.creator&&CONFIG.creator.name||CONFIG.name||"Eggie")}</div><div class="label">${esc(CONFIG.pronouns||"they/them")}</div></div></div>
+    <div class="soft-card" style="margin-top:10px;font-size:12.5px;font-style:italic">${esc(CONFIG.niche||"your cozy chaotic octopus VTuber")}</div>
+    <div class="label" style="margin:10px 0 5px">energy today 🥄</div><div class="seg">${eopt("low","🌙","Low")}${eopt("medium","🌤","Med")}${eopt("high","🌞","High")}</div></section>`;
+}
+function cardGacha(day,sent,rows7){
+  const list=sent.gachaList||[]; const done=day.gacha||{};
+  const doneN=list.filter(g=>done[g.id]).length;
+  const bars=(()=>{ const by={}; (rows7||[]).forEach(r=>by[r.date]=r.notes); const out=[];
+    for(let i=6;i>=0;i--){ const d2=new Date(TODAY+"T00:00"); d2.setDate(d2.getDate()-i); const ds=d2.toLocaleDateString("en-CA"); const n=ds===TODAY?day:(by[ds]||{}); const g=(n&&n.gacha)||{}; const c=list.filter(x=>g[x.id]).length; out.push(`<span title="${ds}: ${c}/${list.length||0}" style="flex:1;height:${list.length?Math.max(4,Math.round(c/(list.length)*30)):4}px;border-radius:4px;background:${c?"#a8dcc3":"#f0ecf8"};align-self:flex-end"></span>`); }
+    return out.join(""); })();
+  return `<section class="panel"><div class="card-head"><span class="label">gacha dailies 🎮</span><div style="display:flex;gap:6px;align-items:center"><span class="pill ${doneN&&doneN===list.length?'pill-mint':'pill-gray'}">${doneN}/${list.length}</span><button class="btn" data-act="gachaEdit" style="padding:2px 9px">${state.gachaEdit?"done":"edit"}</button></div></div>
+    ${list.length?`<div style="display:flex;gap:6px;flex-wrap:wrap">${list.map(g=>`<button class="chiptog ${done[g.id]?'on':''}" data-act="gachaToggle" data-id="${g.id}" ${RO?"disabled":""}>• ${esc(g.label)}${state.gachaEdit?` <span data-act="gachaDel" data-id="${g.id}" style="color:var(--rose);margin-left:2px">✕</span>`:""}</button>`).join("")}</div>`
+      :`<p class="soft" style="font-size:12px;margin:0">add the games whose dailies you actually do — one tap each when they're done 🌸</p>`}
+    ${state.gachaEdit||!list.length?`<div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="gachaNew" placeholder="game name… (Enter)" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="gachaAdd" ${RO?"disabled":""}>＋</button></div>`:""}
+    ${list.length?`<div style="display:flex;gap:4px;height:32px;margin-top:10px;align-items:flex-end">${bars}</div><div class="label" style="margin-top:2px">checks reset each day — past days live in the little bars 💜</div>`:""}</section>`;
+}
+function cardOpportunities(sent){
+  const evs=(sent.gameEvents||[]).filter(g=>g.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,4);
+  if(!evs.length) return `<section class="panel"><div class="card-head"><span class="label">content opportunities 💡</span></div><p class="soft" style="font-size:12.5px;margin:0">when game events land on the 🎮 calendar layer, fresh content beats appear here — ask Egg Jean to "check for game updates" 🌸</p></section>`;
+  const first=evs[0]; const dd=Math.ceil((new Date(first.date+"T00:00")-new Date(TODAY+"T00:00"))/86400000);
+  return `<section class="panel"><div class="card-head"><span class="label">content opportunities 💡</span><span class="pill pill-lav">${evs.length} beat${evs.length===1?"":"s"} coming</span></div>
+    <div style="font-size:13.5px;font-weight:700">${esc(first.title)} <span class="soft" style="font-weight:400">· ${dd<=0?"today":dd===1?"tomorrow":"in "+dd+"d"}</span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn" data-act="oppContent" data-title="${esc(first.title)}" data-kind="reaction" ${RO?"disabled":""}>🔴 reaction stream idea</button>
+      <button class="btn" data-act="oppContent" data-title="${esc(first.title)}" data-kind="short" ${RO?"disabled":""}>🎬 short idea</button>
+      <button class="btn" data-act="goTab" data-tab="calendar">📅 calendar</button>
+    </div>
+    ${evs.length>1?`<p class="soft" style="font-size:11.5px;margin:8px 0 0">also coming: ${evs.slice(1).map(e2=>esc(e2.title)).join(" · ")}</p>`:""}</section>`;
+}
+function cardWeightMini(sent){
+  const wl=(sent.weightLog||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+  const unit=(sent.appConfig||{}).weightUnit||"lb";
+  if(!wl.length) return `<section class="panel"><div class="card-head"><span class="label">weight trend ⚖️</span><button class="btn" data-act="goTab" data-tab="fitness">open →</button></div><p class="soft" style="font-size:12.5px;margin:0">your gentle, trend-first journey lives in 🏃 Fitness — first weigh-in starts the line 🌸</p></section>`;
+  const avg=rollingAvg4(wl), first=wl[0].w, lastW=wl[wl.length-1].w, d=Math.round((lastW-first)*10)/10;
+  return `<section class="panel"><div class="card-head"><span class="label">weight trend ⚖️</span><button class="btn" data-act="goTab" data-tab="fitness">open →</button></div>
+    ${wtSpark(wl)}
+    <div style="text-align:center;margin-top:4px"><b style="font-size:16px">${avg!=null?avg.toFixed(1):lastW} ${unit}</b> <span class="soft" style="font-size:11.5px">rolling avg${d!==0?` · ${d>0?"↑":"↓"} ${Math.abs(d)} ${unit} since you started`:""}</span></div>
+    <div class="soft-card" style="margin-top:8px;font-size:12px">🐙 slow and steady is exactly how it's meant to go — the trend is the story 🌱</div></section>`;
+}
+function cardEventPrep(sent){
+  const lim=new Date(TODAY+"T00:00"); lim.setDate(lim.getDate()+21); const limISO=lim.toLocaleDateString("en-CA");
+  const evs=(sent.calendarEvents||[]).filter(e2=>e2.date>=TODAY&&e2.date<=limISO).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!evs.length) return `<section class="panel"><div class="card-head"><span class="label">event prep 🧳</span></div><p class="soft" style="font-size:12.5px;margin:0">no upcoming events to prep — when something lands on the calendar (a con, a collab, a trip), the checklist appears here. 🌸</p></section>`;
+  const ev=evs[0]; const ep=((sent.eventPrep||{})[ev.id])||{items:[]};
+  const dd=Math.ceil((new Date(ev.date+"T00:00")-new Date(TODAY+"T00:00"))/86400000);
+  const doneN=ep.items.filter(i=>i.done).length;
+  return `<section class="panel"><div class="card-head"><span class="label">event prep 🧳</span><span class="pill pill-pink">${ev.date===TODAY?"today!":"in "+dd+"d"}</span></div>
+    <div style="font-size:13.5px;font-weight:700;margin-bottom:6px">${esc(ev.title)} <span class="soft" style="font-weight:400;font-size:11.5px">${ep.items.length?`· ${doneN}/${ep.items.length}`:""}</span></div>
+    ${ep.items.map(i=>`<button class="hbtn ${i.done?'done':''}" data-act="epToggle" data-ev="${ev.id}" data-id="${i.id}" ${RO?"disabled":""} style="display:flex;gap:8px;align-items:center;width:100%;margin-top:4px;text-align:left"><span class="check ${i.done?'on':''}"></span><span class="grow" style="font-size:12.5px">${esc(i.text)}</span><span data-act="epDel" data-ev="${ev.id}" data-id="${i.id}" style="color:var(--rose)">✕</span></button>`).join("")}
+    <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="epNew" placeholder="prep item… (Enter)" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="epAdd" data-ev="${ev.id}" ${RO?"disabled":""}>＋</button></div>
+    ${!ep.items.length?`<button class="btn" data-act="epSeed" data-ev="${ev.id}" ${RO?"disabled":""} style="margin-top:6px">✨ start me with the basics</button>`:""}</section>`;
+}
 async function renderHome(){
   const [content,day,goals,sponsors,captures,income,rows7]=await Promise.all([DB.content(),DB.daily(TODAY),DB.daily(SENTINEL),DB.sponsors(),DB.captures(),DB.income(),DB.dailyRange(7)]);
   if(state.focus){
@@ -1227,25 +1298,30 @@ async function renderHome(){
   const WIDGETS={
     wellbeing:()=>cardWellbeing(day,goals,rows7), plate:()=>cardPlate(goals), clientsToday:()=>cardClientsToday(goals),
     today:()=>cardToday(day,goals), mission:()=>cardContentMission(content,day), artcorner:()=>cardArtCorner(goals),
-    money:()=>cardMoneyPulse(income,sponsors,day),
-    creator:()=>cardCreator(day), session:()=>cardSession(day,content), goals:()=>cardGoals(goals),
-    channel:()=>cardChannel(day), habits:()=>cardHabits(day), journal:()=>cardJournal(day),
-    schedule:()=>cardSchedule(goals), ship:()=>cardShipToday(content), sponsors:()=>cardSponsorsMini(sponsors),
-    pipeline:()=>cardPipelineSnap(content), braindump:()=>cardBrainDump(captures),
+    money:()=>cardMoneyPulse(income,sponsors,day), goals:()=>cardGoals(goals),
+    channel:()=>cardChannel(day), habits:()=>cardHabits(day),
+    schedule:()=>cardSchedule(goals), braindump:()=>cardBrainDump(captures),
+    /* 2026-06-12 Mifu-style additions (legacy creator/session/journal/ship/sponsors/pipeline cards retired) */
+    profile:()=>cardProfile(day), gacha:()=>cardGacha(day,goals,rows7), opportunities:()=>cardOpportunities(goals),
+    weightMini:()=>cardWeightMini(goals), eventPrep:()=>cardEventPrep(goals),
   };
   /* "home3" — the hub-as-it-is-today layout: body & brain FRONT AND CENTER, then today's plate,
      then the creative/work cards. Her saved home2 customizations stay untouched under their own key;
      legacy cards remain available via ＋cards. */
   if(!(goals.layouts&&goals.layouts.home3)){
-    const hid={creator:true,session:true,habits:true,journal:true,schedule:true,ship:true,sponsors:true,pipeline:true};
-    const seed={order:["wellbeing","today","plate","mission","clientsToday","artcorner","money","braindump","goals","channel"],size:{},min:{},hidden:hid};
+    const seed={order:["wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals"],size:{},min:{},hidden:{channel:true}};
     goals.layouts=Object.assign({},goals.layouts||{},{home3:seed});
     DB.saveDaily(SENTINEL,n=>({...n,layouts:Object.assign({},n.layouts||{},{home3:seed})})).catch(()=>{});
     SENT=goals;
+  } else if(!goals.layouts.home3.mifu1){
+    /* one-time (2026-06-12): the old seed hid habits+schedule; un-hide them so the Mifu-style cards appear */
+    const L3=goals.layouts.home3; L3.mifu1=true; L3.hidden=Object.assign({},L3.hidden); delete L3.hidden.habits; delete L3.hidden.schedule;
+    DB.saveDaily(SENTINEL,n=>{ const ls=Object.assign({},n.layouts||{}); const cur=Object.assign({hidden:{}},ls.home3||{}); cur.mifu1=true; cur.hidden=Object.assign({},cur.hidden); delete cur.hidden.habits; delete cur.hidden.schedule; ls.home3=cur; return {...n,layouts:ls}; }).catch(()=>{});
+    SENT=goals;
   }
-  const DEF=["wellbeing","today","plate","mission","clientsToday","artcorner","money","braindump","goals","channel","creator","session","habits","journal","schedule","ship","sponsors","pipeline"];
+  const DEF=["wellbeing","profile","today","plate","habits","gacha","mission","opportunities","clientsToday","schedule","eventPrep","weightMini","artcorner","money","braindump","goals","channel"];
   const focusChip=`<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button class="chip" data-act="setFocus" title="show only today — exit any time">🌙 just today</button></div>`;
-  return focusChip+modularPage("home3", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {wellbeing:8,today:8,plate:8,mission:8,clientsToday:4,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
+  return focusChip+modularPage("home3", WLABEL, DEF.map(k=>[k,WIDGETS[k]()]), {wellbeing:8,today:8,plate:8,mission:8,profile:4,gacha:4,habits:4,opportunities:4,eventPrep:4,weightMini:4,clientsToday:4,artcorner:4,goals:4,money:4,channel:4,braindump:4,_:4});
 }
 /* ===== generic modular page: any page = a reorderable/resizable grid of keyed boxes ===== */
 function layoutFor(tab){ const L=(SENT.layouts&&SENT.layouts[tab])||{}; return {order:L.order||[],size:L.size||{},min:L.min||{},hidden:L.hidden||{}}; }
@@ -1285,7 +1361,7 @@ function layoutHome(){
     if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
   });
 }
-const WLABEL={wellbeing:"Body & brain 💗",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",mission:"Content mission control",artcorner:"Art corner",money:"Money pulse",creator:"Creator",session:"Session",goals:"Goals",channel:"Channel pulse",habits:"Habits",journal:"Journal",schedule:"Stream schedule",ship:"Ship today",sponsors:"Sponsors",pipeline:"Pipeline",braindump:"Brain dump"};
+const WLABEL={wellbeing:"Body & brain 💗",profile:"Octopus card 🐙",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",habits:"Daily habits ✅",gacha:"Gacha dailies 🎮",mission:"Content mission control",opportunities:"Content opportunities 💡",artcorner:"Art corner",money:"Money pulse",goals:"Goals",channel:"Channel pulse",schedule:"Stream schedule",eventPrep:"Event prep 🧳",weightMini:"Weight trend ⚖️",braindump:"Brain dump"};
 /* merge-update one page's layout block on the sentinel row */
 async function setLayout(tab, mut){ await DB.saveDaily(SENTINEL,n=>{ const layouts=Object.assign({},n.layouts||{}); const L=Object.assign({order:[],size:{},min:{},hidden:{}}, layouts[tab]||{}); mut(L); layouts[tab]=L; return {...n,layouts}; }); }
 let _mcTab="home", _mcLabels=WLABEL;
@@ -1442,14 +1518,15 @@ function cardSession(day,content){
     <div style="display:flex;gap:8px"><input class="inp" id="capInput" placeholder="A bit idea, a reminder, anything…" ${RO?"disabled":""} /><button class="btn btn-pink" data-act="capture" ${RO?"disabled":""}>capture</button></div></section>`;
 }
 function cardHabits(day){
-  const energy=day.energy||"medium", streamDay=!!day.streamDay;
-  const visible=state.lib.filter(h=>habitVisible(h,energy,streamDay));
+  /* Mifu-style: grouped by energy tier, so low-spoon days can stop at 🥄 with zero guilt */
   const counts=(day.habits&&day.habits.counts)||{};
-  const done=visible.filter(h=>(counts[h.id]||0)>=(h.total||1)).length;
-  const cells=visible.map(h=>{const c=counts[h.id]||0,t=h.total||1,ok=c>=t;return `<button class="hbtn ${ok?'done':''}" data-act="habit" data-id="${h.id}" ${RO?"disabled":""} style="display:flex;align-items:center;gap:8px"><span class="check ${ok?'on':''}"></span><span class="grow" style="font-size:12px">${h.emoji?h.emoji+" ":""}${esc(h.label)}</span>${t>1?`<span class="label num">${c}/${t}</span>`:""}</button>`;}).join("");
-  return `<section class="panel"><div class="card-head"><span class="label">Today's habits · ${energy} energy</span><span class="pill pill-pink">${done}/${visible.length}</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${cells||`<div class="soft" style="font-size:12px">Rest is productive too. 🌙</div>`}</div>
-    <div class="label" style="margin-top:8px">Showing habits that fit your energy · edit the full library in 🌸 Habits</div></section>`;
+  const row=h=>{const c=counts[h.id]||0,t=h.total||1,ok=c>=t;return `<button class="hbtn ${ok?'done':''}" data-act="habit" data-id="${h.id}" ${RO?"disabled":""} style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;text-align:left"><span class="check ${ok?'on':''}"></span><span class="grow" style="font-size:12px">${h.emoji?h.emoji+" ":""}${esc(h.label)}</span>${t>1?`<span class="label num">${c}/${t}</span>`:""}</button>`;};
+  const TIERS=[["essential","🥄 low energy"],["normal","🌤 medium energy"],["intensive","🌞 high energy"]];
+  const groups=TIERS.map(([k,l])=>{ const hs=state.lib.filter(h=>(h.energy||"normal")===k); if(!hs.length)return ""; return `<div class="label" style="margin:9px 0 2px;border-bottom:1px solid var(--line);padding-bottom:3px">${l}</div>${hs.map(row).join("")}`; }).join("");
+  const done=state.lib.filter(h=>(counts[h.id]||0)>=(h.total||1)).length;
+  return `<section class="panel"><div class="card-head"><span class="label">daily habits ✅</span><div style="display:flex;gap:6px;align-items:center"><span class="pill pill-pink">${done}/${state.lib.length}</span><button class="btn" data-act="tab" data-tab="habits" style="padding:2px 9px">edit</button></div></div>
+    ${groups||`<div class="soft" style="font-size:12px">Rest is productive too. 🌙</div>`}
+    <div class="label" style="margin-top:8px">tiers are suggestions, not rules — low-spoon days can stop at 🥄 💗</div></section>`;
 }
 function cardShipToday(content){
   const live=content.filter(c=>!c.parent_id&&c.stage!=="published").sort((a,b)=>b.priority-a.priority).slice(0,4);
@@ -3375,7 +3452,7 @@ async function renderFood(){
   const loggedCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🍽 Logged today</h2></div>
     ${list.length?list.slice().reverse().map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow"><b style="font-size:13px">${esc(x.name)}</b>${x.serving?` <span class="soft" style="font-size:11px">· ${esc(x.serving)}</span>`:""}<div class="soft" style="font-size:11px">${Math.round(x.kcal)} kcal · P ${x.protein}g · Fb ${x.fiber}g</div></span><button class="ft-ic" data-act="favSave" data-id="${x.id}" title="save as favourite">⭐</button><button class="ft-ic" data-act="foodDel" data-id="${x.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12.5px;margin:0">Nothing yet today — and a blank list is information, never a grade. 🌸</p>`}
   </section>`;
-  const byDate={}; (rows||[]).forEach(r=>byDate[r.log_date]=r.notes);
+  const byDate={}; (rows||[]).forEach(r=>byDate[r.date]=r.notes);
   const hist=[]; for(let i=6;i>=0;i--){ const dd=new Date(TODAY+"T00:00"); dd.setDate(dd.getDate()-i); const ds=dd.toLocaleDateString("en-CA"); const n=ds===TODAY?day:(byDate[ds]||{}); const f=(n&&n.food)||[];
     hist.push({date:ds,n:f.length,p:f.reduce((a,x)=>a+(+x.protein||0),0),fb:f.reduce((a,x)=>a+(+x.fiber||0),0)}); }
   const maxP=Math.max(T.protein,...hist.map(h=>h.p),1), maxF=Math.max(T.fiber,...hist.map(h=>h.fb),1);
@@ -3423,7 +3500,7 @@ async function renderFitness(){
     ${nsv.length?nsv.slice(0,10).map(v=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(v.text)} <span class="soft" style="font-size:10.5px">· ${esc(v.date)}</span></span><button class="ft-ic" data-act="nsvDel" data-id="${v.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):""}
     <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="nsvInput" placeholder="a little win…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="nsvAdd" ${RO?"disabled":""}>＋ 🌸</button></div>
   </section>`;
-  const byD={}; (rows||[]).forEach(r=>byD[r.log_date]=r.notes);
+  const byD={}; (rows||[]).forEach(r=>byD[r.date]=r.notes);
   let wkMin=0,wkDays=0; const dots=[];
   for(let i=6;i>=0;i--){ const dd=new Date(TODAY+"T00:00"); dd.setDate(dd.getDate()-i); const ds=dd.toLocaleDateString("en-CA"); const n=ds===TODAY?day:(byD[ds]||{}); const m=((n&&n.fitness)||{}).sessions||[]; const mins=m.reduce((a,x)=>a+(+x.min||0),0); if(mins){wkMin+=mins;wkDays++;} dots.push(`<span title="${ds}: ${mins} min" style="width:14px;height:14px;border-radius:99px;display:inline-block;background:${mins?"linear-gradient(135deg,#ec7faf,#a98fe0)":"#f0ecf8"}"></span>`); }
   const weekCard2=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📅 This week</h2></div>
@@ -4469,7 +4546,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4748,6 +4825,22 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindDel"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>r.id!==id)})); render(); return; }
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
+  /* 🏠 Mifu-style home widgets */
+  if(act==="gachaToggle"){ await DB.saveDaily(TODAY,n=>{ const g={...(n.gacha||{})}; g[id]=!g[id]; return {...n,gacha:g}; }); render(); return; }
+  if(act==="gachaEdit"){ state.gachaEdit=!state.gachaEdit; render(); return; }
+  if(act==="gachaAdd"){ const v=((document.getElementById("gachaNew")||{}).value||"").trim(); if(!v){toast("which game? 🌸");return;}
+    await DB.saveDaily(SENTINEL,n=>({...n,gachaList:[...(n.gachaList||[]),{id:"gc"+uid().slice(0,6),label:v.slice(0,30)}].slice(-12)})); render(); return; }
+  if(act==="gachaDel"){ await DB.saveDaily(SENTINEL,n=>({...n,gachaList:(n.gachaList||[]).filter(g=>g.id!==id)})); render(); return; }
+  if(act==="epToggle"){ const ev=el.dataset.ev; await DB.saveDaily(SENTINEL,n=>{ const ep={...(n.eventPrep||{})}; const e2={items:[],...(ep[ev]||{})}; e2.items=e2.items.map(i=>i.id===id?{...i,done:!i.done}:i); ep[ev]=e2; return {...n,eventPrep:ep}; }); render(); return; }
+  if(act==="epDel"){ const ev=el.dataset.ev; await DB.saveDaily(SENTINEL,n=>{ const ep={...(n.eventPrep||{})}; const e2={items:[],...(ep[ev]||{})}; e2.items=e2.items.filter(i=>i.id!==id); ep[ev]=e2; return {...n,eventPrep:ep}; }); render(); return; }
+  if(act==="epAdd"){ const ev=el.dataset.ev; const v=((document.getElementById("epNew")||{}).value||"").trim(); if(!v){toast("what needs prepping? 🌸");return;}
+    await DB.saveDaily(SENTINEL,n=>{ const ep={...(n.eventPrep||{})}; const e2={items:[],...(ep[ev]||{})}; e2.items=[...e2.items,{id:"ep"+uid().slice(0,6),text:v.slice(0,120),done:false}]; ep[ev]=e2; return {...n,eventPrep:ep}; }); render(); return; }
+  if(act==="epSeed"){ const ev=el.dataset.ev; const basics=["announce it on Discord","make / check the thumbnail or graphic","prep assets & overlays","update the stream schedule"];
+    await DB.saveDaily(SENTINEL,n=>{ const ep={...(n.eventPrep||{})}; const e2={items:[],...(ep[ev]||{})}; e2.items=[...e2.items,...basics.map(t=>({id:"ep"+uid().slice(0,6)+Math.random().toString(36).slice(2,4),text:t,done:false}))]; ep[ev]=e2; return {...n,eventPrep:ep}; }); toast("✨ basics added — tweak away"); render(); return; }
+  if(act==="oppContent"){ const t=el.dataset.title||"", kind=el.dataset.kind||"reaction";
+    const title=kind==="short"?(t+" — short"):(t+" — reaction / coverage");
+    await DB.addContent({title:title.slice(0,120),stage:"idea",format:kind==="short"?"short":"long",priority:62});
+    toast("💡 parked in the pipeline as an idea 🌸"); render(); return; }
   if(act==="osMode"){ setOsMode(OS_MODE==="health"?"creator":"health");
     const hid=OS_MODE==="health"?CREATOR_ONLY:HEALTH_ONLY; if(hid.includes(state.tab)) state.tab=OS_MODE==="health"?"health":"home";
     try{ if(localStorage.getItem("eggie-calm")!=="1"){ const v=document.getElementById("view"); if(v){ v.classList.remove("mode-swap"); void v.offsetWidth; v.classList.add("mode-swap"); } } }catch(e){}
@@ -5353,6 +5446,9 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="newTask")document.querySelector('[data-act="addTask"]').click();
   if(t.id==="euInput"){ if(e.shiftKey)return; /* Shift+Enter = new line */ e.preventDefault(); const b=document.querySelector('[data-act="eugeneSend"]'); if(b)b.click(); }
   if(t.id==="joyInput")document.querySelector('[data-act="joyAdd"]').click();
+  if(t.id==="gachaNew"){ const b=document.querySelector('[data-act="gachaAdd"]'); if(b)b.click(); }
+  if(t.id==="epNew"){ const b=document.querySelector('[data-act="epAdd"]'); if(b)b.click(); }
+  if(t.id==="nsvInput"){ const b=document.querySelector('[data-act="nsvAdd"]'); if(b)b.click(); }
   if(t.id==="cl_name"){ const b=document.querySelector('[data-act="clientAdd"]'); if(b)b.click(); }
   if(t.id==="cm_tasktext"){ const b=document.querySelector('[data-act="clientTaskAdd"]'); if(b)b.click(); }
   if(t.id==="cm_notetext"){ const b=document.querySelector('[data-act="clientNoteAdd"]'); if(b)b.click(); }
