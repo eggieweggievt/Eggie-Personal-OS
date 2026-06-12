@@ -72,6 +72,7 @@
   body.mgr #pet,body.mgr #petChat,body.mgr #petBubble{display:none!important;}   /* the pet is Eggie's personal assistant — managers don't get him */
   .ccal .cal-cell{min-height:56px;padding:3px 4px;}   /* the aggregate calendar packs denser than the per-client minis */
   .ccal .cal-daynum{font-size:10px;}
+  body[data-osmode="sakura"] #ocChip{display:none;}   /* OCs are personal — they don't exist in the team space */
   .brand-name{background:linear-gradient(120deg,#5cc6a3,#8d6fd1 45%,#db5e98);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;letter-spacing:.02em;font-size:17px;}
   nav{display:flex;gap:4px;flex-wrap:wrap;}
   .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
@@ -387,7 +388,7 @@
     <nav id="nav"></nav>
   </div>
   <div class="right">
-    <a class="chip" href="https://eggieweggievt.github.io/OC-Hub/" title="OC Hub — your characters" style="text-decoration:none">📖 OCs</a>
+    <a class="chip" id="ocChip" href="https://eggieweggievt.github.io/OC-Hub/" title="OC Hub — your characters" style="text-decoration:none">📖 OCs</a>
     <span id="status" class="chip">…</span>
     <button id="lockChip" class="chip" data-act="toggleLock" title="Lock / unlock the layout">🔓</button>
     <button class="chip" data-act="settings" title="Accessibility + display">⚙️</button>
@@ -901,11 +902,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.44";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.45";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.45: the 📖 OCs chip hides in 🌸 Sakura mode (it's personal, not team)",
   "2026-06-12.44: the 👥 Your managers card on Clients now always shows for Eggie — with honest empty states ('no requests yet' vs 'run the signup SQL first') instead of hiding until the first request",
   "2026-06-12.43: client calendar tidied — capped width (no more stretching across huge screens), denser month cells, and ✓ all / ✕ none buttons beside the client chips",
   "2026-06-12.42: 🌸 SAKURA GREW A FULL SUITE — the mode now has THREE tabs: Clients, 🗒 Tasks (every client's needs in one planner — list grouped by client/due/priority or a board, filters for client/priority/due/search, quick-add with priority), and 📅 Calendar (everyone's events, recurring streams and need-dues on one week/month view — per-client show/hide chips, type toggles, drag-to-move, tap-a-day picks the client). PLUS managers now SELF-SIGNUP: 'request an account' on the sign-in page → email confirm → they wait in a lobby until Eggie taps ✓ approve on the Clients tab's 👥 card (pause/remove any time; unapproved accounts can read nothing)",
