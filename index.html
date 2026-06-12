@@ -829,7 +829,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.24";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.26";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
@@ -5888,6 +5888,8 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     sheet:"pet-widget/Sprite Sheet.png", sheetW:768, sheetH:1216,   // Egg Jean sheet: 64×64 frames · 12 cols × 19 rows
     walk: row(0,12),              // top row = walk/idle cycle (if the walk looks off, change the row index or frame count)
     sit:  {x:0,y:0,w:W,h:H},      // first frame (top-left) = idle/sit
+    jump: row(4,4),               // rising while thrown — row 4 (4 frames)
+    fall: row(6,8),               // falling while thrown — row 6 (8 frames)
     scale:1.6, faces:"right", speed:42, frameMs:130,
     leftClear:86, rightClear:96,  // keep clear of the 🗒️+ (bottom-left) and focus timer (bottom-right)
     avatar:"pet-widget/egg-jean-icon.png",   // round chat-header face icon (Egg Jean)

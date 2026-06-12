@@ -108,7 +108,7 @@
   function init(cfg) {
     var c = Object.assign({
       sheet: "sprite.png", sheetW: 0, sheetH: 0,
-      walk: [], sit: null, scale: 2, faces: "right",
+      walk: [], sit: null, jump: null, fall: null, scale: 2, faces: "right",
       speed: 44, frameMs: 150,
       leftClear: 72, rightClear: 72,           // px kept clear of left/right edges (room for your corner buttons)
       greetings: ["Hi!"], greetEveryMs: 45000, greetDelayMs: 3000,
@@ -156,7 +156,9 @@
       }
       if (!bubble.classList.contains("pet-hidden")) {
         var bl = Math.max(8, Math.min(Math.round(S.x - 8), innerWidth - 210));
-        bubble.style.left = bl + "px"; bubble.style.right = "auto"; bubble.style.bottom = topY + "px";
+        // the egg art fills only the lower part of each frame, so sit the bubble near the visible head, not the frame top
+        var bubY = Math.round(14 + S.y + SPRH * (c.bubbleSeat || 0.6) + 4);
+        bubble.style.left = bl + "px"; bubble.style.right = "auto"; bubble.style.bottom = bubY + "px";
       }
     }
     function step(now) {
@@ -173,7 +175,12 @@
           if (Math.abs(S.vy) < 150) { S.vy = 0; S.vx *= 0.55; if (Math.abs(S.vx) < 30) { var b = bounds(); S.x = Math.max(b.min, Math.min(S.x, b.max)); S.st = "walk"; S.stt = 0; } }
           else { S.vy = -S.vy * 0.5; S.vx *= 0.8; }
         }
-        setFrame(c.sit); sprite.style.transform = (S.vx < 0 ? "scaleX(-1)" : "scaleX(1)"); positionUI(); S.raf = requestAnimationFrame(step); return;
+        // rising (vy>0) → jump animation, falling (vy<0) → fall animation; each may be a single frame or a frame array (animated). Falls back to idle if unset.
+        var _air = (S.vy > 0) ? c.jump : c.fall;
+        if (Array.isArray(_air) && _air.length) { S.ft += dt; if (S.ft >= c.frameMs) { S.ft = 0; S.fi = (S.fi + 1) % _air.length; } setFrame(_air[S.fi % _air.length]); }
+        else if (_air && _air.w) { setFrame(_air); }
+        else { setFrame(c.sit); }
+        sprite.style.transform = (S.vx < 0 ? "scaleX(-1)" : "scaleX(1)"); positionUI(); S.raf = requestAnimationFrame(step); return;
       }
       if (c.reduceMotion()) { setFrame(c.sit); sprite.style.transform = facing(); positionUI(); S.raf = requestAnimationFrame(step); return; }
       var b2 = bounds(); S.stt += dt;
