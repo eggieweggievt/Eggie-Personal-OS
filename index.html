@@ -848,7 +848,28 @@ function showLogin(err){
     <input class="inp" id="authPass" type="password" autocomplete="current-password" placeholder="password" style="margin-bottom:12px"/>
     <button class="btn btn-pink" data-act="signIn" style="width:100%">sign in 💗</button>
     <div id="authErr" class="soft" style="color:var(--rose);font-size:12px;margin-top:8px;min-height:16px">${err?esc(err):""}</div>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      ${state.mgrSignup?`
+        <div class="label" style="text-align:left;margin-bottom:6px">🌸 request a manager account</div>
+        <input class="inp" id="msEmail" type="email" placeholder="your email" style="margin-bottom:8px"/>
+        <input class="inp" id="msPass" type="password" placeholder="pick a password (8+ chars)" style="margin-bottom:8px"/>
+        <button class="btn btn-pink" data-act="mgrSignUp" style="width:100%">request access 🌸</button>
+        <p class="soft" style="font-size:11px;margin:8px 0 0;text-align:left">You'll get a confirmation email — confirm, sign in, and once Eggie approves you the 🌸 management hub opens. You'll never see anything of hers.</p>
+        <button class="btn" data-act="mgrSignupToggle" style="width:100%;margin-top:8px">← back to sign in</button>`
+      :`<button class="btn" data-act="mgrSignupToggle" style="width:100%">🌸 Sakura manager? request an account</button>`}
+    </div>
   </div>`;
+}
+/* a signed-in manager who isn't approved yet parks here — no data is reachable until Eggie says yes */
+function showPending(email){
+  const view=document.getElementById("view");
+  view.innerHTML=`<div class="panel" style="max-width:420px;margin:8vh auto;text-align:center">
+    <div style="font-size:36px">🌸</div>
+    <h2 style="font-size:19px;margin-top:4px">Request received!</h2>
+    <p class="soft" style="font-size:12.5px;margin:8px 0 14px">${esc(email||"Your account")} is waiting for Eggie's approval. Once she taps ✓, the management hub opens right up — check back soon. 💗</p>
+    <div style="display:flex;gap:8px;justify-content:center"><button class="btn btn-pink" onclick="location.reload()">↻ check again</button><button class="btn" data-act="signOut">sign out</button></div>
+  </div>`;
+  try{ document.getElementById("nav").innerHTML=""; }catch(e){}
 }
 async function authBoot(){
   if(DEMO||!SB) return true;                                   // demo mode needs no login
@@ -857,7 +878,16 @@ async function authBoot(){
     // 🌸 any signed-in account that isn't Eggie = a Sakura manager: locked to the team hub,
     // none of her personal surfaces ever render (RLS blocks the data anyway — this blocks the UI).
     IS_MGR=String((SESSION.user||{}).email||"").toLowerCase()!==OWNER_EMAIL;
-    if(IS_MGR){ setOsMode("sakura"); state.tab="clients"; }
+    if(IS_MGR){
+      setOsMode("sakura"); state.tab="clients";
+      // self-registered managers wait in the lobby until Eggie approves them
+      try{
+        const em=String((SESSION.user||{}).email||"").toLowerCase();
+        try{ await SB.from("managers").upsert({email:em},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
+        const {data:mrow}=await SB.from("managers").select("approved").eq("email",em).maybeSingle();
+        if(!mrow||!mrow.approved){ showPending(em); return false; }
+      }catch(e){ showPending(""); return false; }
+    }
     return true;
   }
   // pre-lockdown grace: if anonymous reads still RETURN ROWS, the project isn't locked yet — carry on.
@@ -869,11 +899,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.41";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.42";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.42: 🌸 SAKURA GREW A FULL SUITE — the mode now has THREE tabs: Clients, 🗒 Tasks (every client's needs in one planner — list grouped by client/due/priority or a board, filters for client/priority/due/search, quick-add with priority), and 📅 Calendar (everyone's events, recurring streams and need-dues on one week/month view — per-client show/hide chips, type toggles, drag-to-move, tap-a-day picks the client). PLUS managers now SELF-SIGNUP: 'request an account' on the sign-in page → email confirm → they wait in a lobby until Eggie taps ✓ approve on the Clients tab's 👥 card (pause/remove any time; unapproved accounts can read nothing)",
   "2026-06-12.41: tab switches are now INSTANT — the entrance fade was the last ingredient of the 'double refresh' (old page lingers → blinks out → fades in from blank = looks like loading twice). No animation at all now, exactly like her OC-Hub. Combined with .40's same-frame bar+view, a switch is one clean cut",
   "2026-06-12.40: the double refresh, ACTUALLY found (crash detector proved no crash; it struck on every tab switch): the tab BAR updated the instant she clicked while the page content arrived ~half a second later after the database reads — two visible beats. The bar and the view now land in the SAME frame: one beat, finally",
   "2026-06-12.39: THE 'DOUBLE REFRESH' MYSTERY IS SOLVED 🕵️ — the console stakeout proved the tab was actually CRASHING and Chrome silently reloaded it. Cause: the petal cursor trail + full-screen bubble canvas (GPU/DOM churn). Both are now OFF by default behind a '✨ Sparkles' toggle (Settings → comfort), and a crash detector announces any future silent reload in plain words instead of letting it look like a mystery refresh",
@@ -906,11 +937,11 @@ const OS_NEWS=[
   "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
   "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
 ];
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["cplanner","🗒 Tasks"],["ccalendar","📅 Calendar"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
 /* === tri-mode OS: 🎬 Creator / 💗 Health / 🌸 Sakura — tap the logo to cycle (persisted; default creator) === */
 const HEALTH_ONLY=["health","care","habits","food","fitness"];
 const CREATOR_ONLY=["content","optimize","script","art","tools","income","pitch","review"];
-const SAKURA_ONLY=["clients"];                       // the team mode — the only thing manager accounts ever see
+const SAKURA_ONLY=["clients","cplanner","ccalendar"];   // the team mode — the only things manager accounts ever see
 const SAK_UID="sakura", SAK_KEYS=["clients","inbox","autoNeedsWk"];   // 🌸 shared team row + which sentinel keys live there
 const OWNER_EMAIL="eggieweggievt@gmail.com";          // her auth account; any other signed-in account = a manager
 let IS_MGR=false;
@@ -920,7 +951,7 @@ function setOsMode(m){ OS_MODE=MODES.includes(m)?m:"creator"; try{ localStorage.
 function modeFor(t){ return HEALTH_ONLY.includes(t)?"health":SAKURA_ONLY.includes(t)?"sakura":CREATOR_ONLY.includes(t)?"creator":null; }
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
-function setTab(t){ if(IS_MGR){ state.tab="clients"; render(); return; }
+function setTab(t){ if(IS_MGR){ state.tab=SAKURA_ONLY.includes(t)?t:"clients"; render(); return; }
   /* Sakura is hermetic: leaving it for ANY non-client tab returns to that tab's own mode (shared tabs → creator) */
   if(OS_MODE==="sakura"&&t!=="clients") setOsMode(modeFor(t)||"creator");
   else { const m=modeFor(t); if(m&&m!==OS_MODE) setOsMode(m); }
@@ -1199,10 +1230,10 @@ async function renderCore(){
   /* tri-mode: the bar only shows the current mode's tabs (home/planner/calendar/Egg Jean/settings live everywhere).
      Managers are locked to the 🌸 Sakura hub — one tab, nothing else exists for them. */
   if(IS_MGR&&OS_MODE!=="sakura") setOsMode("sakura");
-  /* 🌸 Sakura is HERMETIC: clients only — none of her personal tabs exist there (for her OR managers) */
-  if(OS_MODE==="sakura"&&state.tab!=="clients") state.tab="clients";
+  /* 🌸 Sakura is HERMETIC: clients/tasks/calendar only — none of her personal tabs exist there (for her OR managers) */
+  if(OS_MODE==="sakura"&&!SAKURA_ONLY.includes(state.tab)) state.tab="clients";
   const _hideByMode=OS_MODE==="health"?[...CREATOR_ONLY,...SAKURA_ONLY]:[...HEALTH_ONLY,...SAKURA_ONLY];
-  let _vtabs=(OS_MODE==="sakura"||IS_MGR)?_tabs.filter(([t])=>t==="clients"):_tabs.filter(([t])=>!_hideByMode.includes(t));
+  let _vtabs=(OS_MODE==="sakura"||IS_MGR)?_tabs.filter(([t])=>SAKURA_ONLY.includes(t)):_tabs.filter(([t])=>!_hideByMode.includes(t));
   const MORE_TABS=(IS_MGR||OS_MODE==="sakura")?[]:OS_MODE==="creator"?["optimize","script","review","settings"]:["settings"];
   const _egg=_vtabs.find(([t])=>t==="eugene");   // Egg Jean rides at the END of the bar in BOTH modes
   const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t)&&t!=="eugene");
@@ -1265,6 +1296,8 @@ async function renderCore(){
     else if(state.tab==="eugene") html=await renderAssistantTab();
     else if(state.tab==="tools") html=await renderTools();
     else if(state.tab==="clients") html=await renderClients();
+    else if(state.tab==="cplanner") html=await renderCPlanner();
+    else if(state.tab==="ccalendar") html=await renderCCalendar();
     else if(state.tab==="settings") html=await renderSettings();
     // ✋ idempotent repaint: if a re-render produced EXACTLY the same HTML (a duplicate/stray render
     // with unchanged data), skip the swap entirely — no image re-decode flicker, no scroll-pin, no
@@ -3338,6 +3371,120 @@ function needsBoardHTML(tasks,cid,sort){ /* cid=""+cname per task → combined b
     const col=tasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort(cmp);
     return `<div class="kcol" data-act="dropClientNeed" data-status="${k}" ${cid?`data-cid="${cid}"`:""} ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px"><span>${l}</span><span style="display:flex;gap:6px;align-items:center">${k==="done"&&col.length?`<button class="ft-ic" data-act="needsClearDone" ${cid?`data-cid="${cid}"`:""} title="sweep the done pile away" ${RO?"disabled":""}>🧹</button>`:""}<span>${col.length}</span></span></div>${col.map(t=>needCardHTML(t,cid||t._cid,cid?"":t._cname)).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
   }).join("")}</div>`; }
+/* ===== 🗒 Sakura TASKS — every client's needs in one filterable, groupable planner ===== */
+function cpPri(t){ return t.priority==="high"?`<span title="high priority">🔴</span>`:t.priority==="low"?`<span title="low priority">🌙</span>`:`<span title="normal">🟦</span>`; }
+async function renderCPlanner(){
+  const sent=await DB.daily(SENTINEL); const clients=(sent.clients||[]).filter(c=>c.status!=="offboarded");
+  const cp=state.cp=state.cp||{view:"list",group:"client",client:"all",pri:"all",due:"all",done:false};
+  const all=[]; clients.forEach(c=>(c.tasks||[]).forEach(t=>all.push({c,t})));
+  const open=all.filter(x=>!(x.t.done||(x.t.status||"needs")==="done"));
+  const weekEnd=(()=>{const d=new Date(TODAY+"T00:00");d.setDate(d.getDate()+7);return d.toLocaleDateString("en-CA");})();
+  const match=x=>(cp.client==="all"||x.c.id===cp.client)
+    &&(cp.pri==="all"||(x.t.priority||"normal")===cp.pri)
+    &&(cp.due==="all"||(cp.due==="overdue"&&x.t.due&&x.t.due<TODAY)||(cp.due==="today"&&x.t.due===TODAY)||(cp.due==="week"&&x.t.due&&x.t.due<=weekEnd));
+  const list=(cp.done?all:open).filter(match);
+  const row=x=>{const k=x.t.status||(x.t.done?"done":"needs"); const od=x.t.due&&x.t.due<TODAY&&k!=="done";
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)" data-clq="${esc(((x.c.name||"")+" "+(x.t.text||"")).toLowerCase())}">
+      <button class="check ${k==="done"?"on":""}" data-act="clientTaskDone" data-id="${x.c.id}" data-tid="${x.t.id}" ${RO?"disabled":""} style="padding:0"></button>
+      ${clientAvatarHTML(x.c,22)}<span style="font-size:11.5px;font-weight:700;color:var(--lav-deep);cursor:pointer" data-act="clientOpen" data-id="${x.c.id}">${esc((x.c.name||"").split(/\s+/)[0])}</span>
+      ${cpPri(x.t)}<span class="grow" style="font-size:13px;${k==="done"?"text-decoration:line-through;opacity:.55":""}">${esc(x.t.text)}${(x.t.steps&&x.t.steps.length)?` <span class="label">· ${x.t.steps.filter(s2=>s2.done).length}/${x.t.steps.length} steps</span>`:""}${x.t.note?" 📝":""}</span>
+      ${x.t.due?`<span class="pill ${od?"":"pill-gray"}" ${od?'style="background:#fde4e4;color:#c0566a"':""}>${od?"overdue":esc(x.t.due.slice(5))}</span>`:""}
+      <button class="pill pill-lav" data-act="needCycle" data-id="${x.t.id}" data-cid="${x.c.id}" ${RO?"disabled":""} style="cursor:pointer;border:none">${needCycleLbl(k)}</button>
+      <button class="ft-ic" data-act="clientNeedEdit" data-cid="${x.c.id}" data-tid="${x.t.id}">✎</button>
+      <button class="ft-ic" data-act="clientTaskDel" data-id="${x.c.id}" data-tid="${x.t.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`; };
+  const groups=(()=>{ if(cp.view==="board") return "";
+    if(cp.group==="client"){ return clients.filter(c=>cp.client==="all"||c.id===cp.client).map(c=>{ const ls=list.filter(x=>x.c.id===c.id).sort((a,b)=>String(a.t.due||"9999").localeCompare(String(b.t.due||"9999"))); if(!ls.length)return ""; return `<div data-clqgroup style="margin-bottom:12px"><div class="label" style="margin-bottom:2px;display:flex;gap:6px;align-items:center">${clientAvatarHTML(c,18)} ${esc(c.name)} · ${ls.length}</div>${ls.map(row).join("")}</div>`; }).join("")||`<p class="soft" style="font-size:12.5px;margin:0">nothing matches these filters — lovely or lonely, you decide 🌸</p>`; }
+    if(cp.group==="due"){ const buckets=[["overdue",x=>x.t.due&&x.t.due<TODAY],["today",x=>x.t.due===TODAY],["this week",x=>x.t.due&&x.t.due>TODAY&&x.t.due<=weekEnd],["later / no date",x=>!x.t.due||x.t.due>weekEnd]];
+      return buckets.map(([l,f])=>{ const ls=list.filter(f); if(!ls.length)return ""; return `<div data-clqgroup style="margin-bottom:12px"><div class="label" style="margin-bottom:2px">${l} · ${ls.length}</div>${ls.map(row).join("")}</div>`; }).join("")||`<p class="soft" style="font-size:12.5px;margin:0">nothing matches 🌸</p>`; }
+    const ls=list.slice().sort((a,b)=>{const pw={high:0,normal:1,low:2};return (pw[a.t.priority||"normal"]-pw[b.t.priority||"normal"])||String(a.t.due||"9999").localeCompare(String(b.t.due||"9999"));});
+    return `<div data-clqgroup>${ls.map(row).join("")||`<p class="soft" style="font-size:12.5px;margin:0">nothing matches 🌸</p>`}</div>`; })();
+  const boardTasks=[]; clients.forEach(c=>{ if(cp.client!=="all"&&c.id!==cp.client)return; (c.tasks||[]).forEach(t=>{ if(match({c,t}))boardTasks.push({...t,_cid:c.id,_cname:c.name}); }); });
+  const fchip=(k,v,l)=>`<button class="chiptog ${cp[k]===v?"on":""}" data-act="cpSet" data-k="${k}" data-v="${v}" style="font-size:11px;padding:4px 10px">${l}</button>`;
+  const lens=(()=>{ const od=open.filter(x=>x.t.due&&x.t.due<TODAY), td=open.filter(x=>x.t.due===TODAY);
+    return `<section class="panel"><div class="card-head"><span class="label">☀️ needs you now</span><span class="label">${od.length} overdue · ${td.length} due today</span></div>
+      ${[...od,...td].slice(0,6).map(row).join("")||`<p class="soft" style="font-size:12.5px;margin:0">nothing overdue, nothing due today — the board breathes 🌸</p>`}</section>`; })();
+  const addCard=`<section class="panel"><div class="card-head"><span class="label">＋ new client task</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select class="inp" id="cp_client" style="min-width:130px">${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
+      <input class="inp" id="cp_text" placeholder="they need…" style="flex:1;min-width:150px" ${RO?"disabled":""}/>
+      <input class="inp" id="cp_due" type="date" style="width:auto" ${RO?"disabled":""}/>
+      <select class="inp" id="cp_pri" style="width:auto"><option value="normal">🟦 normal</option><option value="high">🔴 high</option><option value="low">🌙 low</option></select>
+      <button class="btn btn-pink" data-act="cpAdd" ${RO?"disabled":""}>＋ add</button></div></section>`;
+  const main=`<section class="panel">
+    <div class="card-head"><h2 style="font-size:17px">🗒 Client tasks</h2><div class="seg"><button data-act="cpSet" data-k="view" data-v="list" class="${cp.view==="list"?"on":""}">☰ list</button><button data-act="cpSet" data-k="view" data-v="board" class="${cp.view==="board"?"on":""}">▦ board</button></div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <input class="inp" id="cp_q" placeholder="🔍 find…" value="${esc(state.clientQ||"")}" oninput="window.clientQ(this.value)" style="min-width:120px;flex:1;max-width:220px"/>
+      <span class="label">client</span><select class="inp" data-act="cpClientSel" id="cp_filter_client" style="width:auto">${[["all","everyone"]].concat(clients.map(c=>[c.id,c.name])).map(([v,l])=>`<option value="${v}" ${cp.client===v?"selected":""}>${esc(l)}</option>`).join("")}</select>
+      ${fchip("pri","all","any priority")}${fchip("pri","high","🔴")}${fchip("pri","normal","🟦")}${fchip("pri","low","🌙")}
+      ${fchip("due","all","any due")}${fchip("due","overdue","overdue")}${fchip("due","today","today")}${fchip("due","week","this week")}
+      ${cp.view==="list"?`${fchip("group","client","by client")}${fchip("group","due","by due")}${fchip("group","flat","by priority")}`:""}
+      ${fchip("done",!cp.done?true:false,cp.done?"hide done":"show done")}
+    </div>
+    ${cp.view==="board"?needsBoardHTML(boardTasks,""):groups}</section>`;
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="font-size:22px;font-family:var(--display)">🗒 Client tasks</h2><span class="label">every client, one planner 🌸</span></div>`
+    +modularPage("cplanner",{lens:"Needs you now ☀️",add:"New task ＋",main:"The planner 🗒"},[["lens",lens],["add",addCard],["main",main]],{lens:6,add:6,main:12,_:6});
+}
+/* ===== 📅 Sakura CALENDAR — every client's events/streams/dues on one filterable calendar ===== */
+async function renderCCalendar(){
+  const sent=await DB.daily(SENTINEL); const clients=(sent.clients||[]).filter(c=>c.status!=="offboarded");
+  const cc=state.cc=state.cc||{hide:{},streams:true,dues:true,events:true};
+  if(!state.clientCalRef){ const t=new Date(); state.clientCalRef=new Date(t.getFullYear(),t.getMonth(),1); }
+  if(state.clientCalView==null){ try{state.clientCalView=localStorage.getItem("eggie-client-cal-view")||"week";}catch(e){state.clientCalView="week";} }
+  const view=state.clientCalView||"week", ref=state.clientCalRef, y=ref.getFullYear(), m=ref.getMonth();
+  const monthName=ref.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const act=clients.filter(c=>!cc.hide[c.id]);
+  const wdOf=ds=>["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(ds+"T00:00").getDay()];
+  const nick=c=>esc((c.name||"").split(/\s+/)[0]);
+  const streamsOn=ds=>{ if(!cc.streams)return[]; const wd=wdOf(ds); const out=[]; act.forEach(c=>(c.schedule||[]).forEach(s2=>{ if((s2.day||"").slice(0,3)===wd)out.push({c,s:s2}); })); return out; };
+  const evsOn=ds=>{ if(!cc.events)return[]; const out=[]; act.forEach(c=>(c.events||[]).forEach(e2=>{ if(ds>=e2.date&&ds<=((e2.endDate&&e2.endDate>=e2.date)?e2.endDate:e2.date))out.push({c,e:e2}); })); return out.sort((a,b)=>String(a.e.time||"99:99").localeCompare(String(b.e.time||"99:99"))); };
+  const duesOn=ds=>{ if(!cc.dues)return[]; const out=[]; act.forEach(c=>(c.tasks||[]).forEach(t=>{ if(!t.done&&(t.status||"needs")!=="done"&&t.due===ds)out.push({c,t}); })); return out; };
+  const streamChip=x=>`<div class="cal-stream" data-act="clientSchedEdit" data-cid="${x.c.id}" title="${nick(x.c)}'s recurring stream — tap to edit">🔴 ${nick(x.c)}${x.s.time?" · "+esc(x.s.time):""}</div>`;
+  const evChip=(x,drag)=>{ const ev=x.e; const end=(ev.endDate&&ev.endDate>ev.date)?ev.endDate:null; return `<div class="cal-ev" ${drag?'draggable="true"':''} data-act="clientEventOpen" data-cid="${x.c.id}" data-eid="${ev.id}" style="background:${esc(ev.color||CCAL_COLORS[0])}" title="${esc(x.c.name+': '+(ev.time?ev.time+' ':'')+ev.title+(ev.note?' — '+ev.note:''))}"><b>${nick(x.c)}</b>${ev.time?` ${esc(ev.time)}`:""} ${esc(ev.title)}${end?" ›":""}</div>`; };
+  const dueChip=x=>`<div class="cal-ev" data-act="clientNeedEdit" data-cid="${x.c.id}" data-tid="${x.t.id}" style="background:#fde4e4;color:#c0566a;cursor:pointer" title="${nick(x.c)} — due: ${esc(x.t.text)}">🔴 ${nick(x.c)}: ${esc(x.t.text.slice(0,14))}</div>`;
+  let bodyHTML="";
+  if(view==="month"){
+    const startDow=new Date(y,m,1).getDay(), gridStart=new Date(y,m,1-startDow);
+    const dows=["Su","Mo","Tu","We","Th","Fr","Sa"]; let cells="";
+    for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const inMonth=d.getMonth()===m, isToday=ds===TODAY;
+      cells+=`<div class="cal-cell ${inMonth?"":"other"} ${isToday?"today":""}" data-act="ccalAdd" data-date="${ds}"><span class="cal-daynum">${d.getDate()}</span>${streamsOn(ds).map(streamChip).join("")}${evsOn(ds).map(x=>evChip(x,true)).join("")}${duesOn(ds).map(dueChip).join("")}</div>`; }
+    bodyHTML=`<div class="cal-grid" style="margin-bottom:5px">${dows.map(x=>`<div class="cal-dow">${x}</div>`).join("")}</div><div class="cal-grid">${cells}</div>`;
+  } else {
+    const rows=[];
+    for(let i=0;i<7;i++){ const d=new Date(TODAY+"T00:00"); d.setDate(d.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const label=i===0?"Today":i===1?"Tomorrow":d.toLocaleDateString("en-US",{weekday:"long"}); const sub=d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+      const bits=[].concat(streamsOn(ds).map(streamChip),evsOn(ds).map(x=>evChip(x,false)),duesOn(ds).map(dueChip));
+      rows.push(`<div class="soft-card" style="display:flex;gap:12px;align-items:flex-start;${i===0?"border-color:var(--pink);box-shadow:inset 0 0 0 1px rgba(236,127,175,.25);":""}"><div style="width:80px;flex:0 0 auto"><div style="font-family:var(--display);font-size:13.5px;${i===0?"color:var(--pink-deep)":""}">${label}</div><div class="label">${sub}</div></div><div class="grow" style="display:flex;flex-direction:column;gap:4px;min-width:0">${bits.join("")||`<span class="soft" style="font-size:12px">nothing planned 🌙</span>`}</div><button class="ft-ic" data-act="ccalAdd" data-date="${ds}" title="add on ${label}">＋</button></div>`); }
+    bodyHTML=`<div style="display:flex;flex-direction:column;gap:7px">${rows.join("")}</div>`;
+  }
+  const chips=clients.map(c=>`<button class="chiptog ${cc.hide[c.id]?"":"on"}" data-act="ccClient" data-id="${c.id}" style="font-size:11px;padding:3px 9px;display:inline-flex;gap:5px;align-items:center">${clientAvatarHTML(c,16)} ${nick(c)}</button>`).join("");
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="font-size:22px;font-family:var(--display)">📅 Client calendar</h2><span class="label">everyone's dates, one view 🌸</span></div>
+  <div class="panel ccal">
+    <div class="card-head"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><div class="seg"><button data-act="clientCalView" data-v="week" class="${view==="week"?"on":""}">📋 Week</button><button data-act="clientCalView" data-v="month" class="${view==="month"?"on":""}">🗓 Month</button></div>${view==="month"?`<button class="btn" data-act="clientCalPrev">‹</button><button class="btn" data-act="clientCalToday">today</button><button class="btn" data-act="clientCalNext">›</button><span class="label">${esc(monthName)}</span>`:`<span class="label">next 7 days</span>`}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="chiptog ${cc.streams?"on":""}" data-act="ccToggle" data-k="streams" style="font-size:11px;padding:3px 9px">🔴 streams</button><button class="chiptog ${cc.events?"on":""}" data-act="ccToggle" data-k="events" style="font-size:11px;padding:3px 9px">🗓 events</button><button class="chiptog ${cc.dues?"on":""}" data-act="ccToggle" data-k="dues" style="font-size:11px;padding:3px 9px">⏰ dues</button></div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;align-items:center"><span class="label">showing</span>${chips}</div>
+    <div class="mini-cal">${bodyHTML}</div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">Tap a day to add an event (picks the client first) · drag events between days in Month view · tap a 🔴 due to open the task. 🌸</p>
+  </div>`;
+}
+/* aggregate-calendar drag: the dragged chip carries BOTH the event id and its client */
+function wireCCalDnD(){
+  let dragEid=null, dragCid=null;
+  document.querySelectorAll(".ccal .cal-ev[draggable]").forEach(ev=>{
+    ev.addEventListener("dragstart",e=>{ dragEid=ev.dataset.eid; dragCid=ev.dataset.cid; ev.classList.add("dragging"); if(e.dataTransfer){e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",dragEid);}catch(_){}} });
+    ev.addEventListener("dragend",()=>{ ev.classList.remove("dragging"); document.querySelectorAll(".cal-cell.drag-over").forEach(c=>c.classList.remove("drag-over")); });
+  });
+  document.querySelectorAll(".ccal .cal-cell").forEach(cell=>{
+    cell.addEventListener("dragover",e=>{ e.preventDefault(); if(e.dataTransfer)e.dataTransfer.dropEffect="move"; cell.classList.add("drag-over"); });
+    cell.addEventListener("dragleave",()=>cell.classList.remove("drag-over"));
+    cell.addEventListener("drop",async e=>{
+      e.preventDefault(); cell.classList.remove("drag-over");
+      const date=cell.dataset.date; if(!dragEid||!dragCid||!date)return;
+      if(RO){ toast("Read-only mode 🌸"); return; }
+      const cid=dragCid, eid=dragEid; dragEid=dragCid=null;
+      await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>{ if(c.id!==cid)return c; const evs=(c.events||[]).slice(); const t=evs.find(x=>x.id===eid); if(t){ if(t.endDate&&t.endDate>t.date){ const dur=calDiff(t.date,t.endDate); t.date=date; t.endDate=calAdd(date,dur); } else { t.date=date; } } return {...c,touched:TODAY,events:evs}; })}));
+      render();
+    });
+  });
+}
 async function renderClients(){
   const sent=await DB.daily(SENTINEL);
   const clients=sent.clients||[];
@@ -3405,7 +3552,15 @@ async function renderClients(){
   const CLABEL={three:"Today's three ☀️",inbox:"Inbox 📨",pulse:"At a glance 🌸",roster:"Roster & needs 👥"};
   /* 🌸 one-time: move the client hub into the shared team row so manager accounts can work it */
   const migBanner=(!DEMO&&SB&&!IS_MGR&&!sent._sakMigrated&&!RO)?`<div class="panel" style="background:linear-gradient(135deg,#fff0f7,#ffe9f3);margin-bottom:14px"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="font-size:22px">🌸</span><div class="grow" style="min-width:200px"><b style="font-size:13.5px">Make Sakura a team space</b><div class="soft" style="font-size:12px;margin-top:2px">Moves clients + inbox to a shared row so manager accounts can sign in and work the hub — they'll never see anything else of yours. One tap, one time. (Then run the team SQL + add their accounts.)</div></div><button class="btn btn-pink" data-act="sakMigrate">🌸 move it</button></div></div>`:"";
-  return migBanner+modularPage("clients", CLABEL, [["three",todays3],["inbox",inboxPanel],["pulse",pulse],["roster",roster]], {three:6,inbox:6,pulse:12,roster:12,_:6});
+  /* 👥 manager approvals (Eggie only): self-signed-up managers wait here for her ✓ */
+  let teamPanel="";
+  if(!IS_MGR&&!DEMO&&SB&&SESSION){ try{
+    const {data:mgrs}=await SB.from("managers").select("email,approved,requested_at").order("requested_at",{ascending:true});
+    if(mgrs&&mgrs.length) teamPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👥 Your managers</h2><span class="label">${mgrs.filter(m=>m.approved).length} active · ${mgrs.filter(m=>!m.approved).length} waiting</span></div>
+      ${mgrs.map(m=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(m.email)}</span>${m.approved?`<span class="pill pill-mint">✓ active</span><button class="btn" data-act="mgrRevoke" data-id="${esc(m.email)}" style="padding:2px 9px">⏸ pause</button>`:`<span class="pill pill-peach">waiting</span><button class="btn btn-pink" data-act="mgrApprove" data-id="${esc(m.email)}" style="padding:2px 9px">✓ approve</button>`}<button class="ft-ic" data-act="mgrDel" data-id="${esc(m.email)}" style="color:var(--rose)">🗑</button></div>`).join("")}
+      <p class="soft" style="font-size:11px;margin:8px 0 0">Managers request access from the sign-in page — approve them here and they're in. Pausing locks them out instantly; 🗑 removes the request (delete their login itself in Supabase → Auth if you want it fully gone).</p></div>`;
+  }catch(e){} }
+  return migBanner+teamPanel+modularPage("clients", CLABEL, [["three",todays3],["inbox",inboxPanel],["pulse",pulse],["roster",roster]], {three:6,inbox:6,pulse:12,roster:12,_:6});
 }
 /* CL3: saved message snippets — recurring messages stop being compositions ({name} = their first name) */
 const CLIENT_SNIPPETS=[
@@ -4748,7 +4903,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent","checkin","sakMigrate"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent","checkin","sakMigrate","cpAdd","mgrApprove","mgrRevoke","mgrDel"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4902,6 +5057,32 @@ document.addEventListener("click",async(e)=>{
   if(act==="invUnpaid"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).map(iv=>iv.id===id?{...iv,status:"sent",paid_on:undefined}:iv)})); render(); return; }
   if(act==="invDel"){ await DB.saveDaily(SENTINEL,n=>({...n,invoices:(n.invoices||[]).filter(iv=>iv.id!==id)})); render(); return; }
   if(act==="invEdit"){ invoiceModal(id); return; }
+  /* 🗒/📅 sakura tasks + calendar */
+  if(act==="cpSet"){ const k=el.dataset.k, v=el.dataset.v; state.cp=state.cp||{}; state.cp[k]=(k==="done")?v==="true":v; render(); return; }
+  if(act==="cpAdd"){ const cid=((document.getElementById("cp_client")||{}).value)||""; const tx=((document.getElementById("cp_text")||{}).value||"").trim(); if(!cid||!tx){toast("pick a client + what they need 🌸");return;}
+    const due=((document.getElementById("cp_due")||{}).value)||""; const pri=((document.getElementById("cp_pri")||{}).value)||"normal";
+    await DB.saveDaily(SENTINEL,n=>({...n,clients:(n.clients||[]).map(c=>c.id===cid?{...c,touched:TODAY,tasks:[...(c.tasks||[]),{id:uid(),text:tx.slice(0,200),status:"needs",due,priority:pri,done:false}]}:c)}));
+    toast("＋ added to their board 🌸"); render(); return; }
+  if(act==="ccClient"){ state.cc=state.cc||{hide:{}}; state.cc.hide=Object.assign({},state.cc.hide); state.cc.hide[id]=!state.cc.hide[id]; render(); return; }
+  if(act==="ccToggle"){ const k=el.dataset.k; state.cc=state.cc||{hide:{}}; state.cc[k]=!state.cc[k]; render(); return; }
+  if(act==="ccalAdd"){ const date=el.dataset.date; const sCc=await DB.daily(SENTINEL); const cs=(sCc.clients||[]).filter(c=>c.status!=="offboarded");
+    if(!cs.length){toast("add a client first 🌸");return;}
+    if(cs.length===1){ clientEventModal(cs[0].id,date); return; }
+    document.getElementById("modal").innerHTML=`<div class="modal-bg" data-act="closeModal"><div class="panel" style="max-width:380px;width:100%"><div class="card-head"><h3 style="font-size:16px">📅 whose event? · ${esc(date)}</h3><button class="btn" data-act="closeModal">✕</button></div>
+      ${cs.map(c=>`<button class="hbtn" data-act="ccalPick" data-id="${c.id}" data-date="${date}" style="display:flex;gap:9px;align-items:center;width:100%;margin-top:6px;text-align:left">${clientAvatarHTML(c,24)}<span class="grow" style="font-size:13px">${esc(c.name)}</span></button>`).join("")}
+    </div></div>`; return; }
+  if(act==="ccalPick"){ clientEventModal(id,el.dataset.date); return; }
+  if(act==="mgrSignupToggle"){ state.mgrSignup=!state.mgrSignup; showLogin(); return; }
+  if(act==="mgrSignUp"){ const em=((document.getElementById("msEmail")||{}).value||"").trim().toLowerCase(); const pw=((document.getElementById("msPass")||{}).value||"");
+    if(!em||!/@/.test(em)){ showLogin("a real email please 🌸"); state.mgrSignup=true; return; }
+    if(pw.length<8){ state.mgrSignup=true; showLogin("password needs 8+ characters 🌸"); return; }
+    try{ const {error}=await SB.auth.signUp({email:em,password:pw});
+      if(error){ state.mgrSignup=true; showLogin(error.message||"couldn't sign up"); return; }
+      state.mgrSignup=false; showLogin("🌸 request sent! Check your email to confirm, then sign in here — Eggie approves you after. 💗");
+    }catch(e){ state.mgrSignup=true; showLogin(e.message||"couldn't sign up"); } return; }
+  if(act==="mgrApprove"){ await SB.from("managers").update({approved:true}).eq("email",id); toast("🌸 approved — they're in next time they load the hub 💗"); render(); return; }
+  if(act==="mgrRevoke"){ await SB.from("managers").update({approved:false}).eq("email",id); toast("access paused for "+id); render(); return; }
+  if(act==="mgrDel"){ await SB.from("managers").delete().eq("email",id); toast("request removed (their login itself is deleted in the Supabase dashboard)"); render(); return; }
   if(act==="sakMigrate"){ if(DEMO||!SB)return;
     const her=await DB.daily(SENTINEL);   // pre-migration: merged view IS her row
     await DB.saveSak(s=>({...s,_sakMigrated:true,clients:her.clients||[],inbox:her.inbox||[],autoNeedsWk:her.autoNeedsWk||null}));
@@ -5541,6 +5722,7 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&e.target.id==="foodFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; (async()=>{ try{ const data=await euScaleImage(f,1100,0.82), thumb=await euScaleImage(f,200,0.7); state.foodDraft=state.foodDraft||{}; state.foodDraft.image={data,thumb}; render(); }catch(err){ toast("couldn't read that photo 🌸"); } })(); }
   if(e.target&&e.target.id==="emoteFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.emote={data:rd.result,size:f.size,name:f.name}; render(); }; rd.readAsDataURL(f); }
   if(e.target&&e.target.id==="notanFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.notan={data:rd.result}; render(); setTimeout(artNotanPaint,80); }; rd.readAsDataURL(f); }
+  if(e.target&&e.target.id==="cp_filter_client"){ state.cp=state.cp||{}; state.cp.client=e.target.value; render(); }
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
   if(e.target&&e.target.id==="artGType"){ state.art=state.art||{}; state.art.gType=e.target.value; render(); }
   if(e.target&&e.target.id==="artSpokes"){ state.art=state.art||{}; state.art.gSpokes=parseInt(e.target.value)||12; render(); }
@@ -5712,7 +5894,8 @@ async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]
 
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
- if(state.tab==="clients"&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
+ if((state.tab==="clients"||state.tab==="cplanner")&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
+ if(state.tab==="ccalendar"){ try{wireCCalDnD();}catch(e){} }
  if(state.tab==="clients"&&state.clientPage){ try{wireClientCalDnD(state.clientPage);}catch(e){console.error(e);} }
  if(state.tab==="art"&&state.art&&state.art.notan){ try{artNotanPaint();}catch(e){} }
  if(state.tab==="art"&&state.inspoPick&&!state._inspoScrolled){ state._inspoScrolled=true; const pk=document.querySelector("[data-inspopick]"); if(pk)try{pk.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){} }
