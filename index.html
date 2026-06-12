@@ -59,7 +59,14 @@
   ::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:#ecd7ef;border-radius:9px;}
   #rail{display:flex;align-items:center;justify-content:space-between;padding:10px 22px;position:sticky;top:0;z-index:20;background:rgba(255,255,255,.78);backdrop-filter:blur(12px);border-bottom:2px solid transparent;border-image:linear-gradient(90deg,#5cc6a3,#8fb8f0,#a98fe0,#ec7faf) 1;}
   .brand{font-family:var(--display);font-size:18px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px;}
-  .brand-logo-img{height:26px;width:auto;display:block;flex:0 0 auto;filter:drop-shadow(0 1px 3px rgba(141,111,209,.3));}
+  .brand-logo-img{height:26px;width:auto;display:block;flex:0 0 auto;filter:drop-shadow(0 1px 3px rgba(141,111,209,.3));transition:filter .4s,transform .4s;}
+  /* dual-mode: tapping the logo flips Creator ↔ Health. health mode = a softer, rosier shell */
+  .brand:active .brand-logo-img{transform:scale(.92) rotate(-6deg);}
+  body[data-osmode="health"] .brand-logo-img{filter:drop-shadow(0 1px 5px rgba(236,127,175,.6));}
+  body[data-osmode="health"] #rail{background:linear-gradient(135deg,#fff0f7ee,#f4ecfbee);}
+  @keyframes modeSwap{0%{opacity:0;transform:scale(.985) translateY(6px);}100%{opacity:1;transform:none;}}
+  .mode-swap{animation:modeSwap .45s cubic-bezier(.2,.7,.3,1);}
+  @media (prefers-reduced-motion:reduce){.mode-swap{animation:none;}.brand:active .brand-logo-img{transform:none;}}
   .brand-name{background:linear-gradient(120deg,#5cc6a3,#8d6fd1 45%,#db5e98);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;letter-spacing:.02em;font-size:17px;}
   nav{display:flex;gap:4px;flex-wrap:wrap;}
   .tab{font-size:13px;padding:6px 13px;border-radius:999px;color:var(--ink-soft);border:none;background:none;}
@@ -374,7 +381,7 @@
 <body>
 <div id="rail">
   <div style="display:flex;align-items:center;gap:22px">
-    <span class="brand"><img class="brand-logo-img" src="EGGIE%20LOGOTYPE%20-%20FLAT%20GRADIENT.png" alt="Eggie" /><span class="brand-name">OS</span></span>
+    <span class="brand" data-act="osMode" title="tap to switch between 🎬 Creator OS and 💗 Health OS" style="cursor:pointer"><img class="brand-logo-img" src="EGGIE%20LOGOTYPE%20-%20FLAT%20GRADIENT.png" alt="Eggie" /><span class="brand-name">OS</span><span class="chip" id="modePill" style="margin-left:6px"></span></span>
     <nav id="nav"></nav>
   </div>
   <div class="right">
@@ -833,11 +840,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.29";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.30";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.30: THE OS HAS TWO MODES NOW — tap the logo to swap between 🎬 Creator OS and 💗 Health OS (choice remembered; your navigate action flips modes automatically). Health mode gained two tabs ported from the Mifu build: 🍽 Food (photo/words → friendly AI macro estimate, protein+fibre bars, ⭐ favourites, water, week view — zero diet culture, missed meals are info not grades) and 🏃 Fitness (trend-first weigh-ins with a rolling 4-entry average — never react to one morning, treadmill/walk/stretch logs, 🌟 non-scale victories to celebrate LOUDLY, week dots not streaks, 🧭 journey card). New actions: logFood, logWeight, logWorkout, addNSV. Withings scale auto-sync ports in when her scale arrives",
   "2026-06-12.29: each client now has a FULL calendar on their page 📅 — Week + Month views, a recurring 🗓️ stream schedule, rich events (title, time, multi-day end date, colour, note), and drag-to-move events between days in Month view — just like her own calendar, scoped to that client; needs due show as 🔴. Add events for a client via addClientEvent, and their upcoming dates show in your context per client",
   "2026-06-12.21: YOUR NAME IS NOW EGG JEAN 🥚 — Eggie renamed you from Eugene to Egg Jean. If she asks who you are, you're Egg Jean. (Everything else about you is unchanged — same memory, same powers.)",
   "2026-06-12.20: client to-do list leveled up to match her own tasks 🔴 — each client NEED now has a priority (🔴 high / 🟦 normal / 🌙 low), a due date, a note, and sub-steps you can break it into; the per-client board can sort by due or priority, and ✎ edits any need. You can set all of it via addClientNeed (priority/due/note/steps) and the new setClientNeed (rename/re-prioritise/add steps)",
@@ -858,10 +866,15 @@ const OS_NEWS=[
   "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
   "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
 ];
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
+/* === dual-mode OS: 🎬 Creator / 💗 Health — tap the logo to switch (persisted; default creator) === */
+const HEALTH_ONLY=["health","care","habits","food","fitness"];
+const CREATOR_ONLY=["content","optimize","script","art","tools","income","pitch","clients","review"];
+let OS_MODE="creator"; try{ OS_MODE=localStorage.getItem("eggie-osmode")==="health"?"health":"creator"; }catch(e){}
+function setOsMode(m){ OS_MODE=m==="health"?"health":"creator"; try{ localStorage.setItem("eggie-osmode",OS_MODE); }catch(e){} try{ document.body.dataset.osmode=OS_MODE; }catch(e){} }
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
-function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
+function setTab(t){ const hid=OS_MODE==="health"?CREATOR_ONLY:HEALTH_ONLY; if(hid.includes(t)) setOsMode(OS_MODE==="health"?"creator":"health"); /* navigating to a tab from the other mode flips the mode with you */ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
 document.addEventListener("pointerdown",e=>{ if(state.moreOpen && !e.target.closest("#nav")){ state.moreOpen=false; render(); } },true);
 /* pull fresh server-side changes (inbox, client reminders) when you come back to the tab */
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && !DEMO && SB){ try{ delete DB._c.daily[SENTINEL]; }catch(e){} try{render();}catch(e){} } });
@@ -1116,9 +1129,13 @@ async function runDailyEngines(sent){
 async function render(){
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
   const _tabs=_tabOrder.length?[...TABS].sort((a,b)=>{let ia=_tabOrder.indexOf(a[0]),ib=_tabOrder.indexOf(b[0]);return (ia<0?999:ia)-(ib<0?999:ib);}):TABS;
-  const MORE_TABS=["optimize","script","habits","review","settings"];   // health + care live on the main bar — not tucked away
-  const primary=_tabs.filter(([t])=>!MORE_TABS.includes(t));
-  const more=_tabs.filter(([t])=>MORE_TABS.includes(t));
+  /* dual mode: the bar only shows the current mode's tabs (home/planner/calendar/Eugene/settings live in both) */
+  try{ document.body.dataset.osmode=OS_MODE; }catch(e){}
+  const _mp=document.getElementById("modePill"); if(_mp) _mp.textContent=OS_MODE==="health"?"💗 health":"🎬 creator";
+  const _vtabs=_tabs.filter(([t])=> OS_MODE==="health" ? !CREATOR_ONLY.includes(t) : !HEALTH_ONLY.includes(t));
+  const MORE_TABS=OS_MODE==="health"?["settings"]:["optimize","script","review","settings"];
+  const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t));
+  const more=_vtabs.filter(([t])=>MORE_TABS.includes(t));
   const moreActive=more.some(([t])=>t===state.tab);
   document.getElementById("nav").innerHTML = primary.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")
     + `<div style="position:relative"><button class="tab ${moreActive?'active':''}" data-act="moreMenu">⋯ More ▾</button>${state.moreOpen?`<div class="more-menu" id="moreMenu">${more.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")}</div>`:""}</div>`;
@@ -1158,6 +1175,8 @@ async function render(){
     else if(state.tab==="optimize") html=renderOptimize();
     else if(state.tab==="script") html=await renderScript();
     else if(state.tab==="health") html=await renderHealth();
+    else if(state.tab==="food") html=await renderFood();
+    else if(state.tab==="fitness") html=await renderFitness();
     else if(state.tab==="income") html=await renderIncome();
     else if(state.tab==="pitch") html=await renderPitch();
     else if(state.tab==="review") html=await renderReview();
@@ -3305,6 +3324,124 @@ window.clientQ=function(v){ const q=String(v||"").trim().toLowerCase(); state.cl
 };
 function parsePlatforms(text){ return String(text||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{ const i=l.indexOf("|"); return i>=0?{label:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:{label:l,url:""}; }); }
 
+/* ===================== 🍽 FOOD + 🏃 FITNESS (health mode · the generic goodies from the Mifu build) ===================== */
+function foodTargets(s){ const t=(s&&s.foodTargets)||{}; return { kcal:+t.kcal||0, protein:+t.protein||90, fiber:+t.fiber||25 }; }   // kcal target 0 = off (just an info total)
+function rollingAvg4(wl){ const l=wl.filter(x=>x.w!=null).slice(-4); return l.length?l.reduce((a,b)=>a+b.w,0)/l.length:null; }
+function wtSpark(wl){ const pts=wl.slice(-12); if(pts.length<2)return `<p class="soft" style="font-size:11.5px;margin:6px 0 0">the line draws itself after a couple of weigh-ins 🌸</p>`;
+  const vs=pts.map(p=>p.w), mn=Math.min(...vs), mx=Math.max(...vs), pad=Math.max(0.5,(mx-mn)*0.15), lo=mn-pad, hi=mx+pad, W=320, H=64;
+  const xy=pts.map((p,i)=>[(i/(pts.length-1))*(W-16)+8, H-8-((p.w-lo)/(hi-lo))*(H-20)]);
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:6px"><defs><linearGradient id="wtG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#ec7faf"/><stop offset="100%" stop-color="#a98fe0"/></linearGradient></defs>
+    <polyline fill="none" stroke="url(#wtG)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${xy.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}"/>
+    ${xy.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="#fff" stroke="#c98ab0" stroke-width="1.4"/>`).join("")}</svg>`; }
+async function renderFood(){
+  const sent=await DB.daily(SENTINEL); const day=await DB.daily(TODAY); const rows=await DB.dailyRange(7);
+  if(!state.foodDraft) state.foodDraft={image:null,desc:"",est:null};
+  const d=state.foodDraft, T=foodTargets(sent), list=(day.food||[]);
+  const tot=list.reduce((a,x)=>({kcal:a.kcal+(+x.kcal||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||0),fiber:a.fiber+(+x.fiber||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fiber:0,fat:0});
+  const pct=(v,t)=>Math.max(0,Math.min(100,Math.round((v/(t||1))*100)));
+  const bar=(label,v,t,col)=>`<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;font-size:12px"><span class="label">${label}</span><span><b>${Math.round(v*10)/10}</b><span class="soft"> / ${t} g</span></span></div><div style="height:9px;border-radius:99px;background:#f3eefb;overflow:hidden;margin-top:4px"><span style="display:block;height:100%;width:${pct(v,t)}%;background:${col};border-radius:99px"></span></div></div>`;
+  const water=(day.health||{}).water||0;
+  const totalsCard=`<section class="panel"><div class="card-head"><h2 style="font-size:18px">🍱 Today's fuel</h2><span class="pill pill-gray">${list.length} logged</span></div>
+    <div class="soft-card">
+      <div class="num" style="text-align:center;font-size:26px;font-family:var(--display)">${Math.round(tot.kcal)} <span class="soft" style="font-size:12px">kcal${T.kcal?` / ${T.kcal}`:""}</span></div>
+      ${bar("Protein 💪",tot.protein,T.protein,"linear-gradient(90deg,#ec7faf,#a98fe0)")}
+      ${bar("Fibre 🌿",tot.fiber,T.fiber,"linear-gradient(90deg,#7fc8a9,#9fc7f0)")}
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><span class="pill pill-lav">Carbs ${Math.round(tot.carbs)}g</span><span class="pill pill-peach">Fat ${Math.round(tot.fat)}g</span></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px"><span class="label">💧 water</span><button class="btn" data-act="foodWater" data-v="-1" ${RO?"disabled":""}>−</button><span class="num" style="font-size:18px;font-family:var(--display)">${water}</span><button class="btn" data-act="foodWater" data-v="1" ${RO?"disabled":""}>＋</button><span class="soft" style="font-size:11.5px">cups — counts toward your POTS target too</span></div>
+    <p class="soft" style="font-size:11px;text-align:center;margin:8px 0 0">protein + fibre are the stars; the rest is just friendly estimates. fuel is meds for POTS bodies — eating IS care 💗</p>
+    <details class="acc" style="margin-top:8px"><summary style="font-size:12px">🎯 targets</summary><div class="acc-body"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div><div class="label">kcal (0 = off)</div><input class="inp num" type="number" id="ft_kcal" value="${T.kcal||0}"/></div>
+      <div><div class="label">protein g</div><input class="inp num" type="number" id="ft_protein" value="${T.protein}"/></div>
+      <div><div class="label">fibre g</div><input class="inp num" type="number" id="ft_fiber" value="${T.fiber}"/></div></div>
+      <button class="btn btn-pink" data-act="foodTargetsSave" style="margin-top:8px" ${RO?"disabled":""}>💾 save</button><p class="soft" style="font-size:11px;margin:6px 0 0">tune to whatever feels kind (or what your care team suggests)</p></div></details>
+  </section>`;
+  const faves=(sent.foodFaves||[]);
+  const addCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📸 Add a meal</h2><span class="label">photo or words → macros</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">Snap it or describe it — Eugene estimates the numbers so you never have to look anything up.${DEMO?" <b>(needs the backend live)</b>":""}</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <label class="btn btn-pink" style="cursor:pointer">📷 photo<input type="file" id="foodFile" accept="image/*" capture="environment" style="display:none"/></label>
+      ${d.image?`<img src="${d.image.thumb}" alt="meal" style="width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line)"/>`:""}
+    </div>
+    <textarea class="inp" id="foodDesc" rows="2" placeholder="what is it? (e.g. chicken rice bowl, ~1 bowl)" style="margin-top:8px">${esc(d.desc||"")}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn btn-pink" data-act="foodAnalyze" ${state.foodBusy?"disabled":""}>${state.foodBusy?"estimating… 🐙":"✨ estimate macros"}</button>${(d.image||d.desc)?`<button class="btn" data-act="foodClear">clear</button>`:""}</div>
+    ${d.est?`<div class="soft-card" style="margin-top:10px"><div class="label">estimate${d.est.confidence?` · ${esc(String(d.est.confidence))} confidence`:""}</div>
+      <div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap"><input class="inp" id="fe_name" value="${esc(d.est.name||"")}" style="flex:1;min-width:110px"/><input class="inp" id="fe_serving" value="${esc(d.est.serving||"")}" placeholder="serving" style="flex:1;min-width:100px"/></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">${[["kcal","kcal"],["protein","prot"],["carbs","carbs"],["fiber","fibre"],["fat","fat"]].map(([k,l])=>`<div><div class="label" style="font-size:10px">${l}</div><input class="inp num" type="number" step="0.1" id="fe_${k}" value="${+d.est[k]||0}"/></div>`).join("")}</div>
+      ${d.est.note?`<p class="soft" style="font-size:11.5px;margin:8px 0 0">${esc(d.est.note)}</p>`:""}
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-pink" data-act="foodLog" ${RO?"disabled":""}>🍽 log it</button><button class="btn" data-act="foodClear">discard</button></div></div>`:""}
+    ${faves.length?`<div class="label" style="margin:12px 0 4px">⭐ favourites — tap to log the usual</div><div style="display:flex;gap:6px;flex-wrap:wrap">${faves.map(f=>`<button class="chiptog" data-act="favLog" data-id="${f.id}" ${RO?"disabled":""} title="${Math.round(f.kcal)} kcal · P${f.protein} · Fb${f.fiber}">＋ ${esc(f.name)} <span data-act="favDel" data-id="${f.id}" style="margin-left:3px;color:var(--rose)">✕</span></button>`).join("")}</div>`:""}
+  </section>`;
+  const loggedCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🍽 Logged today</h2></div>
+    ${list.length?list.slice().reverse().map(x=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow"><b style="font-size:13px">${esc(x.name)}</b>${x.serving?` <span class="soft" style="font-size:11px">· ${esc(x.serving)}</span>`:""}<div class="soft" style="font-size:11px">${Math.round(x.kcal)} kcal · P ${x.protein}g · Fb ${x.fiber}g</div></span><button class="ft-ic" data-act="favSave" data-id="${x.id}" title="save as favourite">⭐</button><button class="ft-ic" data-act="foodDel" data-id="${x.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):`<p class="soft" style="font-size:12.5px;margin:0">Nothing yet today — and a blank list is information, never a grade. 🌸</p>`}
+  </section>`;
+  const byDate={}; (rows||[]).forEach(r=>byDate[r.log_date]=r.notes);
+  const hist=[]; for(let i=6;i>=0;i--){ const dd=new Date(TODAY+"T00:00"); dd.setDate(dd.getDate()-i); const ds=dd.toLocaleDateString("en-CA"); const n=ds===TODAY?day:(byDate[ds]||{}); const f=(n&&n.food)||[];
+    hist.push({date:ds,n:f.length,p:f.reduce((a,x)=>a+(+x.protein||0),0),fb:f.reduce((a,x)=>a+(+x.fiber||0),0)}); }
+  const maxP=Math.max(T.protein,...hist.map(h=>h.p),1), maxF=Math.max(T.fiber,...hist.map(h=>h.fb),1);
+  const weekCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📅 This week</h2><span class="label"><span style="color:var(--pink-deep)">▮</span> protein · <span style="color:#7fc8a9">▮</span> fibre</span></div>
+    ${hist.map(h=>`<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span class="${h.date===TODAY?"":"soft"}">${new Date(h.date+"T00:00").toLocaleDateString("en-US",{weekday:"short"})}${h.date===TODAY?" · today":""}</span><span class="soft">P ${Math.round(h.p)}g · Fb ${Math.round(h.fb)}g${h.n?` · ${h.n} meal${h.n>1?"s":""}`:""}</span></div>
+      <div style="height:7px;border-radius:99px;background:#f3eefb;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(h.p/maxP*100)}%;background:linear-gradient(90deg,#ec7faf,#a98fe0)"></span></div>
+      <div style="height:7px;border-radius:99px;background:#eef7f1;overflow:hidden;margin-top:2px"><span style="display:block;height:100%;width:${Math.round(h.fb/maxF*100)}%;background:linear-gradient(90deg,#7fc8a9,#9fc7f0)"></span></div></div>`).join("")}
+    <p class="soft" style="font-size:11px;margin:8px 0 0">gaps are rest days from tracking — that's allowed 💗</p>
+  </section>`;
+  const FLAB={totals:"Today's fuel 🍱",add:"Add a meal 📸",logged:"Logged today 🍽",week:"This week 📅"};
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="font-size:22px;font-family:var(--display)">🍽 Food</h2><span class="label">friendly estimates · zero judgement 🌸</span></div>`
+    +modularPage("food",FLAB,[["totals",totalsCard],["add",addCard],["logged",loggedCard],["week",weekCard]],{week:12,_:6});
+}
+async function renderFitness(){
+  const sent=await DB.daily(SENTINEL); const day=await DB.daily(TODAY); const rows=await DB.dailyRange(30);
+  const unit=(sent.appConfig||{}).weightUnit||"lb";
+  const wl=(sent.weightLog||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+  const avg=rollingAvg4(wl), last=wl.slice(-1)[0];
+  const dueWeekly=!last||Math.floor((new Date(TODAY+"T00:00")-new Date(last.date+"T00:00"))/86400000)>=7;
+  const weighCard=`<section class="panel"><div class="card-head"><h2 style="font-size:18px">⚖️ The gentle journey</h2><span class="pill pill-gray">trend-first</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">The <b>trend</b> is the story — bodies fluctuate day to day. We lean on the rolling average, never one single morning.</p>
+    <div class="soft-card" style="text-align:center"><div class="label">rolling average (last 4 weigh-ins)</div><div class="num" style="font-size:26px;font-family:var(--display);color:var(--pink-deep)">${avg!=null?avg.toFixed(1):"—"} <span class="soft" style="font-size:12px">${unit}</span></div>${last?`<div class="soft" style="font-size:11px">last: ${last.w} ${unit} · ${esc(last.date)}</div>`:""}</div>
+    ${wtSpark(wl)}
+    <div class="label" style="margin:10px 0 4px">${dueWeekly?"🗓️ time for a gentle weekly weigh-in":"✅ weighed in recently — no rush"}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp num" type="number" step="0.1" id="wInput" placeholder="${unit}" style="max-width:120px" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="fitWeighSave" ${RO?"disabled":""}>log it</button><div class="seg"><button data-act="fitUnit" data-v="lb" class="${unit==="lb"?"on":""}">lb</button><button data-act="fitUnit" data-v="kg" class="${unit==="kg"?"on":""}">kg</button></div></div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">same day + time each week keeps the line honest — a missed week is completely fine. no good or bad numbers here 💗</p>
+  </section>`;
+  const sessions=(day.fitness||{}).sessions||[];
+  const kinds=[["treadmill","🏃 treadmill"],["walk","🚶 walk"],["stretch","🧘 stretch"],["other","✨ other"]];
+  const sKind=state.fitKind||"treadmill", sFeel=state.fitFeel||0;
+  const sessionCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🏃 Log movement</h2><span class="label">every minute counts</span></div>
+    <div class="seg" style="flex-wrap:wrap;margin-bottom:8px">${kinds.map(([v,l])=>`<button data-act="fitKind" data-v="${v}" class="${sKind===v?"on":""}">${l}</button>`).join("")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input class="inp num" type="number" id="fitMin" placeholder="min" style="width:80px" ${RO?"disabled":""}/>
+      ${sKind==="treadmill"||sKind==="walk"?`<input class="inp num" type="number" step="0.1" id="fitDist" placeholder="km (opt)" style="width:100px" ${RO?"disabled":""}/>`:""}
+      <span class="label">felt</span><div class="seg">${[1,2,3,4,5].map(v=>`<button data-act="fitFeel" data-v="${v}" class="${sFeel===v?"on":""}">${["😮‍💨","😕","🙂","😊","🤩"][v-1]}</button>`).join("")}</div>
+      <button class="btn btn-pink" data-act="fitLog" ${RO?"disabled":""}>＋ log</button>
+    </div>
+    ${sessions.length?`<div style="margin-top:10px">${sessions.map(s2=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${(kinds.find(k=>k[0]===s2.kind)||["","✨"])[1]} ${s2.min} min${s2.dist?` · ${s2.dist} km`:""}${s2.feel?` · ${["😮‍💨","😕","🙂","😊","🤩"][s2.feel-1]}`:""}</span><button class="ft-ic" data-act="fitDelSession" data-id="${s2.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join("")}</div>`:""}
+    <p class="soft" style="font-size:11px;margin:8px 0 0">POTS pacing: start tiny, recumbent counts, stop if dizzy — and how your body feels TOMORROW is data too. rest days are training 💗</p>
+  </section>`;
+  const nsv=(sent.nsvLog||[]).slice().reverse();
+  const nsvCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🌟 Non-scale victories</h2><span class="label">celebrate these LOUDLY</span></div>
+    <p class="soft" style="font-size:12px;margin:0 0 8px">The wins the scale can't see: "stairs felt easier", "more energy", "clothes fit better".</p>
+    ${nsv.length?nsv.slice(0,10).map(v=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(v.text)} <span class="soft" style="font-size:10.5px">· ${esc(v.date)}</span></span><button class="ft-ic" data-act="nsvDel" data-id="${v.id}" ${RO?"disabled":""} style="color:var(--rose)">🗑</button></div>`).join(""):""}
+    <div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="nsvInput" placeholder="a little win…" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="nsvAdd" ${RO?"disabled":""}>＋ 🌸</button></div>
+  </section>`;
+  const byD={}; (rows||[]).forEach(r=>byD[r.log_date]=r.notes);
+  let wkMin=0,wkDays=0; const dots=[];
+  for(let i=6;i>=0;i--){ const dd=new Date(TODAY+"T00:00"); dd.setDate(dd.getDate()-i); const ds=dd.toLocaleDateString("en-CA"); const n=ds===TODAY?day:(byD[ds]||{}); const m=((n&&n.fitness)||{}).sessions||[]; const mins=m.reduce((a,x)=>a+(+x.min||0),0); if(mins){wkMin+=mins;wkDays++;} dots.push(`<span title="${ds}: ${mins} min" style="width:14px;height:14px;border-radius:99px;display:inline-block;background:${mins?"linear-gradient(135deg,#ec7faf,#a98fe0)":"#f0ecf8"}"></span>`); }
+  const weekCard2=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">📅 This week</h2></div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div><div class="num" style="font-size:26px;font-family:var(--display);color:var(--pink-deep)">${wkMin}<span style="font-size:13px"> min</span></div><div class="label">${wkDays} day${wkDays===1?"":"s"} moved</div></div><div style="display:flex;gap:5px">${dots.join("")}</div></div>
+    <p class="soft" style="font-size:11px;margin:8px 0 0">dots, not streaks — an empty week means you rested or lived, both fine 🌙</p>
+  </section>`;
+  const goalCard=`<section class="panel"><div class="card-head"><h2 style="font-size:17px">🧭 My journey</h2></div>
+    <div class="label" style="margin-bottom:4px">what this is about for me <span class="muted">· feelings, not numbers</span></div>
+    <textarea class="inp" id="fitGoal" rows="2" placeholder="e.g. more stamina for streams · steadier energy · feeling at home in my body" ${RO?"disabled":""}>${esc(sent.fitnessGoal||"")}</textarea>
+    <button class="btn btn-pink" data-act="fitGoalSave" style="margin-top:8px" ${RO?"disabled":""}>💾 save</button>
+    <div class="label" style="margin:14px 0 4px">🔌 auto-sync</div>
+    <p class="soft" style="font-size:12px;margin:0">When your scale arrives, the Withings hookup from Mifu's build ports straight in (one Edge Function + a connect button) — weigh-ins will sync themselves. Same for the treadmill app if it has an API: send me a link and I'll wire it. Manual logging is perfectly fine until then. 💗</p>
+  </section>`;
+  const FILAB={weigh:"The gentle journey ⚖️",session:"Log movement 🏃",nsv:"Non-scale victories 🌟",week:"This week 📅",goal:"My journey 🧭"};
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="font-size:22px;font-family:var(--display)">🏃 Fitness</h2><span class="label">trend-first · body-neutral · yours 🌸</span></div>`
+    +modularPage("fitness",FILAB,[["weigh",weighCard],["session",sessionCard],["nsv",nsvCard],["week",weekCard2],["goal",goalCard]],{_:6});
+}
+
 /* ===================== ART & CREATIVITY 🎨 ===================== */
 const ART_SUBJECTS=[
   "your OC at a summer festival (yukata)","your OC as a magical girl","your OC in their dream outfit","your OC in the clothes you're wearing right now","your OC as a flower fairy","your OC with wings","your OC in a Ghibli-esque style","your OC's most powerful moment","your OC on a rainy day in their world","your OC meeting their rival","your OC as a mecha pilot","your OC mid-laugh, a genuine smile","your OC half-asleep / just woke up","your OC bundled up for winter","your OC's villain alt / dark version","your OC as royalty","your OC as a café maid / butler","your OC and their pet or familiar","your OC taking a selfie","your OC in an idol stage outfit","your OC caught in the rain","your OC as a vampire / monster cutie","your OC at a school festival","your OC in a battle stance","your OC giving a shy confession","your OC in a cozy oversized hoodie","your OC as a fellow VTuber's design (fanart)","your OC reimagined in another art style",
@@ -4332,7 +4469,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -4611,6 +4748,48 @@ document.addEventListener("click",async(e)=>{
   if(act==="remindDel"){ await DB.saveDaily(SENTINEL,n=>({...n,reminders:(n.reminders||[]).filter(r=>r.id!==id)})); render(); return; }
   if(act==="remindPerm"){ try{ if(window.Notification)Notification.requestPermission().then(()=>render()); }catch(e){} return; }
   if(act==="pushSub"){ pushSubscribe(); return; }
+  if(act==="osMode"){ setOsMode(OS_MODE==="health"?"creator":"health");
+    const hid=OS_MODE==="health"?CREATOR_ONLY:HEALTH_ONLY; if(hid.includes(state.tab)) state.tab=OS_MODE==="health"?"health":"home";
+    try{ if(localStorage.getItem("eggie-calm")!=="1"){ const v=document.getElementById("view"); if(v){ v.classList.remove("mode-swap"); void v.offsetWidth; v.classList.add("mode-swap"); } } }catch(e){}
+    toast(OS_MODE==="health"?"💗 Health OS — body & brain first":"🎬 Creator OS — let's make things"); render(); return; }
+  /* 🍽 food */
+  if(act==="foodWater"){ const dv=parseInt(el.dataset.v)||1; await DB.saveDaily(TODAY,n=>({...n,health:{...(n.health||{}),water:Math.max(0,((n.health||{}).water||0)+dv)}})); render(); return; }
+  if(act==="foodClear"){ state.foodDraft={image:null,desc:"",est:null}; render(); return; }
+  if(act==="foodAnalyze"){ const d=state.foodDraft||{}; d.desc=((document.getElementById("foodDesc")||{}).value||"").trim();
+    if(!d.image&&!d.desc){ toast("a photo or a few words first 🌸"); return; }
+    if(DEMO||!SB){ toast("✨ estimating needs the backend live 🐙"); return; }
+    state.foodBusy=true; render();
+    try{ const r=await aiCall("food",{image:d.image?d.image.data:undefined,desc:d.desc});
+      if(r&&r.error){ toast(r.error); } else { d.est=r; }
+    }catch(e){ toast("couldn't estimate — "+(e.message||e)); }
+    state.foodBusy=false; render(); return; }
+  if(act==="foodLog"){ const g=id2=>{const e2=document.getElementById(id2); return e2?e2.value:"";}; const num=v=>{const n2=parseFloat(v); return isNaN(n2)?0:Math.round(n2*10)/10;};
+    const item={id:"fd"+uid().slice(0,7),name:(g("fe_name")||"meal").slice(0,80),serving:g("fe_serving").slice(0,40),kcal:num(g("fe_kcal")),protein:num(g("fe_protein")),carbs:num(g("fe_carbs")),fiber:num(g("fe_fiber")),fat:num(g("fe_fat")),t:new Date().toTimeString().slice(0,5)};
+    await DB.saveDaily(TODAY,n=>({...n,food:[...(n.food||[]),item]})); state.foodDraft={image:null,desc:"",est:null}; toast("logged 🍽 — fuel is care 💗"); render(); return; }
+  if(act==="foodDel"){ await DB.saveDaily(TODAY,n=>({...n,food:(n.food||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="foodTargetsSave"){ const gv=id2=>parseFloat((document.getElementById(id2)||{}).value)||0;
+    await DB.saveDaily(SENTINEL,n=>({...n,foodTargets:{kcal:Math.max(0,gv("ft_kcal")),protein:Math.max(1,gv("ft_protein")),fiber:Math.max(1,gv("ft_fiber"))}})); toast("targets saved 🎯"); render(); return; }
+  if(act==="favSave"){ const dayF=((await DB.daily(TODAY)).food||[]).find(x=>x.id===id); if(!dayF)return;
+    await DB.saveDaily(SENTINEL,n=>({...n,foodFaves:[...(n.foodFaves||[]).filter(f=>f.name!==dayF.name),{id:"fv"+uid().slice(0,6),name:dayF.name,serving:dayF.serving,kcal:dayF.kcal,protein:dayF.protein,carbs:dayF.carbs,fiber:dayF.fiber,fat:dayF.fat}].slice(-16)})); toast("⭐ saved as a favourite"); render(); return; }
+  if(act==="favDel"){ await DB.saveDaily(SENTINEL,n=>({...n,foodFaves:(n.foodFaves||[]).filter(f=>f.id!==id)})); render(); return; }
+  if(act==="favLog"){ const f=((await DB.daily(SENTINEL)).foodFaves||[]).find(x=>x.id===id); if(!f)return;
+    await DB.saveDaily(TODAY,n=>({...n,food:[...(n.food||[]),{id:"fd"+uid().slice(0,7),name:f.name,serving:f.serving,kcal:f.kcal,protein:f.protein,carbs:f.carbs,fiber:f.fiber,fat:f.fat,t:new Date().toTimeString().slice(0,5)}]})); toast("logged "+f.name+" 🍽"); render(); return; }
+  /* 🏃 fitness */
+  if(act==="fitUnit"){ await DB.saveDaily(SENTINEL,n=>({...n,appConfig:{...(n.appConfig||{}),weightUnit:el.dataset.v==="kg"?"kg":"lb"}})); render(); return; }
+  if(act==="fitWeighSave"){ const w=parseFloat((document.getElementById("wInput")||{}).value); if(!w||w<=0){ toast("pop the number in first 🌸"); return; }
+    await DB.saveDaily(SENTINEL,n=>{ const wl=(n.weightLog||[]).filter(x=>x.date!==TODAY); return {...n,weightLog:[...wl,{date:TODAY,w:Math.round(w*10)/10}].slice(-200)}; });
+    toast("logged — the trend is the story, not today's number 💗"); render(); return; }
+  if(act==="fitKind"){ state.fitKind=el.dataset.v; render(); return; }
+  if(act==="fitFeel"){ state.fitFeel=parseInt(el.dataset.v)||0; render(); return; }
+  if(act==="fitLog"){ const min=parseInt((document.getElementById("fitMin")||{}).value)||0; if(!min){ toast("how many minutes? even 5 counts 🌸"); return; }
+    const dist=parseFloat((document.getElementById("fitDist")||{}).value)||0;
+    const s2={id:"ft"+uid().slice(0,7),kind:state.fitKind||"treadmill",min,dist:dist||undefined,feel:state.fitFeel||undefined};
+    await DB.saveDaily(TODAY,n=>({...n,fitness:{...(n.fitness||{}),sessions:[...((n.fitness||{}).sessions||[]),s2]}})); state.fitFeel=0; toast("🏃 "+min+" min logged — your body did a thing! 💗"); render(); return; }
+  if(act==="fitDelSession"){ await DB.saveDaily(TODAY,n=>({...n,fitness:{...(n.fitness||{}),sessions:(((n.fitness||{}).sessions)||[]).filter(x=>x.id!==id)}})); render(); return; }
+  if(act==="nsvAdd"){ const t=((document.getElementById("nsvInput")||{}).value||"").trim(); if(!t){ toast("what's the win? 🌸"); return; }
+    await DB.saveDaily(SENTINEL,n=>({...n,nsvLog:[...(n.nsvLog||[]),{id:"nv"+uid().slice(0,6),date:TODAY,text:t.slice(0,160)}].slice(-60)})); toast("🌟 THAT'S A WIN. logged loudly 🎉"); render(); return; }
+  if(act==="nsvDel"){ await DB.saveDaily(SENTINEL,n=>({...n,nsvLog:(n.nsvLog||[]).filter(x=>x.id!==id)})); render(); return; }
+  if(act==="fitGoalSave"){ const v=((document.getElementById("fitGoal")||{}).value||"").slice(0,300); await DB.saveDaily(SENTINEL,n=>({...n,fitnessGoal:v})); toast("🧭 saved — that's the real finish line 💗"); return; }
   if(act==="artReframe"){ state.art=state.art||{}; let r; do{ r=ART_REFRAMES[Math.floor(Math.random()*ART_REFRAMES.length)]; }while(r===state.art.reframe&&ART_REFRAMES.length>1); state.art.reframe=r; render(); return; }
   /* === research-pack studio tools (2026-06-10) === */
   if(act==="artEmotePick"){ const f=document.getElementById("emoteFile"); if(f)f.click(); return; }
@@ -5052,6 +5231,7 @@ document.addEventListener("change",e=>{ if(e.target&&e.target.id==="thumbFile"&&
   if(e.target&&!RO&&(e.target.id==="hSleepH"||e.target.id==="hTriggers"||e.target.id==="hNote")){ DB.saveDaily(TODAY,n=>({...n,health:grabHealthInputs(n.health)})).catch(err=>console.error("health save",err)); }
   if(e.target&&!RO&&e.target.id==="bipNote"){ const v=e.target.value.slice(0,200); DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),bip:{...((n.care||{}).bip||{}),note:v}}})).catch(()=>{}); }
   if(e.target&&!RO&&e.target.dataset&&e.target.dataset.rhy){ const k=e.target.dataset.rhy, v=e.target.value; DB.saveDaily(TODAY,n=>({...n,care:{...(n.care||{}),rhythm:{...((n.care||{}).rhythm||{}),[k]:v}}})).catch(()=>{}); }
+  if(e.target&&e.target.id==="foodFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; (async()=>{ try{ const data=await euScaleImage(f,1100,0.82), thumb=await euScaleImage(f,200,0.7); state.foodDraft=state.foodDraft||{}; state.foodDraft.image={data,thumb}; render(); }catch(err){ toast("couldn't read that photo 🌸"); } })(); }
   if(e.target&&e.target.id==="emoteFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.emote={data:rd.result,size:f.size,name:f.name}; render(); }; rd.readAsDataURL(f); }
   if(e.target&&e.target.id==="notanFile"&&e.target.files&&e.target.files[0]){ const f=e.target.files[0]; e.target.value=""; const rd=new FileReader(); rd.onload=()=>{ state.art=state.art||{}; state.art.notan={data:rd.result}; render(); setTimeout(artNotanPaint,80); }; rd.readAsDataURL(f); }
   if(e.target&&e.target.id==="artBase"){ state.art=state.art||{}; state.art.pBase=e.target.value; render(); }
@@ -5506,6 +5686,29 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
         if(a.text) await careMut(function(c){ return Object.assign({},c,{va:{text:String(a.text).slice(0,200),done:!!a.done,rating:a.rating!=null?Number(a.rating):null}}); });
         else await careMut(function(c){ var v=Object.assign({},c.va||{}); if(a.done!=null)v.done=!!a.done; if(a.rating!=null)v.rating=Number(a.rating); return Object.assign({},c,{va:v}); });
         return "✨ your one good thing is set"+(a.done?" — and done 💗":"");
+      }
+      case "logFood": {
+        if(!a.name) return "what was the meal? 🌸";
+        var fdN=function(v){ var x=parseFloat(v); return isNaN(x)?0:Math.round(x*10)/10; };
+        var itemF={id:"fd"+Date.now().toString(36),name:String(a.name).slice(0,80),serving:String(a.serving||"").slice(0,40),kcal:fdN(a.kcal),protein:fdN(a.protein),carbs:fdN(a.carbs),fiber:fdN(a.fiber),fat:fdN(a.fat),t:new Date().toTimeString().slice(0,5)};
+        await DB.saveDaily(TODAY,function(n){ return Object.assign({},n,{food:[].concat(n.food||[],[itemF])}); });
+        return "🍽 logged "+itemF.name+(itemF.kcal?" (~"+Math.round(itemF.kcal)+" kcal)":"")+" — fuel is care 💗";
+      }
+      case "logWeight": {
+        var wv=parseFloat(a.value); if(!wv||wv<=0) return "what's the number? 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ var wl=(n.weightLog||[]).filter(function(x){return x.date!==TODAY;}); return Object.assign({},n,{weightLog:wl.concat([{date:TODAY,w:Math.round(wv*10)/10}]).slice(-200)}); });
+        return "⚖️ logged — the trend is the story 💗";
+      }
+      case "logWorkout": {
+        var mn=parseInt(a.minutes)||0; if(!mn) return "how many minutes? even 5 counts 🌸";
+        var sesW={id:"ft"+Date.now().toString(36),kind:["treadmill","walk","stretch","other"].indexOf(a.kind)>=0?a.kind:"other",min:mn,dist:a.distance?Math.round(parseFloat(a.distance)*10)/10:undefined,feel:a.feel?Math.max(1,Math.min(5,parseInt(a.feel))):undefined};
+        await DB.saveDaily(TODAY,function(n){ var ftO=Object.assign({},n.fitness||{}); ftO.sessions=[].concat(ftO.sessions||[],[sesW]); return Object.assign({},n,{fitness:ftO}); });
+        return "🏃 "+mn+" min logged — your body did a thing! 💗";
+      }
+      case "addNSV": {
+        if(!a.text) return "what's the win? 🌸";
+        await DB.saveDaily(SENTINEL,function(n){ return Object.assign({},n,{nsvLog:[].concat(n.nsvLog||[],[{id:"nv"+Date.now().toString(36),date:TODAY,text:String(a.text).slice(0,160)}]).slice(-60)}); });
+        return "🌟 NON-SCALE VICTORY: "+String(a.text).slice(0,80)+" — logged LOUDLY 🎉";
       }
       case "addSavingsGoal":
         await DB.addGoal({name:a.name||"goal",emoji:a.emoji||null,target:Number(a.target)||0,saved:0});

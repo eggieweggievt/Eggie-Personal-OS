@@ -187,6 +187,13 @@ async function fullContext(userId: string, today: string): Promise<string> {
     if (Object.keys(h).length) lines.push(`  health today: ${Object.entries(h).map(([k, v]) => `${k}:${v}`).join(", ")}`);
     if (Object.keys(c).length) lines.push(`  care today: ${[c.feelings?.length ? "feelings:" + c.feelings.join("/") : "", c.mood != null ? "weather:" + c.mood + "/5" : "", c.bip?.elev != null ? "mood-chart elevation:" + c.bip.elev + (c.bip.irrit ? " irrit:" + c.bip.irrit : "") : "", c.va?.text ? "good-thing:" + c.va.text + (c.va.done ? " ✓" : "") : "", c.rhythm ? "anchors:" + Object.entries(c.rhythm).map(([k, v]) => k + "@" + v).join(" ") : "", c.signs?.length ? "⚠ warning-signs ticked:" + c.signs.length : "", c.efStep ? "next-step:" + c.efStep : ""].filter(Boolean).join(", ")}`);
     if (d.hygiene && Object.keys(d.hygiene).length) lines.push(`  care menu today: ${Object.entries(d.hygiene).map(([k, v]) => `${k}:${v}`).join(", ")} (every tier counts equally)`);
+    const _fd = Array.isArray(d.food) ? d.food : [];
+    if (_fd.length) lines.push(`  food today (friendly estimates): ${_fd.length} logged — ${Math.round(_fd.reduce((a: number, x: any) => a + (+x.kcal || 0), 0))} kcal, P ${Math.round(_fd.reduce((a: number, x: any) => a + (+x.protein || 0), 0))}g, Fb ${Math.round(_fd.reduce((a: number, x: any) => a + (+x.fiber || 0), 0))}g (${_fd.map((x: any) => x.name).slice(0, 5).join(", ")})`);
+    const _fs = ((d.fitness || {}).sessions || []);
+    if (_fs.length) lines.push(`  movement today: ${_fs.reduce((a: number, x: any) => a + (+x.min || 0), 0)} min (${_fs.map((x: any) => x.kind).join(", ")})`);
+    if (s.weightLog?.length) { const wl = s.weightLog.slice().sort((a: any, b: any) => a.date < b.date ? -1 : 1); const l4 = wl.slice(-4); const avg = l4.reduce((a: number, x: any) => a + (+x.w || 0), 0) / l4.length; const un = (s.appConfig || {}).weightUnit || "lb"; lines.push(`WEIGHT (trend-first, body-neutral — NEVER call a number good/bad): last ${wl[wl.length - 1].w}${un} on ${wl[wl.length - 1].date}; rolling avg ${avg.toFixed(1)}${un} over last ${l4.length} weigh-ins.`); }
+    if (s.nsvLog?.length) lines.push(`NON-SCALE VICTORIES (celebrate these loudly): ${s.nsvLog.slice(-3).map((v: any) => v.text).join(" | ")}`);
+    if (s.fitnessGoal) lines.push(`HER FITNESS JOURNEY IS ABOUT: ${String(s.fitnessGoal).slice(0, 200)}`);
     // meds list + which are taken today
     if (s.medsList?.length) {
       const taken = h.meds || {};
@@ -534,6 +541,7 @@ VIDIQ: you do NOT have a direct VidIQ connection from here (VidIQ has no public 
 PHOTOS: she can attach a photo to a message (📷 in chat). When one is attached, actually LOOK at it and use it — read handwritten/whiteboard notes or a screenshot into tasks/captures/calendar events, read a schedule or receipt, describe her art warmly and give gentle concrete feedback, check a thumbnail against the thumbnail rubric, identify what's in the picture. If the photo alone is ambiguous, say what you see and ask. Photos are seen this message only (not stored), so capture anything worth keeping as an action right away. Never claim you can't see an attached image.
 
 THE OS ITSELF (its map — so you can answer "where do I find…", walk her through anything step by step, and route her with navigate). You know EVERY feature, including the 2026-06-10 ADHD upgrade (build .7) marked ✦:
+✦DUAL MODES (build .18): the OS has TWO modes — 🎬 Creator OS (content/planner/calendar/art/money/sponsors/clients/tools/optimize/script/review) and 💗 Health OS (health/care/habits/food/fitness). She taps the LOGO (top-left) to swap; Home/Planner/Calendar/you/Settings live in both; your navigate action flips the mode automatically when needed. Default is creator; her choice is remembered per device.
 - 🏠 Home (rebuilt around wellbeing): ✦"💗 body & brain" card FIRST — spoons + inner-weather taps, quick med ticks, the gentle insight, doors to Health/Care; ✦"☀️ today's plate" (the Planner's Today lens on the front page, checkable); today-at-a-glance (events/reminders/stream); content mission control; ✦clients' today's-three; art corner; money pulse; brain-dump with capture box. ✦"🌙 just today" chip = focus mode. ✦Low-energy days soften the page automatically. NOTE: 💗 Health and 🫂 Care are on the MAIN tab bar now (not the ⋯ More menu).
 - 🎬 Content: 7-stage pipeline board. ✦"🌿 simple" folds it to 3 columns — and she can RENAME those three columns via the ✎ next to the toggle (stored as contentMacros; use her names when talking about them). ✦Due pills on cards. ✦"📥 triage" = sort brain-dump captures one at a time; ✦"🪄 compile" = you (AI) sort ALL captures at once and she approves. ✦Gentle nudge when 5+ items are mid-flight. Pillar mix lives in a collapsed accordion.
 - 🗒️ Planner: buckets + spoons + due dates + reminders. ✦"📅 Today" lens (due/overdue + today's reminders + anything she stars with ☀). ✦☀ star = "on today's plate". ✦🪄 on any task = magic break-it-down (spice 1-5 = step size) with honest minute estimates (~Xm pills). ◎ = focus-one-thing view. ✦Done tasks collapse. ✦15+ open tasks offers gentle "tuck into Someday". ✦The ▦ Board view has FULL parity with the list (✓ checks, ☀, 🪄, ＋ subtasks, estimates, tuck).
@@ -541,6 +549,8 @@ THE OS ITSELF (its map — so you can answer "where do I find…", walk her thro
 - 🎯 Optimize (titles/tags/thumbnail checker) · ✍️ Script (talk-it-out script writer + teleprompter) · 🌸 Habits (spoon-aware library).
 - 💗 Health (rebuilt): ✦🌅 morning check (3 taps → suggests the day's spoons), symptom scales, POTS care with ✦her clinician-agreed water/salt targets + 🥵 heat + 🌺 period-day flags, ✦🩹 Skin care companion (BFRB/picking support: urge-vs-picked logs where redirects are celebrated, 60-second urge surf, strategy shelf, healing-days count — NEVER shame her about picking, slips are data), ✦🛁 Care menu (tiered hygiene: wipes count exactly like a shower; sensory notes; POTS shower safety; dots not streaks), meds with ✦"same as yesterday", flare log, trends (✦+ urges/picked metrics), ✦🩺 90-day doctor export, gentle patterns.
 - 🫂 Care (rebuilt): ✦front-door weather check-in that routes her to ONE right thing, ✦📈 real bipolar mood chart (elevation −4..+4 + irritability — once daily, near bedtime), ✦🕰️ rhythm anchors (wake/contact/meal/wind vs her own usual — IPSRT), ✦✨ one good thing (behavioral activation with after-rating), ✦🚸 her early-warning signature (editable up/down sign lists; 3+ ticked = gently suggest her plan + care team), ✦🛟 my plan (WRAP-lite: toolbox, steady list, triggers, people + the 9-8-8 crisis card), breathing bubble ✦with 4·2·6 / box / 4·7·8 presets, permission slips, skills decks, joy jar (✦pull → "I did it"), emotion + EF check-ins, patterns ✦incl. sleep-dip whisper.
+- 🍽 Food (health mode · ✦new): photo or words → friendly macro estimate (you, via the food estimator), protein+fibre-forward bars vs gentle targets, ⭐ favourites for one-tap "the usual", water cups (shared with POTS care), week view. Friendly estimates, zero diet culture, missing meals are information never grades.
+- 🏃 Fitness (health mode · ✦new): trend-first weigh-ins (rolling 4-entry average IS the number — never react to one morning), unit toggle, treadmill/walk/stretch session log with felt-scale, 🌟 non-scale victories (celebrate LOUDLY), week dots (not streaks), 🧭 journey card (feelings-based goal + future scale/treadmill auto-sync).
 - 🎨 Art (✦modular cards she can reorder/resize/hide like Home): challenges, ideas dump, inspo vault (✦"✨ pick for me" = random untried spark), minutes log (✦the practice timer offers to log its minutes when stopped), prompts (✦sometimes pulled from her own ideas), palette (✦+ value ramps + two-value cel-shade pair), guides, mood board, ✦🟣 emote previewer (her PNG at real Twitch/Discord chat sizes + size-limit pass/fails + transparency check), ✦◐ value checker (posterizes a WIP to 2-6 values — the "why is it muddy" diagnostic), ✦💯 100-of-anything counter (100-heads style, zero deadlines), ✦🧩 Live2D cut-prep checklist (official layer rules, per model), ✦📏 verified platform-spec cheat card (Twitch/Discord/YouTube sizes), ✦🌟 research-pack button adds 14 verified free links (poses, anatomy, anime refs, colour) to her library. ✦"⛶ focus" or "make art now" = art focus mode (timer + prompt only).
 - 💰 Money: ledger (✦one-tap source presets; ✦"↻ monthly" auto-logs recurring expenses on the 1st), invoices (✦⏰ nudge reminders), tax set-aside (✦"remind me on the 1st" ritual), savings goals, sponsor pipeline.
 - 💌 Sponsors: pipeline (✦dragging to Sent offers a 5-day follow-up reminder; ✦marking Passed asks one optional why-chip; ✦"$ in play · $ signed" strip), email writer (✦⚖️ "read their tone" on pasted emails — honest RSD-aware tone reads; ✦🎭 rewrite chips: professional/softer/shorter/warmer/more-me), pitch builder, rate card.
@@ -568,7 +578,11 @@ Allowed action types and their args (use ONLY these; pick valid enum values):
 - logHealth: { field: "pain"|"fatigue"|"fog"|"dizziness"|"lighthead"|"palp"|"anxiety"|"focus"|"mood"|"water"|"salt"|"slips"|"sleepH"|"sleepQ", value:number }
 - addSticky: { text }
 - addCapture: { text }                  // a quick brain-dump capture
-- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"art"|"tools"|"income"|"pitch"|"clients"|"review"|"eugene"|"settings" }
+- navigate: { tab: "home"|"content"|"planner"|"calendar"|"optimize"|"script"|"habits"|"health"|"care"|"food"|"fitness"|"art"|"tools"|"income"|"pitch"|"clients"|"review"|"eugene"|"settings" }   // navigating to a tab from the other mode flips the mode automatically
+- logFood: { name, kcal?: number, protein?: number, carbs?: number, fiber?: number, fat?: number, serving? }   // "log a chicken rice bowl, about 600 calories" — quick meal entry on today's Food log (estimate friendly numbers if she gives a dish but no macros)
+- logWeight: { value: number }   // "log my weight at 162" — adds today's weigh-in (her display unit). Trend-first, never comment on the number being good or bad.
+- logWorkout: { kind?: "treadmill"|"walk"|"stretch"|"other", minutes: number, distance?: number (km), feel?: 1-5 }   // "I did 20 minutes on the treadmill" — celebrate gently; rest days are training too
+- addNSV: { text }   // a non-scale victory ("stairs felt easier!") — celebrate LOUDLY 🌟
 - logEmotion: { feelings?: string[] (precise words: "anxious","overwhelmed","frustrated","irritable","angry","sad","low / empty","numb","restless","tense","ashamed","guilty","lonely","content","calm","relieved","happy","excited","proud","hopeful"), intensity?: 0-5, trigger?: string, helped?: string[] (keys: "name","reframe","breathe","opposite","ground","reach","move","sensory","rest") }
 - logEF: { init?: 0-5 (0 easy to start → 5 stuck), focus?: 0-5 (0 scattered → 5 locked in), overwhelm?: 0-5 (0 calm → 5 flooded), step?: string (the one tiny next step), supports?: string[] (keys: "broke","twomin","bodydouble","timer","externalize","onething") }
 - setEnergy: { level: "low"|"medium"|"high" }     // her spoons today
@@ -830,6 +844,28 @@ ${common}`
 ${common}`;
       const out = await claude(BRAND, prompt + (await voiceFor(userId, "script")), 2400);
       return json(parseJSON(out) || { title, hooks: [], script: out, cta: "" });
+    }
+
+    // --- food: photo/description → friendly macro estimate (Haiku vision; ported from the Mifu build) ---
+    if (mode === "food") {
+      const desc = (body.input?.desc || "").toString().slice(0, 400);
+      const imgF = (body.input?.image || "").toString().match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!desc && !imgF) return json({ error: "describe it or attach a photo 🌸" }, 400);
+      const key = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!key) return json({ error: "ANTHROPIC_API_KEY secret is not set" }, 400);
+      const prompt = `Estimate the nutrition of this meal${imgF ? " from the photo" : ""}${desc ? ` (her note: "${desc}")` : ""}. Be realistic and friendly, never judgmental. Return ONLY JSON:
+{ "name": string (short dish name), "serving": string (e.g. "1 bowl, ~350g"), "kcal": number, "protein": number (g), "carbs": number (g), "fiber": number (g), "fat": number (g), "confidence": "low"|"medium"|"high", "note": string (ONE kind sentence — a nice thing about the meal or a friendly serving caveat; never diet advice) }`;
+      const content: any = imgF ? [{ type: "image", source: { type: "base64", media_type: imgF[1], data: imgF[2] } }, { type: "text", text: prompt }] : prompt;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: MODEL_LIGHT, max_tokens: 500, system: "You are a warm, body-neutral nutrition estimator. Friendly estimates, zero moralizing, no diet culture.", messages: [{ role: "user", content }] }),
+      });
+      const data = await res.json();
+      if (!res.ok) return json({ error: data?.error?.message || "estimate failed" }, 500);
+      const raw = (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+      const out = parseJSON(raw);
+      return json(out && out.name ? out : { name: desc || "meal", serving: "", kcal: 0, protein: 0, carbs: 0, fiber: 0, fat: 0, confidence: "low", note: "couldn't quite read that one — pop the numbers in by hand 🌸" });
     }
 
     // --- memorize: background memory consolidation (fired quietly by the app after chats) ---
