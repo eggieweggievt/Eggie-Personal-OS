@@ -503,7 +503,7 @@ Max 12 events, future dates only.`,
       // per-user personality: eggie keeps BRAND; anyone else gets the persona stored on
       // THEIR sentinel row (appConfig.assistantPrompt), falling back to GENERIC_ASSISTANT.
       let persona = BRAND;
-      let nameLine = "Your name is Egg Jean — Eggie's cozy octopus helper. If she asks who you are, you're Egg Jean. 🐙";
+      let nameLine = "Your name is Egg Jean — Eggie's cozy egg helper (a little egg character). If she asks who you are, you're Egg Jean. 🥚";
       if (userId !== "eggie") {
         persona = GENERIC_ASSISTANT;
         nameLine = "If asked who you are, stay in the persona described at the top of these instructions.";

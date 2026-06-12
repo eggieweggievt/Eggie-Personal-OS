@@ -37,6 +37,12 @@
     if (document.getElementById("pet-widget-css")) return;
     var s = document.createElement("style");
     s.id = "pet-widget-css";
+    // avatar: a separate image if given, else a cropped frame of the sprite sheet (the `sit` frame), else a gradient
+    var _av = c.sit || (c.walk && c.walk[0]) || null;
+    var avBg, avExtra = "";
+    if (c.avatar) { avBg = '#eef2fb center/cover no-repeat url("' + encodeURI(c.avatar) + '")'; }
+    else if (_av && c.sheetW) { var _sc = 36 / (_av.w || 64); avBg = '#fff no-repeat url("' + encodeURI(c.sheet) + '")'; avExtra = 'background-size:' + (c.sheetW * _sc) + 'px ' + (c.sheetH * _sc) + 'px;background-position:' + (-_av.x * _sc) + 'px ' + (-_av.y * _sc) + 'px;image-rendering:pixelated;'; }
+    else { avBg = 'linear-gradient(135deg,' + c.accentFrom + ',' + c.accentTo + ')'; }
     s.textContent = `
     #pet{position:fixed;bottom:14px;left:90px;z-index:9991;cursor:grab;touch-action:none;user-select:none;filter:drop-shadow(0 5px 7px rgba(80,70,110,.4));}
     #pet:active{cursor:grabbing;}
@@ -46,7 +52,7 @@
     #petChat.pet-big{left:50% !important;top:50% !important;bottom:auto !important;right:auto !important;transform:translate(-50%,-50%);width:min(640px,94vw);height:min(80vh,760px);max-height:90vh;}
     #petChat.pet-hidden,#petBubble.pet-hidden{display:none!important;}
     .pet-head{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #e4e6f5;background:linear-gradient(120deg,${c.accentFrom}22,${c.accentTo}22);}
-    .pet-av{width:36px;height:36px;border-radius:999px;border:1px solid #e4e6f5;flex:0 0 auto;background:${c.avatar ? '#eef2fb center/cover no-repeat url("' + encodeURI(c.avatar) + '")' : 'linear-gradient(135deg,' + c.accentFrom + ',' + c.accentTo + ')'};display:grid;place-items:center;font-size:18px;color:#fff;}
+    .pet-av{width:36px;height:36px;border-radius:999px;border:1px solid #e4e6f5;flex:0 0 auto;background:${avBg};${avExtra}display:grid;place-items:center;font-size:18px;color:#fff;}
     .pet-title{font-weight:700;font-size:14px;color:#3a3550;}
     .pet-sub{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9b96b6;font-weight:700;}
     .pet-x{margin-left:auto;border:none;background:none;font-size:15px;color:#9b96b6;cursor:pointer;}

@@ -309,7 +309,7 @@
   .eu-card{display:flex;flex-direction:column;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:0;}
   body.eu-drop .eu-card{outline:2px dashed #ec7faf;outline-offset:-2px;}
   .eu-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,#ec7faf18,#a98fe018);}
-  .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#eef2fb center/cover no-repeat url("pet-widget/Screenshot 2026-06-02 202234.png");flex:0 0 auto;}
+  .eu-av{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:#fff no-repeat url("pet-widget/Sprite Sheet.png");background-size:456px 722px;background-position:0 0;image-rendering:pixelated;flex:0 0 auto;}  /* frame (0,0) of the 768×1216 sheet, scaled to 38px */
   .eu-log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0;}
   .eu-msg{font-size:14px;line-height:1.55;padding:10px 14px;border-radius:16px;max-width:82%;white-space:pre-wrap;word-break:break-word;}
   .eu-msg.me{align-self:flex-end;background:linear-gradient(135deg,#ec7faf,#a98fe0);color:#fff;border-bottom-right-radius:5px;}
@@ -829,7 +829,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.22";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.23";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
@@ -853,7 +853,7 @@ const OS_NEWS=[
   "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
   "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
 ];
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🐙 Ask Egg Jean"],["settings","⚙️ Settings"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
 const state = { tab:"home", sel:new Set(), smartIds:null, fmt:"all", lib:[], moneyView:"month", ledgerKind:"in", focus:false, optMode:"video", taskSpoon:"all", focusTask:null, addBucket:"personal", joy:[] };
 let SENT={};
 function setTab(t){ state.tab=t; state.sel.clear(); state.smartIds=null; state.moreOpen=false; render(); }
@@ -3693,7 +3693,7 @@ async function renderAssistantTab(){
     : `<div class="eu-fb" style="margin-top:6px;display:flex;gap:6px"><button class="ft-ic" data-act="euFb" data-i="${mi}" data-v="up" title="this helped — learn from it" style="font-size:13px">👍</button><button class="ft-ic" data-act="euFb" data-i="${mi}" data-v="down" title="not quite right — tell me why" style="font-size:13px">👎</button></div>`);
   const logHtml = log.length
     ? log.map((m,mi)=>`<div class="eu-msg ${m.role==="me"?"me":"pet"}">${m.img?`<img src="${m.img}" alt="photo" style="display:block;max-width:180px;max-height:140px;border-radius:10px;margin:0 0 6px"/>`:""}${esc(m.text)}${m.retryQ?`<div style="margin-top:7px"><button class="eu-chip" data-act="eugeneAsk" data-q="${esc(m.retryQ)}">↻ try that again</button></div>`:""}${fbRow(m,mi)}</div>`).join("")
-    : `<div class="eu-msg pet">Hi, I'm Egg Jean! 🐙 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. You can also 📷 show me a photo, or ask me to note a change request for Claude.${loop0?`\n\nLast time we left a thread hanging: "${esc(loop0)}" — want to pick it up? Totally fine to ignore it too. 💗`:" Tap an example below to start. 🌸"}</div>`;
+    : `<div class="eu-msg pet">Hi, I'm Egg Jean! 🥚 Ask me anything about your OS — your health, money, tasks, schedule — or send me to the web to look something up. You can also 📷 show me a photo, or ask me to note a change request for Claude.${loop0?`\n\nLast time we left a thread hanging: "${esc(loop0)}" — want to pick it up? Totally fine to ignore it too. 💗`:" Tap an example below to start. 🌸"}</div>`;
   const busyHtml = state.eugeneBusy ? `<div class="eu-msg pet">…thinking 🐙</div>` : "";
   /* E1 + E2: the first chips mirror TODAY — overdue things, unread client notes, low spoons — then evergreen ones */
   let dyn=["☀️ brief me on today"];
@@ -3731,7 +3731,7 @@ async function renderAssistantTab(){
   if(max) return `<div class="eu-full">${card}</div>`;
   return `<div style="max-width:860px;margin:0 auto">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
-      <h2 style="font-size:20px;font-family:var(--display)">🐙 Ask Egg Jean</h2>
+      <h2 style="font-size:20px;font-family:var(--display)">🥚 Ask Egg Jean</h2>
       <span class="label">plain talk · no asterisks · web + your whole OS</span>
     </div>
     ${card}</div>`;
@@ -5882,7 +5882,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     }catch(e){ if(manual)toast("reflection hiccup: "+(e.message||e)); }
   }
   window.eugeneReflect=eugeneReflect;
-  window.eugeneAsk = function(q,img){ return runAgent(q,img); };   // lets the 🐙 Ask Egg Jean tab share the same brain (img = optional photo dataURL)
+  window.eugeneAsk = function(q,img){ return runAgent(q,img); };   // lets the 🥚 Ask Egg Jean tab share the same brain (img = optional photo dataURL)
   var W=64,H=64, row=function(r,n){ var a=[],c=(n||12); for(var i=0;i<c;i++)a.push({x:i*W,y:r*H,w:W,h:H}); return a; };
   window.PET = PetWidget.init({
     sheet:"pet-widget/Sprite Sheet.png", sheetW:768, sheetH:1216,   // Egg Jean sheet: 64×64 frames · 12 cols × 19 rows
@@ -5890,11 +5890,11 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
     sit:  {x:0,y:0,w:W,h:H},      // first frame (top-left) = idle/sit
     scale:1.6, faces:"right", speed:42, frameMs:130,
     leftClear:86, rightClear:96,  // keep clear of the 🗒️+ (bottom-left) and focus timer (bottom-right)
-    avatar:"pet-widget/Screenshot 2026-06-02 202234.png",   // round chat-header icon (the pet's face close-up)
-    title:"Egg Jean", subtitle:"your octopus helper — ask or search the web 🐙",
+    avatar:null,   // null → the chat-header icon is auto-cropped from the sprite sheet's first frame (Egg Jean's face)
+    title:"Egg Jean", subtitle:"your cozy egg helper — ask or search the web 🥚",
     accentFrom:"#ec7faf", accentTo:"#a98fe0",
     font:"inherit",
-    greetings:["pspsps… try \"add stream Friday 4pm\" 🐙","ask me to look something up on the web 🌐","tell me to add a task or event 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
+    greetings:["pspsps… try \"add stream Friday 4pm\" 🥚","ask me to look something up on the web 🌐","tell me to add a task or event 🌸","need a hand? just tap me ✨","rest is productive too, you know 💜"],
     suggestions:[
       "I'm feeling aimless — pick ONE thing for me 🧭",
       "Break down my scariest task into tiny steps 🪄",
