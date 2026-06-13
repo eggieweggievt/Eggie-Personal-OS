@@ -902,11 +902,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.46";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.47";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.47: 📔 JOURNAL is a real tab now (creator mode, under Content) — a daily free-write with a rotating gentle prompt, PLUS every past entry browsable, searchable, and editable, each tagged with that day's energy/inside-weather/stream. The old home journal card still works and now opens the full tab. Say 'journal that …' and I'll append to today (journalAdd). For her eyes only, no streaks.",
   "2026-06-12.46: 🌸 Sakura gained a 📖 GUIDE tab — a step-by-step manager handbook: getting in/approval, the Clients roster, Tasks planner, Calendar, the full Discord message pipeline (channel linking, message-one, 📣 message-many with {name}, /sakura inbox + reply-closes-the-loop), who Egg Jean is (the bot delivers team messages; the in-app chat stays Eggie-only), and troubleshooting",
   "2026-06-12.45: the 📖 OCs chip hides in 🌸 Sakura mode (it's personal, not team)",
   "2026-06-12.44: the 👥 Your managers card on Clients now always shows for Eggie — with honest empty states ('no requests yet' vs 'run the signup SQL first') instead of hiding until the first request",
@@ -944,10 +945,10 @@ const OS_NEWS=[
   "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
   "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
 ];
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["cplanner","🗒 Tasks"],["ccalendar","📅 Calendar"],["chelp","📖 Guide"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["journal","📔 Journal"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["cplanner","🗒 Tasks"],["ccalendar","📅 Calendar"],["chelp","📖 Guide"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
 /* === tri-mode OS: 🎬 Creator / 💗 Health / 🌸 Sakura — tap the logo to cycle (persisted; default creator) === */
 const HEALTH_ONLY=["health","care","habits","food","fitness"];
-const CREATOR_ONLY=["content","optimize","script","art","tools","income","pitch","review"];
+const CREATOR_ONLY=["content","journal","optimize","script","art","tools","income","pitch","review"];
 const SAKURA_ONLY=["clients","cplanner","ccalendar","chelp"];   // the team mode — the only things manager accounts ever see
 const SAK_UID="sakura", SAK_KEYS=["clients","inbox","autoNeedsWk"];   // 🌸 shared team row + which sentinel keys live there
 const OWNER_EMAIL="eggieweggievt@gmail.com";          // her auth account; any other signed-in account = a manager
@@ -1306,6 +1307,7 @@ async function renderCore(){
     else if(state.tab==="cplanner") html=await renderCPlanner();
     else if(state.tab==="ccalendar") html=await renderCCalendar();
     else if(state.tab==="chelp") html=renderCHelp();
+    else if(state.tab==="journal") html=await renderJournal();
     else if(state.tab==="settings") html=await renderSettings();
     // ✋ idempotent repaint: if a re-render produced EXACTLY the same HTML (a duplicate/stray render
     // with unchanged data), skip the swap entirely — no image re-decode flicker, no scroll-pin, no
@@ -1367,7 +1369,7 @@ function homeCheckins(day,sent){
   const tiles=OS_MODE==="health"
     ? [T("medsAM","💊","Meds AM",ck.medsAM),T("medsPM","💊","Meds PM",ck.medsPM),
        T("weighed","⚖️","Weighed in",weighed,weighed?null:"goTab",weighed?null:"fitness"),
-       T("journaled","📓","Journaled",ck.journaled),
+       T("journaled","📓","Journaled",ck.journaled||!!String(day.journal||"").trim(),(day.journal&&String(day.journal).trim())?"goTab":null,(day.journal&&String(day.journal).trim())?"journal":null),
        T("moved","🏃","Moved a bit",moved,moved?null:"goTab",moved?null:"fitness"),
        T("water","💧","Drank water",water,water?null:"goTab",water?null:"food"),
        T("sleptWell","😴","Slept well",ck.sleptWell)]
@@ -4827,6 +4829,46 @@ function scheduleModal(){ DB.daily(SENTINEL).then(sent=>{
 async function addSlot(){ const off=state.schedWeekOff||0, wk=weekStartISO(off); const day=document.getElementById("slDay").value,time=document.getElementById("slTime").value.trim(),title=document.getElementById("slTitle").value.trim(); await setWeekSlots(wk,base=>base.concat([{id:"s"+uid().slice(0,8),day,time,title}])); scheduleModal(); render(); }
 async function delSlot(id){ const off=state.schedWeekOff||0, wk=weekStartISO(off); await setWeekSlots(wk,base=>base.filter(s=>s.id!==id)); scheduleModal(); render(); }
 async function addSug(day,text){ const off=state.schedWeekOff||0, wk=weekStartISO(off); await setWeekSlots(wk,base=>base.concat([{id:"s"+uid().slice(0,8),day,time:"",title:text}])); scheduleModal(); render(); }
+/* ===== 📔 JOURNAL — write today, wander back through every entry ===== */
+const JOURNAL_PROMPTS=[
+  "what's one moment from today you want future-you to remember?",
+  "what took more spoons than expected today — and what gave some back?",
+  "write to yourself like a friend who watched your whole day 💗",
+  "what's a tiny thing that made you smile (or smirk)?",
+  "anything you're carrying that belongs on this page instead of in your head?",
+  "what did you make today — art, content, a decision, a boundary?",
+  "what would you tell stream-chat about today, if it were a cozy recap?",
+  "one worry, written down and left here 🌙",
+  "what are you quietly proud of right now?",
+  "describe today in exactly three words. then explain one of them.",
+];
+async function renderJournal(){
+  const day=await DB.daily(TODAY); const rows=await DB.dailyRange(180);
+  const prompt=state.jrPrompt||JOURNAL_PROMPTS[new Date().getDate()%JOURNAL_PROMPTS.length];
+  const weatherEmoji=m=>m==null?"":["🌧️","🌦️","⛅","🌤","🌞"][Math.max(0,Math.min(4,(m||1)-1))];
+  const past=(rows||[]).filter(r=>r.date!==TODAY&&r.notes&&String(r.notes.journal||"").trim()).sort((a,b)=>b.date.localeCompare(a.date));
+  const entryCard=r=>{ const n=r.notes||{}; const editing=state.jrEdit===r.date;
+    const meta=[n.energy?({low:"🌙 low",medium:"🌤 medium",high:"🌞 high"})[n.energy]||"":"",(n.care&&n.care.mood)?weatherEmoji(n.care.mood)+" inside":"",n.streamDay?"🔴 stream day":""].filter(Boolean).join(" · ");
+    return `<div class="soft-card" style="padding:12px 14px" data-clq="${esc((r.date+" "+String(n.journal||"")).toLowerCase())}">
+      <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b style="font-size:13px;font-family:var(--display)">${new Date(r.date+"T00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}</b><span class="label">${meta}</span><div style="flex:1"></div><button class="ft-ic" data-act="jrEditStart" data-id="${r.date}">✎</button></div>
+      ${editing?`<textarea class="inp" id="jr_edit" rows="5" style="margin-top:8px">${esc(n.journal||"")}</textarea><div style="display:flex;gap:8px;margin-top:6px;justify-content:flex-end"><button class="btn" data-act="jrEditCancel">cancel</button><button class="btn btn-pink" data-act="jrEditSave" data-id="${r.date}" ${RO?"disabled":""}>💾 save</button></div>`
+      :`<div style="font-size:13px;line-height:1.65;white-space:pre-wrap;margin-top:6px">${esc(n.journal||"")}</div>`}
+    </div>`; };
+  return `<div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px"><h2 style="font-size:22px;font-family:var(--display)">📔 Journal</h2><span class="label">for your eyes only · no streaks, no rules 🌙</span></div>
+    <div class="panel" style="background:linear-gradient(135deg,#fef2f9,#f3ecfb)">
+      <div class="card-head"><span class="label">today · ${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</span><button class="btn" data-act="jrPromptRoll" title="another prompt">↻</button></div>
+      <p class="soft" style="font-size:12.5px;font-style:italic;margin:0 0 8px">${esc(prompt)}</p>
+      <textarea class="inp" id="journalBox" rows="6" ${RO?"disabled":""} placeholder="today I…" style="font-size:13.5px;line-height:1.65">${esc(day.journal||"")}</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="soft" style="font-size:11px">a sentence counts. a word counts. skipping counts too 💗</span><button class="btn btn-pink" data-act="saveJournal" ${RO?"disabled":""}>💾 save today</button></div>
+    </div>
+    <div class="panel">
+      <div class="card-head"><h2 style="font-size:17px">🗂 Past entries</h2><span class="pill pill-lav">${past.length} in the last 6 months</span></div>
+      <input class="inp" placeholder="🔍 search your entries…" value="${esc(state.clientQ||"")}" oninput="window.clientQ(this.value)" style="margin-bottom:10px"/>
+      ${past.length?`<div style="display:flex;flex-direction:column;gap:10px">${past.map(entryCard).join("")}</div>`:`<p class="soft" style="font-size:12.5px;margin:0">No past entries yet — today's box up there is where they're born. 🌸</p>`}
+    </div>
+  </div>`;
+}
 function cardJournal(day){
   return `<section class="panel"><div class="card-head"><span class="label">Journal 🌙</span></div>
     <p class="soft" style="font-size:12px;margin:0 0 6px">A line about today — how it went, a thought, nothing fancy.</p>
@@ -4977,7 +5019,7 @@ const WRITE_ACTS=["capture","habit","energy","streamDay","goalToggle","goalDel",
   "taskRemSave","taskEditDel","remindAdd","remindDone","remindDel","invAdd","invPaid","invUnpaid","invDel","invSave","saveSponsor","delSponsorModal","sponsorRemind","clientAdd","clientSave","clientDel","clientTaskAdd","clientTaskDone","clientTaskDel","clientNoteAdd","clientNoteDel","clientAvatarUpload","clientAvatarClear","inboxRead","inboxDel","inboxClearRead","inboxToNeed","inboxReplySend","teachSave","teachDel","factDel","artRoll","artChallengeDone","artLog","artLogQuick","artIdeaAdd","artIdeaDel","artIdeaToBoard","artInspoAdd","artInspoDel","artInspoDone","artResAdd","artResDel","mbAddImage","mbAddNote","mbAddColor","mbDel","mbUpload","restoreLocal","restoreServer","resetLayout","discordMode","discordChanSave","talentRoleSave","slimData",
   "calQuickAdd","taskToday","subAdd","tuckTask","triageContent","triageTask","triageSticky","triageTrash","recurDel","invRemind","asideRemind","fuSet","passReason","emailAttach","clientMsgSend","needPickDone",
   "goblinApplySubs","compileApply","compileApplyAll","goblinApplyFree","macroSave","macroReset",
-  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent","checkin","sakMigrate","cpAdd","mgrApprove","mgrRevoke","mgrDel"];
+  "bipElev","bipIrrit","rhythmNow","valuedPick","valuedDone","valuedRate","signToggle","warnSave","wrapSave","mcGo","targetsSave","sameYesterday","bfrbSave","stratToggle","hygTier","hygNotesSave","needCycle","needsClearDone","clientBulkSend","memPause","memSumSave","memLoopDel","memFactDel","memFactAdd","eugeneModelSave","artCountInc","artCountSave","artCountReset","l2dToggle","l2dReset","artResPack","foodWater","foodLog","foodDel","foodTargetsSave","favSave","favDel","favLog","fitUnit","fitWeighSave","fitLog","fitDelSession","nsvAdd","nsvDel","fitGoalSave","gachaToggle","gachaAdd","gachaDel","epToggle","epAdd","epDel","epSeed","oppContent","checkin","sakMigrate","cpAdd","mgrApprove","mgrRevoke","mgrDel","jrEditSave"];
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
@@ -5671,6 +5713,10 @@ document.addEventListener("click",async(e)=>{
   if(act==="schedWeek"){ state.schedWeekOff=(state.schedWeekOff||0)+Number(el.dataset.d); return scheduleModal(); }
   if(act==="schedThisWeek"){ state.schedWeekOff=0; return scheduleModal(); }
   if(act==="saveJournal"){ const v=document.getElementById("journalBox").value; await DB.saveDaily(TODAY,n=>({...n,journal:v})); toast("Journaled 🌙"); return; }
+  if(act==="jrPromptRoll"){ let p; do{ p=JOURNAL_PROMPTS[Math.floor(Math.random()*JOURNAL_PROMPTS.length)]; }while(p===state.jrPrompt&&JOURNAL_PROMPTS.length>1); state.jrPrompt=p; render(); return; }
+  if(act==="jrEditStart"){ state.jrEdit=el.dataset.id; render(); return; }
+  if(act==="jrEditCancel"){ state.jrEdit=null; render(); return; }
+  if(act==="jrEditSave"){ const d2=el.dataset.id; const v=((document.getElementById("jr_edit")||{}).value||""); await DB.saveDaily(d2,n=>({...n,journal:v})); state.jrEdit=null; toast("entry updated 🌙"); render(); return; }
   if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); render(); return; }
@@ -5970,7 +6016,7 @@ async function saveReview(){ const data={}; document.querySelectorAll("[data-rv]
 
 /* boot */
 function postRender(){ const c=document.getElementById("clock"); if(c)c.textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); if(state.tab==="calendar"){ try{wireCalDnD();}catch(e){console.error(e);} } if(document.querySelector(".grid-modular")){ requestAnimationFrame(()=>{try{layoutHome();}catch(e){}}); setTimeout(()=>{try{layoutHome();}catch(e){}},120); } const sbd=document.querySelector(".sponsor-board"); if(sbd&&!sbd._ro&&window.ResizeObserver){ sbd._ro=new ResizeObserver(()=>{ try{layoutHome();}catch(e){} clearTimeout(window._sbHT); window._sbHT=setTimeout(()=>{ try{ const hh=Math.round(sbd.getBoundingClientRect().height); if(hh>120)localStorage.setItem("eggie-sponsor-h",hh); }catch(e){} },300); }); sbd._ro.observe(sbd); }
- if((state.tab==="clients"||state.tab==="cplanner")&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
+ if((state.tab==="clients"||state.tab==="cplanner"||state.tab==="journal")&&state.clientQ){ try{window.clientQ(state.clientQ);}catch(e){} }
  if(state.tab==="ccalendar"){ try{wireCCalDnD();}catch(e){} }
  if(state.tab==="clients"&&state.clientPage){ try{wireClientCalDnD(state.clientPage);}catch(e){console.error(e);} }
  if(state.tab==="art"&&state.art&&state.art.notan){ try{artNotanPaint();}catch(e){} }
@@ -6157,6 +6203,7 @@ const FX_ON=()=>{ try{ return localStorage.getItem("eggie-fx")==="1"; }catch(e){
         return "💗 logged "+a.field+" = "+a.value;
       case "addSticky": addSticky(a.text||""); return "📌 stuck up a note";
       case "addCapture": await DB.addCapture(a.text||""); return "🐙 captured it";
+      case "journalAdd": { if(!a.text)return "what should I write down? 🌙"; await DB.saveDaily(TODAY,function(n){ var cur=String(n.journal||"").trim(); return Object.assign({},n,{journal:cur?cur+"\n\n"+a.text:a.text}); }); return "📔 added to today's journal 🌙"; }
       case "logEmotion":
         await careMut(function(c){ var o=Object.assign({},c); if(Array.isArray(a.feelings)&&a.feelings.length)o.feelings=a.feelings; if(a.intensity!=null)o.emoInt=Number(a.intensity); if(a.trigger)o.emoTrigger=a.trigger; if(Array.isArray(a.helped)&&a.helped.length)o.emoSkills=a.helped; return o; });
         return "🩷 logged how you're feeling"+(a.feelings&&a.feelings.length?" ("+a.feelings.join(", ")+")":"");
