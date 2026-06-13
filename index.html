@@ -902,11 +902,12 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.45";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.46";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.46: 🌸 Sakura gained a 📖 GUIDE tab — a step-by-step manager handbook: getting in/approval, the Clients roster, Tasks planner, Calendar, the full Discord message pipeline (channel linking, message-one, 📣 message-many with {name}, /sakura inbox + reply-closes-the-loop), who Egg Jean is (the bot delivers team messages; the in-app chat stays Eggie-only), and troubleshooting",
   "2026-06-12.45: the 📖 OCs chip hides in 🌸 Sakura mode (it's personal, not team)",
   "2026-06-12.44: the 👥 Your managers card on Clients now always shows for Eggie — with honest empty states ('no requests yet' vs 'run the signup SQL first') instead of hiding until the first request",
   "2026-06-12.43: client calendar tidied — capped width (no more stretching across huge screens), denser month cells, and ✓ all / ✕ none buttons beside the client chips",
@@ -943,11 +944,11 @@ const OS_NEWS=[
   "2026-06-10.5: sign-in gate fixed + wipe tripwires (data was never lost — it was hidden behind the new login)",
   "2026-06-10.4: auth lockdown (private data), images → cloud storage, 🚿 slim my data, unified morning surface",
 ];
-const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["cplanner","🗒 Tasks"],["ccalendar","📅 Calendar"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
+const TABS = [["home","🏠 Home"],["content","🎬 Content"],["planner","🗒️ Planner"],["calendar","📅 Calendar"],["optimize","🎯 Optimize"],["script","✍️ Script"],["habits","🌸 Habits"],["health","💗 Health"],["care","🫂 Care"],["food","🍽 Food"],["fitness","🏃 Fitness"],["art","🎨 Art"],["tools","🛠 Tools"],["income","💰 Money"],["pitch","💌 Sponsors"],["clients","🌸 Clients"],["cplanner","🗒 Tasks"],["ccalendar","📅 Calendar"],["chelp","📖 Guide"],["review","🌷 Review"],["eugene","🥚 Ask Egg Jean"],["settings","⚙️ Settings"]];
 /* === tri-mode OS: 🎬 Creator / 💗 Health / 🌸 Sakura — tap the logo to cycle (persisted; default creator) === */
 const HEALTH_ONLY=["health","care","habits","food","fitness"];
 const CREATOR_ONLY=["content","optimize","script","art","tools","income","pitch","review"];
-const SAKURA_ONLY=["clients","cplanner","ccalendar"];   // the team mode — the only things manager accounts ever see
+const SAKURA_ONLY=["clients","cplanner","ccalendar","chelp"];   // the team mode — the only things manager accounts ever see
 const SAK_UID="sakura", SAK_KEYS=["clients","inbox","autoNeedsWk"];   // 🌸 shared team row + which sentinel keys live there
 const OWNER_EMAIL="eggieweggievt@gmail.com";          // her auth account; any other signed-in account = a manager
 let IS_MGR=false;
@@ -1304,6 +1305,7 @@ async function renderCore(){
     else if(state.tab==="clients") html=await renderClients();
     else if(state.tab==="cplanner") html=await renderCPlanner();
     else if(state.tab==="ccalendar") html=await renderCCalendar();
+    else if(state.tab==="chelp") html=renderCHelp();
     else if(state.tab==="settings") html=await renderSettings();
     // ✋ idempotent repaint: if a re-render produced EXACTLY the same HTML (a duplicate/stray render
     // with unchanged data), skip the swap entirely — no image re-decode flicker, no scroll-pin, no
@@ -3377,6 +3379,66 @@ function needsBoardHTML(tasks,cid,sort){ /* cid=""+cname per task → combined b
     const col=tasks.filter(t=>(t.status||(t.done?"done":"needs"))===k).sort(cmp);
     return `<div class="kcol" data-act="dropClientNeed" data-status="${k}" ${cid?`data-cid="${cid}"`:""} ondragover="event.preventDefault()"><div class="label" style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px"><span>${l}</span><span style="display:flex;gap:6px;align-items:center">${k==="done"&&col.length?`<button class="ft-ic" data-act="needsClearDone" ${cid?`data-cid="${cid}"`:""} title="sweep the done pile away" ${RO?"disabled":""}>🧹</button>`:""}<span>${col.length}</span></span></div>${col.map(t=>needCardHTML(t,cid||t._cid,cid?"":t._cname)).join("")||`<div class="label" style="padding:6px;opacity:.6">—</div>`}</div>`;
   }).join("")}</div>`; }
+/* ===== 📖 Sakura GUIDE — the manager handbook (static, no data) ===== */
+function renderCHelp(){
+  const S=(title,inner,open)=>`<details class="acc" ${open?"open":""}><summary style="font-size:14px;font-weight:700">${title}</summary><div class="acc-body" style="font-size:12.5px;line-height:1.65">${inner}</div></details>`;
+  const step=(n,t)=>`<div style="display:flex;gap:9px;align-items:flex-start;padding:4px 0"><span class="pill pill-pink" style="flex:0 0 auto">${n}</span><span>${t}</span></div>`;
+  return `<div style="max-width:760px;margin:0 auto">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px"><h2 style="font-size:22px;font-family:var(--display)">📖 The Sakura Guide</h2><span class="label">everything a manager needs 🌸</span></div>
+    <div class="panel" style="background:linear-gradient(135deg,#fff0f7,#f4ecfb);margin-bottom:14px"><p style="font-size:13px;margin:0">Welcome to <b>Sakura Lightworks HQ</b> 🌸 This hub is where the team takes care of our talent — their tasks, their dates, and their Discord channels. It's deliberately simple: three working tabs and this guide. Nothing here touches Eggie's personal stuff, and nothing of yours is tracked beyond what you do for clients.</p></div>
+
+    ${S("🌸 Getting in (one-time)",`
+      ${step(1,`On the sign-in page, tap <b>"🌸 Sakura manager? request an account"</b>, enter your email + a password.`)}
+      ${step(2,`Open the confirmation email and tap the link (check spam if it's shy).`)}
+      ${step(3,`Sign in. You'll land in a little waiting room until Eggie taps ✓ approve — she gets your request automatically.`)}
+      ${step(4,`Once approved: reload, and the hub opens. You stay signed in on this device.`)}
+      <p class="soft" style="font-size:11.5px">Privacy by design: manager accounts can ONLY reach the shared client hub. Eggie's health, money, content, and assistant are invisible to us — enforced by the database itself, not just the menus.</p>`,true)}
+
+    ${S("👥 The Clients tab — the roster",`
+      ${step(1,`Each card is a client. The pill shows open needs (a red <b>!</b> = something's overdue). 🌫 means they've been quiet ~2 weeks — maybe a gentle hello.`)}
+      ${step(2,`<b>Tap a card</b> to open their page: profile, brand notes, their needs board, meeting notes, and their own calendar (events + recurring streams).`)}
+      ${step(3,`<b>☀️ Today's three</b> at the top = the three most urgent needs across everyone. Start there on busy days.`)}
+      ${step(4,`🔍 the search box finds clients AND need text as you type. The 📡 radar row adds a new client/prospect before the thought evaporates.`)}
+      ${step(5,`Cards on this page can be dragged, resized, or hidden (＋cards button) — arrange your own cockpit.`)}`)}
+
+    ${S("🗒 The Tasks tab — one planner for every client",`
+      ${step(1,`<b>＋ new client task</b>: pick the client, type the need, set a due date and a priority (🔴 high · 🟦 normal · 🌙 low).`)}
+      ${step(2,`<b>☰ List</b> groups by client, by due, or by priority — your choice with the chips. <b>▦ Board</b> is needs → doing → done; drag cards or just tap the little pill (→ start / → done).`)}
+      ${step(3,`Filters: client dropdown, priority chips, due lenses (overdue / today / this week), and 🔍 search. "show done" reveals finished ones.`)}
+      ${step(4,`✎ on any task opens the full editor — rename, re-prioritise, add a note or break it into sub-steps.`)}
+      ${step(5,`🧹 on the done column sweeps finished tasks away once celebrated.`)}`)}
+
+    ${S("📅 The Calendar tab — everyone's dates",`
+      ${step(1,`<b>Week</b> = the next 7 days as a list. <b>Month</b> = the grid, with ‹ today › to travel.`)}
+      ${step(2,`Chips under the header show/hide each client (✓ all / ✕ none for quick focus). Toggle 🔴 streams, 🗓 events, ⏰ dues separately.`)}
+      ${step(3,`<b>Tap any day</b> to add an event — it asks whose event first, then takes title, time, multi-day end, colour, and a note.`)}
+      ${step(4,`In Month view, <b>drag an event</b> to another day to move it (multi-day events keep their length).`)}
+      ${step(5,`🔴 chips with a client's name = recurring weekly streams (tap to edit their schedule). Red 🔴 due chips open the task itself.`)}`)}
+
+    ${S("📨 The Discord system — how messages flow (the important one)",`
+      <p style="margin:4px 0 8px"><b>The pipe:</b> every client can have their Discord channel linked to their profile. Messages we send land in THAT channel, posted by the <b>Egg Jean bot</b>. Clients write back with <b>/sakura</b> in the same channel, and it lands in our 📨 Inbox.</p>
+      ${step(1,`<b>Link a channel</b> (once per client): open the client → ✎ edit → "💬 Discord & access" → paste their channel ID. (In Discord: Settings → Advanced → Developer Mode ON, then right-click the channel → Copy Channel ID.)`)}
+      ${step(2,`<b>Message one client:</b> their page → 📨 message them. Snippet chips fill common messages (schedule nudge, deliverable ready, check-in); 🎭 rephrases your draft (professional / softer / shorter / warmer). Send — it posts to their channel instantly.`)}
+      ${step(3,`<b>Message many:</b> Clients tab → 📣 message many. Write it ONCE with <b>{name}</b> where their first name should go, tick who gets it, send. Each client receives a personalised copy in their own channel.`)}
+      ${step(4,`<b>When a client writes /sakura something</b> in their channel, it appears in the 📨 Inbox: ⚖️ gives an honest tone-read, ➕ turns it into a need on their board, ↩ replies straight back to their channel — and after a reply it offers to mark the related need done. Close the whole loop from one card.`)}
+      ${step(5,`<b>Scheduled reminders into a client's channel</b> (e.g. "post your schedule" every Monday) exist too — currently set by Eggie via Egg Jean; ask her to set one up and it pings the client automatically with the team's voice.`)}
+      <p class="soft" style="font-size:11.5px">If a send fails: the client probably has no channel ID linked, or the bot isn't in that server — fix the profile first, then retry.</p>`)}
+
+    ${S("🥚 Who (or what) is Egg Jean?",`
+      <p style="margin:4px 0 8px">Egg Jean is Eggie's AI assistant — a little octopus brain that lives in her OS and doubles as <b>the Discord bot</b> that delivers everything above.</p>
+      ${step(1,`<b>In Discord:</b> when you send a client a message from the hub, it arrives FROM the Egg Jean bot. Clients know the bot speaks for the team — sign your name in the message if it matters who's talking ("— Aria 🌸").`)}
+      ${step(2,`<b>The in-app chat</b> ("Ask Egg Jean") is Eggie's private assistant — it can see her whole life, so manager accounts intentionally don't get it. If you ask the floating pet something, it will politely decline.`)}
+      ${step(3,`<b>What that means for you:</b> anything Egg Jean does for the team (client reminders, auto-spawned weekly deliverable tasks every Monday, the /sakura inbox) just works — you'll see the results appear in the hub.`)}
+      ${step(4,`Need something only Egg Jean can do (a recurring client reminder, a bulk announcement with special logic)? Ask Eggie — one sentence to her assistant sets it up.`)}`)}
+
+    ${S("🆘 Troubleshooting & manners",`
+      ${step("?",`<b>"I can't see anything / it logged me out":</b> your approval may be paused, or your session expired — sign in again; if it persists, ask Eggie to check the 👥 card.`)}
+      ${step("?",`<b>"My message didn't send":</b> check the client's channel ID is linked (their page → ✎ → Discord) and the bot is in that server.`)}
+      ${step("?",`<b>"I deleted something by accident":</b> tell Eggie soon — she has restore points.`)}
+      ${step("💗",`House style: warm, gentle, no pressure on talent. Celebrate loudly, nudge softly, and when in doubt — ask in the team channel. 🌸`)}
+      <p class="soft" style="font-size:11.5px;margin-top:6px">Sign out any time with the 🌸 chip up top.</p>`)}
+  </div>`;
+}
 /* ===== 🗒 Sakura TASKS — every client's needs in one filterable, groupable planner ===== */
 function cpPri(t){ return t.priority==="high"?`<span title="high priority">🔴</span>`:t.priority==="low"?`<span title="low priority">🌙</span>`:`<span title="normal">🟦</span>`; }
 async function renderCPlanner(){
