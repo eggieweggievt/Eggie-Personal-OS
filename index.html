@@ -502,6 +502,19 @@
   .col,.grid-home{ gap:18px; }
   .inp{ border-radius:12px; }
   body::before{ opacity:.15; }   /* softer decorative backdrop — calmer canvas */
+  /* ✦ redesign finish — carry the soft, rounded, calm look onto every surface (radius/shadow/colour only) */
+  .soft-card{ border-radius:14px; }
+  .kcol{ border-radius:15px; background:var(--panel-soft); box-shadow:none; }
+  .citem{ border-radius:12px; box-shadow:var(--e-soft); }
+  .hbtn{ border-radius:13px; }
+  .inp,textarea.inp,select.inp{ border-radius:12px; }
+  .note,.chiptog{ border-radius:13px; }
+  .cal-cell{ border-radius:13px; }
+  .meter,.bar,.pill,.seg{ border-radius:999px; }
+  .card-head{ align-items:center; }
+  .more-menu{ border-radius:16px; box-shadow:0 14px 38px rgba(120,90,140,.20); }
+  /* a touch more inner breathing room on the big content panels */
+  .panel{ line-height:1.55; }
 
   /* ===== ✦ GROUPED SIDEBAR (redesign) — desktop rail · mobile drawer · collapsible ===== */
   .nv{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;text-align:left;padding:9px 11px;border-radius:11px;color:var(--ink-soft);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}
@@ -1146,11 +1159,12 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.60";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.61";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.61: ✨ the redesign now reaches every surface — kanban cards, inputs, habit buttons, calendar cells, secondary cards and chips all got the same soft, rounded, calm treatment as the main panels, so nothing looks like the 'old' style anymore. Pure cosmetics; every tool and layout is exactly where it was.",
   "2026-06-14.60: 🧭 NEW NAVIGATION — the top tab bar is now a grouped sidebar down the left (Create · Wellbeing · Business · Sakura), with every tab visible (no more ⋯ More menu). Tap « to collapse it to icons; on phone/iPad it's a slide-in drawer from the ☰ button. Same tabs, same modes — just easier to scan. Tap the logo still cycles Creator/Health/Sakura.",
   "2026-06-14.59: 🎨 REDESIGN LOOK — the calmer visual language from the demo is now applied across every page: softer card shadows, rounder corners, more breathing room, cleaner nav tabs (the active tab is now a soft white card), and a gentler backdrop. Same tools, same layout logic — it just reads calmer. The grouped sidebar is coming as a separate step.",
   "2026-06-14.57: 🎚️ NEW in Settings → Comfort: a MOTION level — Full (playful), Gentle (no bounce), or Off — so you can dial the animation feel without going fully Calm. Calm mode still forces it to Off. Part of pulling all your sensory controls into one predictable spot.",
