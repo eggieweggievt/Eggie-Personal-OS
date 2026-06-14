@@ -859,17 +859,29 @@ function showLogin(err){
         <button class="btn btn-pink" data-act="mgrSignUp" style="width:100%">request access 🌸</button>
         <p class="soft" style="font-size:11px;margin:8px 0 0;text-align:left">You'll get a confirmation email — confirm, sign in, and once Eggie approves you the 🌸 management hub opens. You'll never see anything of hers.</p>
         <button class="btn" data-act="mgrSignupToggle" style="width:100%;margin-top:8px">← back to sign in</button>`
-      :`<button class="btn" data-act="mgrSignupToggle" style="width:100%">🌸 Sakura manager? request an account</button>`}
+      :state.clientSignup?`
+        <div class="label" style="text-align:left;margin-bottom:6px">🌸 talent sign-up — see your own page</div>
+        <input class="inp" id="csEmail" type="email" placeholder="your email" style="margin-bottom:8px"/>
+        <input class="inp" id="csPass" type="password" placeholder="pick a password (8+ chars)" style="margin-bottom:8px"/>
+        <select class="inp" id="csTalent" style="margin-bottom:8px;width:100%"><option value="">— which talent are you? —</option>${(state.clientRoster||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select>
+        <button class="btn btn-pink" data-act="clientSignUp" style="width:100%">request access 🌸</button>
+        <p class="soft" style="font-size:11px;margin:8px 0 0;text-align:left">Confirm your email, sign in, and once you're approved you'll see your own page — your to-dos and schedule, view-only. 💗</p>
+        <button class="btn" data-act="clientSignupToggle" style="width:100%;margin-top:8px">← back to sign in</button>`
+      :`<button class="btn" data-act="mgrSignupToggle" style="width:100%">🌸 Sakura manager? request an account</button>
+        <button class="btn" data-act="clientSignupToggle" style="width:100%;margin-top:8px">🌸 Talent? request your client login</button>`}
     </div>
   </div>`;
 }
 /* a signed-in manager who isn't approved yet parks here — no data is reachable until Eggie says yes */
-function showPending(email){
+function showPending(email,kind){
   const view=document.getElementById("view");
+  const msg=kind==="client"
+    ? `${esc(email||"Your account")} is waiting for approval. Once you're approved, your own page opens right up — your to-dos and schedule, view-only. Check back soon. 💗`
+    : `${esc(email||"Your account")} is waiting for Eggie's approval. Once she taps ✓, the management hub opens right up — check back soon. 💗`;
   view.innerHTML=`<div class="panel" style="max-width:420px;margin:8vh auto;text-align:center">
     <div style="font-size:36px">🌸</div>
     <h2 style="font-size:19px;margin-top:4px">Request received!</h2>
-    <p class="soft" style="font-size:12.5px;margin:8px 0 14px">${esc(email||"Your account")} is waiting for Eggie's approval. Once she taps ✓, the management hub opens right up — check back soon. 💗</p>
+    <p class="soft" style="font-size:12.5px;margin:8px 0 14px">${msg}</p>
     <div style="display:flex;gap:8px;justify-content:center"><button class="btn btn-pink" onclick="location.reload()">↻ check again</button><button class="btn" data-act="signOut">sign out</button></div>
   </div>`;
   try{ document.getElementById("nav").innerHTML=""; }catch(e){}
@@ -878,14 +890,24 @@ async function authBoot(){
   if(DEMO||!SB) return true;                                   // demo mode needs no login
   try{ const {data}=await SB.auth.getSession(); SESSION=(data&&data.session)||null; }catch(e){ SESSION=null; }
   if(SESSION){
-    // 🌸 any signed-in account that isn't Eggie = a Sakura manager: locked to the team hub,
+    const em=String((SESSION.user||{}).email||"").toLowerCase();
+    const meta=(SESSION.user||{}).user_metadata||{};
+    const isOwner=em===OWNER_EMAIL;
+    // 🌸 CLIENT (talent) account — view-only, sees ONLY their own page. Identified by signup metadata.
+    if(!isOwner && (meta.role==="client" || meta.client_id)){
+      IS_CLIENT=true; IS_MGR=false;
+      try{ await SB.from("client_accounts").upsert({email:em,client_id:meta.client_id||null,talent_name:meta.talent_name||null},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
+      const ok=await loadClientView();              // JWT-checked fetch of THEIR record only
+      if(!ok){ showPending(em,"client"); return false; }   // not approved yet (or page not set up) → lobby
+      return true;
+    }
+    // 🌸 any other signed-in account that isn't Eggie = a Sakura manager: locked to the team hub,
     // none of her personal surfaces ever render (RLS blocks the data anyway — this blocks the UI).
-    IS_MGR=String((SESSION.user||{}).email||"").toLowerCase()!==OWNER_EMAIL;
+    IS_MGR=!isOwner;
     if(IS_MGR){
       setOsMode("sakura"); state.tab="clients";
       // self-registered managers wait in the lobby until Eggie approves them
       try{
-        const em=String((SESSION.user||{}).email||"").toLowerCase();
         try{ await SB.from("managers").upsert({email:em},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
         const {data:mrow}=await SB.from("managers").select("approved").eq("email",em).maybeSingle();
         if(!mrow||!mrow.approved){ showPending(em); return false; }
@@ -900,13 +922,61 @@ async function authBoot(){
   try{ const {data,error}=await SB.from("daily_logs").select("log_date").limit(1); if(!error && data && data.length) return true; }catch(e){}
   showLogin(); return false;
 }
+/* 🌸 fetch THIS client's own record via the JWT-checked clientView function (no direct DB access for clients) */
+async function loadClientView(){
+  try{ const r=await SB.functions.invoke("analyze",{body:{mode:"clientView"}}); const d=r&&r.data;
+    if(d&&d.ok&&d.client){ CLIENT_REC=d.client; return true; } return false;
+  }catch(e){ return false; }
+}
+/* read-only month calendar for a client's own page (their events + recurring streams + due to-dos) */
+function clientReadonlyCalHTML(rec){
+  if(!state.clientCalRef){ const t=new Date(); state.clientCalRef=new Date(t.getFullYear(),t.getMonth(),1); }
+  const ref=state.clientCalRef, y=ref.getFullYear(), m=ref.getMonth();
+  const monthName=ref.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const startDow=new Date(y,m,1).getDay(), gridStart=new Date(y,m,1-startDow);
+  const dows=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const events=rec.events||[], sched=rec.schedule||[];
+  const dueNeeds=(rec.tasks||[]).filter(t=>!t.done&&(t.status||"needs")!=="done"&&t.due);
+  const wdOf=ds=>["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(ds+"T00:00").getDay()];
+  let cells="";
+  for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); const ds=d.toLocaleDateString("en-CA"); const inM=d.getMonth()===m, isT=ds===TODAY;
+    const streams=sched.filter(s=>(s.day||"").slice(0,3)===wdOf(ds)).map(s=>`<div class="cal-stream" style="cursor:default">🔴 ${s.time?esc(s.time)+" · ":""}${esc(s.title||"Stream")}</div>`).join("");
+    const evs=events.filter(e=>ds>=e.date&&ds<=((e.endDate&&e.endDate>=e.date)?e.endDate:e.date)).sort((a,b)=>String(a.time||"99").localeCompare(String(b.time||"99"))).map(e=>`<div class="cal-ev" style="background:${esc(e.color||'#f6b8d4')};cursor:default">${e.time?`<b>${esc(e.time)}</b> `:""}${esc(e.title)}</div>`).join("");
+    const due=dueNeeds.filter(t=>t.due===ds).map(t=>`<div class="cal-ev" style="background:#fde4e4;color:#c0566a;cursor:default">🔴 ${esc(String(t.text).slice(0,12))}</div>`).join("");
+    cells+=`<div class="cal-cell ${inM?'':'other'} ${isT?'today':''}" style="cursor:default"><span class="cal-daynum">${d.getDate()}</span>${streams}${evs}${due}</div>`;
+  }
+  return `<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">📅 Your calendar</h2><div style="display:flex;gap:6px"><button class="btn" data-act="clientCalPrev">‹</button><button class="btn" data-act="clientCalToday">today</button><button class="btn" data-act="clientCalNext">›</button></div></div>
+    <div class="label" style="margin:-2px 0 8px">${esc(monthName)}</div>
+    <div class="mini-cal"><div class="cal-grid" style="margin-bottom:5px">${dows.map(x=>`<div class="cal-dow">${x}</div>`).join("")}</div><div class="cal-grid">${cells}</div></div></div>`;
+}
+/* 🌸 a client's OWN view-only page — their to-dos + calendar + factual profile. No private notes, no brand-brain. */
+function renderClientOwnPage(){
+  const rec=CLIENT_REC||{};
+  const info=(label,val)=> val?`<div class="soft-card"><div class="label">${label}</div><div style="font-size:13px;white-space:pre-wrap;margin-top:2px">${esc(val)}</div></div>`:"";
+  const plats=(rec.platforms||[]).filter(p=>p&&(p.label||p.url));
+  const NEED_COLS=[["needs","🔴 To do"],["doing","🔆 In progress"],["done","✅ Done"]];
+  const tasks=rec.tasks||[];
+  const board=`<div class="kanban" style="grid-template-columns:repeat(3,minmax(150px,1fr))">${NEED_COLS.map(([k,l])=>{ const col=tasks.filter(t=>(t.status||(t.done?"done":"needs"))===k); return `<div class="kcol"><div class="label" style="padding:2px 4px">${l} · ${col.length}</div>${col.map(t=>`<div class="citem" style="cursor:default"><div style="font-size:12.5px;${k==='done'?'text-decoration:line-through;opacity:.6':''}">${t.priority==="high"?"🔴 ":""}${esc(t.text)}</div>${(t.sub||[]).length?`<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">${t.sub.map(s=>`<div style="font-size:11px;${s.done?'text-decoration:line-through;opacity:.5':''}">${s.done?"✓":"○"} ${esc(s.text)}</div>`).join("")}</div>`:""}${t.due?`<span class="pill ${(t.due<TODAY&&k!=='done')?'':'pill-gray'}" ${(t.due<TODAY&&k!=='done')?'style="background:#fde4e4;color:#c0566a"':''}>📅 ${esc(t.due.slice(5))}</span>`:""}</div>`).join("")||`<div class="label" style="padding:6px;opacity:.55">—</div>`}</div>`; }).join("")}</div>`;
+  return `<div style="max-width:880px;margin:0 auto;padding:0 6px">
+    <div style="display:flex;align-items:center;gap:10px;margin:14px 0;flex-wrap:wrap">
+      ${rec.avatar?`<div class="avatar" style="width:48px;height:48px;background:#fff;overflow:hidden;flex:0 0 auto"><img src="${esc(rec.avatar)}" alt="" style="width:100%;height:100%;object-fit:cover"/></div>`:`<div class="avatar" style="width:48px;height:48px;font-size:22px;flex:0 0 auto">${esc((rec.name||"?").slice(0,1).toUpperCase())}</div>`}
+      <div style="flex:1;min-width:160px"><h1 style="font-size:22px;font-family:var(--display)">${esc(rec.name||"Your page")}</h1><div class="label">${esc(rec.handle||"")}${rec.pronouns?` · ${esc(rec.pronouns)}`:""} · 🌸 Sakura Lightworks</div></div>
+      <button class="btn" data-act="clientRefresh" title="refresh">↻</button><button class="btn" data-act="signOut">sign out</button>
+    </div>
+    <p class="soft" style="font-size:12px;margin:0 0 14px">Your read-only space — what your management team is tracking for you. 💗</p>
+    ${(rec.deliverables||rec.goals||plats.length)?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px">${info("💼 What we do for you",rec.deliverables)}${info("🎯 Goals",rec.goals)}${plats.length?`<div class="soft-card"><div class="label">🔗 Your platforms</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">${plats.map(p=>p.url?`<a class="pill pill-lav" href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(p.label||p.url)}</a>`:`<span class="pill pill-lav">${esc(p.label)}</span>`).join("")}</div></div>`:""}</div>`:""}
+    <div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">📋 Your to-dos</h2></div><p class="soft" style="font-size:11.5px;margin:0 0 8px">What your team is working on with you (view-only).</p>${board}</div>
+    ${clientReadonlyCalHTML(rec)}
+  </div>`;
+}
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.48";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.49";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-12.49: 👀 CLIENT LOGINS — talents can now sign up (email + pick which talent they are) and, once Eggie approves them on the Clients page, sign in to a READ-ONLY page that shows ONLY their own to-dos, calendar and profile. True isolation: a client can never see another client's data, your notes, or your brand-brain — their page is served by a JWT-checked function and they have no direct database access. Needs the eggie-os-client-signup.sql run.",
   "2026-06-12.47: 📔 JOURNAL is a real tab now (creator mode, under Content) — a daily free-write with a rotating gentle prompt, PLUS every past entry browsable, searchable, and editable, each tagged with that day's energy/inside-weather/stream. The old home journal card still works and now opens the full tab. Say 'journal that …' and I'll append to today (journalAdd). For her eyes only, no streaks.",
   "2026-06-12.46: 🌸 Sakura gained a 📖 GUIDE tab — a step-by-step manager handbook: getting in/approval, the Clients roster, Tasks planner, Calendar, the full Discord message pipeline (channel linking, message-one, 📣 message-many with {name}, /sakura inbox + reply-closes-the-loop), who Egg Jean is (the bot delivers team messages; the in-app chat stays Eggie-only), and troubleshooting",
   "2026-06-12.45: the 📖 OCs chip hides in 🌸 Sakura mode (it's personal, not team)",
@@ -953,6 +1023,7 @@ const SAKURA_ONLY=["clients","cplanner","ccalendar","chelp"];   // the team mode
 const SAK_UID="sakura", SAK_KEYS=["clients","inbox","autoNeedsWk"];   // 🌸 shared team row + which sentinel keys live there
 const OWNER_EMAIL="eggieweggievt@gmail.com";          // her auth account; any other signed-in account = a manager
 let IS_MGR=false;
+let IS_CLIENT=false, CLIENT_REC=null;   // 🌸 a signed-in talent (client) — view-only, sees ONLY their own page
 const MODES=["creator","health","sakura"];
 let OS_MODE="creator"; try{ const m0=localStorage.getItem("eggie-osmode"); OS_MODE=MODES.includes(m0)?m0:"creator"; }catch(e){}
 function setOsMode(m){ OS_MODE=MODES.includes(m)?m:"creator"; try{ localStorage.setItem("eggie-osmode",OS_MODE); }catch(e){} try{ document.body.dataset.osmode=OS_MODE; }catch(e){} }
@@ -1233,6 +1304,7 @@ async function render(){
   }
 }
 async function renderCore(){
+  if(IS_CLIENT){ try{ document.getElementById("nav").innerHTML=""; }catch(e){} try{ document.body.classList.add("mgr"); }catch(e){} const _v=document.getElementById("view"); if(_v)_v.innerHTML=renderClientOwnPage(); return; }
   let _tabOrder=[]; try{_tabOrder=JSON.parse(localStorage.getItem("tab-order")||"[]");}catch(e){}
   const _tabs=_tabOrder.length?[...TABS].sort((a,b)=>{let ia=_tabOrder.indexOf(a[0]),ib=_tabOrder.indexOf(b[0]);return (ia<0?999:ia)-(ib<0?999:ib);}):TABS;
   /* tri-mode: the bar only shows the current mode's tabs (home/planner/calendar/Egg Jean/settings live everywhere).
@@ -3636,7 +3708,19 @@ async function renderClients(){
       ${rows}
       ${(mgrs&&mgrs.length)?`<p class="soft" style="font-size:11px;margin:8px 0 0">Approve = they're in next load · ⏸ pause locks them out instantly · 🗑 removes the request (delete the login itself in Supabase → Auth to fully erase it).</p>`:""}</div>`;
   }
-  return migBanner+teamPanel+modularPage("clients", CLABEL, [["three",todays3],["inbox",inboxPanel],["pulse",pulse],["roster",roster]], {three:6,inbox:6,pulse:12,roster:12,_:6});
+  // 👀 client (talent) logins — view-only accounts each tied to one talent
+  let clientPanel="";
+  if(!IS_MGR&&!IS_CLIENT&&!DEMO&&SB&&SESSION){
+    let cas=null, casMissing=false;
+    try{ const {data,error}=await SB.from("client_accounts").select("email,client_id,talent_name,approved,requested_at").order("requested_at",{ascending:true}); if(error)casMissing=true; else cas=data||[]; }catch(e){ casMissing=true; }
+    const crows=(cas&&cas.length)?cas.map(a=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="font-size:12.5px">${esc(a.email)}</span><span class="pill pill-lav" title="the talent they signed up as">${esc(a.talent_name||a.client_id||"?")}</span>${a.approved?`<span class="pill pill-mint">✓ active</span><button class="btn" data-act="clientAcctRevoke" data-id="${esc(a.email)}" style="padding:2px 9px">⏸ pause</button>`:`<span class="pill pill-peach">waiting</span><button class="btn btn-pink" data-act="clientAcctApprove" data-id="${esc(a.email)}" style="padding:2px 9px">✓ approve</button>`}<button class="ft-ic" data-act="clientAcctDel" data-id="${esc(a.email)}" style="color:var(--rose)">🗑</button></div>`).join("")
+      :casMissing?`<p class="soft" style="font-size:12.5px;margin:0">⚠️ Run <b>eggie-os-client-signup.sql</b> in the Supabase SQL Editor (and make sure new sign-ups are allowed) — then talent logins show up here for your ✓.</p>`
+      :`<p class="soft" style="font-size:12.5px;margin:0">No client logins yet 🌸 A talent taps "🌸 Talent? request your client login" on the sign-in page, picks who they are, and lands here for your ✓. They'll only ever see their own page, read-only.</p>`;
+    clientPanel=`<div class="panel" style="margin-bottom:14px"><div class="card-head"><h2 style="font-size:17px">👀 Client logins <span class="label" style="font-weight:400">· view-only</span></h2>${(cas&&cas.length)?`<span class="label">${cas.filter(a=>a.approved).length} active · ${cas.filter(a=>!a.approved).length} waiting</span>`:""}</div>
+      ${crows}
+      ${(cas&&cas.length)?`<p class="soft" style="font-size:11px;margin:8px 0 0">Each talent sees ONLY their own page, read-only — their to-dos, calendar and profile. Never your notes, brand brain, or anyone else's data.</p>`:""}</div>`;
+  }
+  return migBanner+teamPanel+clientPanel+modularPage("clients", CLABEL, [["three",todays3],["inbox",inboxPanel],["pulse",pulse],["roster",roster]], {three:6,inbox:6,pulse:12,roster:12,_:6});
 }
 /* CL3: saved message snippets — recurring messages stop being compositions ({name} = their first name) */
 const CLIENT_SNIPPETS=[
@@ -5201,6 +5285,19 @@ document.addEventListener("click",async(e)=>{
   if(act==="mgrApprove"){ await SB.from("managers").update({approved:true}).eq("email",id); toast("🌸 approved — they're in next time they load the hub 💗"); render(); return; }
   if(act==="mgrRevoke"){ await SB.from("managers").update({approved:false}).eq("email",id); toast("access paused for "+id); render(); return; }
   if(act==="mgrDel"){ await SB.from("managers").delete().eq("email",id); toast("request removed (their login itself is deleted in the Supabase dashboard)"); render(); return; }
+  if(act==="clientSignupToggle"){ state.clientSignup=!state.clientSignup; state.mgrSignup=false; if(state.clientSignup&&SB){ try{ const {data}=await SB.rpc("talent_roster"); state.clientRoster=data||[]; }catch(e){ state.clientRoster=[]; } } showLogin(); return; }
+  if(act==="clientSignUp"){ const em=((document.getElementById("csEmail")||{}).value||"").trim().toLowerCase(); const pw=((document.getElementById("csPass")||{}).value||""); const sel=document.getElementById("csTalent"); const tid=(sel&&sel.value)||""; const tname=(sel&&sel.selectedOptions&&sel.selectedOptions[0]&&sel.selectedOptions[0].textContent)||"";
+    if(!em||!/@/.test(em)){ state.clientSignup=true; showLogin("a real email please 🌸"); return; }
+    if(pw.length<8){ state.clientSignup=true; showLogin("password needs 8+ characters 🌸"); return; }
+    if(!tid){ state.clientSignup=true; showLogin("pick which talent you are 🌸"); return; }
+    try{ const {error}=await SB.auth.signUp({email:em,password:pw,options:{data:{role:"client",client_id:tid,talent_name:tname}}});
+      if(error){ state.clientSignup=true; showLogin(error.message||"couldn't sign up"); return; }
+      state.clientSignup=false; showLogin("🌸 request sent! Confirm your email, sign in here, and you'll see your page once you're approved. 💗");
+    }catch(e){ state.clientSignup=true; showLogin(e.message||"couldn't sign up"); } return; }
+  if(act==="clientRefresh"){ if(window.toast)toast("↻ refreshing…"); await loadClientView(); render(); return; }
+  if(act==="clientAcctApprove"){ await SB.from("client_accounts").update({approved:true}).eq("email",id); toast("🌸 approved — they'll see their page next time they load it 💗"); render(); return; }
+  if(act==="clientAcctRevoke"){ await SB.from("client_accounts").update({approved:false}).eq("email",id); toast("access paused for "+id); render(); return; }
+  if(act==="clientAcctDel"){ await SB.from("client_accounts").delete().eq("email",id); toast("client login removed (delete the login itself in Supabase → Auth)"); render(); return; }
   if(act==="sakMigrate"){ if(DEMO||!SB)return;
     const her=await DB.daily(SENTINEL);   // pre-migration: merged view IS her row
     await DB.saveSak(s=>({...s,_sakMigrated:true,clients:her.clients||[],inbox:her.inbox||[],autoNeedsWk:her.autoNeedsWk||null}));

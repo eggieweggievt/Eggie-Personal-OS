@@ -383,6 +383,38 @@ Deno.serve(async (req) => {
     const mode = body.mode || "analyze";
     const userId = body.userId || "eggie";
 
+    // --- clientView: a logged-in CLIENT (talent) gets ONLY their own page, read-only. ---
+    // True isolation: the caller's identity is verified from their JWT here; clients have NO
+    // direct DB access (RLS blocks them). We return a client-safe projection of just their record
+    // — their to-dos, calendar, recurring streams, factual profile — and deliberately OMIT the
+    // owner's private notes/meeting log and internal brand-brain (niche/voice/winning-style).
+    if (mode === "clientView") {
+      const authHdr = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+      const token = authHdr.replace(/^Bearer\s+/i, "").trim();
+      if (!token) return json({ error: "not signed in" }, 401);
+      const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: u, error: uerr } = await svc.auth.getUser(token);
+      const email = u?.user?.email?.toLowerCase();
+      if (uerr || !email) return json({ error: "could not verify your sign-in" }, 401);
+      const { data: acct } = await svc.from("client_accounts").select("client_id,approved").eq("email", email).maybeSingle();
+      if (!acct) return json({ error: "no client account", pending: false }, 403);
+      if (!acct.approved || !acct.client_id) return json({ error: "waiting for approval", pending: true }, 403);
+      const { data: row } = await svc.from("daily_logs").select("notes").eq("user_id", "sakura").eq("log_date", "2000-01-01").maybeSingle();
+      let sak: any = {}; try { sak = JSON.parse(row?.notes || "{}"); } catch { sak = {}; }
+      const c = (sak.clients || []).find((x: any) => x.id === acct.client_id);
+      if (!c) return json({ error: "your page isn't set up yet — ask your manager" }, 404);
+      const safe = {
+        name: c.name || "", handle: c.handle || "", pronouns: c.pronouns || "", tz: c.tz || "",
+        status: c.status || "", tier: c.tier || "", avatar: c.avatar || "",
+        deliverables: c.deliverables || "", goals: c.goals || "", prefs: c.prefs || "",
+        platforms: Array.isArray(c.platforms) ? c.platforms : [],
+        tasks: (c.tasks || []).map((t: any) => ({ id: t.id, text: t.text || "", status: t.status || (t.done ? "done" : "needs"), due: t.due || "", done: !!t.done, priority: t.priority || "normal", note: t.note || "", sub: (t.sub || []).map((s: any) => ({ text: s.text || "", done: !!s.done })) })),
+        events: (c.events || []).map((e: any) => ({ id: e.id, title: e.title || "", date: e.date, endDate: e.endDate || "", time: e.time || "", color: e.color || "", note: e.note || "" })),
+        schedule: (c.schedule || []).map((s: any) => ({ day: s.day, time: s.time || "", title: s.title || "" })),
+      };
+      return json({ ok: true, client: safe });
+    }
+
     // --- channelStats: auto-pull free social numbers (YouTube subs + Discord) ---
     // Writes them into today's daily_logs.channel so a weekly cron can refresh
     // with no page open. Manual-only platforms (Twitch/TikTok/X/IG) are preserved.
