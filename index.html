@@ -268,6 +268,8 @@
   details.acc>summary::-webkit-details-marker{display:none;}
   details.acc>summary::after{content:"▸";color:var(--muted);transition:transform .2s;}
   details.acc[open]>summary::after{transform:rotate(90deg);}
+  details.acc>summary:hover{background:var(--panel-soft);}   /* clearer "this opens" affordance (ND: obvious interactivity) */
+  details.acc>summary:hover::after{color:var(--pink-deep);}
   details.acc>.acc-body{padding:2px 16px 16px;}
   /* health counter stepper */
   .hcount{display:flex;align-items:center;gap:8px;}
@@ -397,6 +399,9 @@
     --mo:1;--t-fast:.13s;--t:.22s;--t-slow:.4s;--ease:cubic-bezier(.4,0,.2,1);--spring:cubic-bezier(.34,1.56,.64,1);
   }
   body.calm{--mo:0;}
+  body.gentle{--spring:var(--ease);--t-slow:.3s;}   /* motion stays, but no bouncy overshoot */
+  body.fx-off{--mo:0;}                               /* motion OFF without softening colours the way calm does */
+  body.fx-off *{animation:none!important;transition:none!important;}
   @media (prefers-reduced-motion:reduce){:root{--mo:0;}}
 
   /* one keyboard-focus ring everywhere (zero-specificity :where, so component focus styles can still override; outline can't clobber existing box-shadows or layout) */
@@ -902,6 +907,9 @@ function applySettings(){
   try{
     document.body.classList.toggle("calm",localStorage.getItem("eggie-calm")==="1");
     document.body.classList.toggle("text-lg",localStorage.getItem("eggie-text")==="1");
+    var _mo=localStorage.getItem("eggie-motion")||"full";
+    document.body.classList.toggle("gentle",_mo==="gentle");
+    document.body.classList.toggle("fx-off",_mo==="off");
     state.focus=localStorage.getItem("eggie-focus")==="1";
     const locked=localStorage.getItem("layout-locked")==="1";
     document.body.classList.toggle("locked",locked);
@@ -1076,11 +1084,12 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.56";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.58";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.57: 🎚️ NEW in Settings → Comfort: a MOTION level — Full (playful), Gentle (no bounce), or Off — so you can dial the animation feel without going fully Calm. Calm mode still forces it to Off. Part of pulling all your sensory controls into one predictable spot.",
   "2026-06-14.56: 🌈 the OS now follows your device's accessibility settings — if you've turned on 'increase contrast' it firms up the card borders, and 'reduce transparency' flattens the frosted top bar — both make things calmer and clearer for sensory needs, automatically, no toggles to find.",
   "2026-06-14.55: 🧹 QUALITY-OF-LIFE PASS — little frictions smoothed everywhere: press Esc to close any pop-up; opening a pop-up drops your cursor in the first box and keeps Tab inside it (desktop); Enter saves from a text box on the safe forms (never on send/delete — those still need a tap); every AI button (optimize, script, email, thumbnail, Egg Jean, reflect…) shows a little spinner while it's thinking; a gentle 'are you sure?' now guards the few un-undoable deletes (a client, a sponsor, a saved script, a content brief, a med, a habit); the Settings comfort options are real on/off switches; cold loads show a soft skeleton instead of a blank flash; long text can't blow out a card; and scroll-to spots no longer hide under the top bar. Nothing moved or changed colour — it just feels less fiddly.",
   "2026-06-14.53: 💅 UI GLOW-UP — a design-system pass landed across the whole app: one keyboard focus ring everywhere (accessibility), gentle playful motion on buttons/chips/scales (soft spring on press + hover, all of it still instantly OFF in calm mode / reduce-motion), and a set of new reusable bits you'll see appear over time — proper on/off switches, info/success/warn/error banners, loading skeletons + spinners, button busy-spinners, count badges, status dots, and kinder empty states. Colours and layout are unchanged; nothing moved, it just feels more polished and responsive on phone/iPad/desktop. New window.UI helpers (toast/modal/skeleton/busy) are available for future features.",
@@ -3401,7 +3410,7 @@ function settingsModal(){ setTab("settings"); }   // the old modal grew up into 
 async function renderSettings(){
   const sent=await DB.daily(SENTINEL);
   const c=CONFIG.creator;
-  const calm=localStorage.getItem("eggie-calm")==="1", big=localStorage.getItem("eggie-text")==="1", foc=localStorage.getItem("eggie-focus")==="1";
+  const calm=localStorage.getItem("eggie-calm")==="1", big=localStorage.getItem("eggie-text")==="1", foc=localStorage.getItem("eggie-focus")==="1", mot=localStorage.getItem("eggie-motion")||"full";
   const locked=localStorage.getItem("layout-locked")==="1", speak=localStorage.getItem("eugene-speak")==="1";
   const facts=sent.eugeneFacts||[];
   const rc=Object.entries(CONFIG.rateCard).map(([k,v])=>`${k} = ${v}`).join("\n");
@@ -3421,7 +3430,11 @@ async function renderSettings(){
           <button class="switch" role="switch" aria-checked="${on?'true':'false'}" data-act="${act}" aria-label="${title.replace(/^[^ ]+ /,'')}"></button>
         </div>`).join("")}
       </div>
-      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Your device's "reduce motion" setting is always honoured too. Sparkles are off by default — they were heavy enough to crash the tab on some machines.</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1.5px solid var(--line-2);border-radius:14px;background:#fff;margin-top:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600;color:var(--ink)">🎚️ Motion <span class="soft" style="font-weight:500">— how lively the animations feel${calm?" (Calm mode is holding this at Off)":""}</span></span>
+        <div class="seg" role="tablist" aria-label="Motion level">${[["full","Full"],["gentle","Gentle"],["off","Off"]].map(([v,l])=>`<button role="tab" aria-selected="${mot===v?'true':'false'}" data-act="setMotion" data-v="${v}">${l}</button>`).join("")}</div>
+      </div>
+      <p class="soft" style="font-size:11.5px;margin:10px 0 0">Your device's "reduce motion" setting is always honoured too — and now so are its "increase contrast" and "reduce transparency" settings. Sparkles are off by default — they were heavy enough to crash the tab on some machines.</p>
     </div>
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">🐙 You & your brand</h2><span class="label">saved to your account</span></div>
@@ -5976,6 +5989,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="jrEditStart"){ state.jrEdit=el.dataset.id; render(); return; }
   if(act==="jrEditCancel"){ state.jrEdit=null; render(); return; }
   if(act==="jrEditSave"){ const d2=el.dataset.id; const v=((document.getElementById("jr_edit")||{}).value||""); await DB.saveDaily(d2,n=>({...n,journal:v})); state.jrEdit=null; toast("entry updated 🌙"); render(); return; }
+  if(act==="setMotion"){ localStorage.setItem("eggie-motion",el.dataset.v||"full"); applySettings(); render(); return; }
   if(act==="setCalm"){ localStorage.setItem("eggie-calm",localStorage.getItem("eggie-calm")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setText"){ localStorage.setItem("eggie-text",localStorage.getItem("eggie-text")==="1"?"0":"1"); applySettings(); render(); return; }
   if(act==="setFocus"){ localStorage.setItem("eggie-focus",localStorage.getItem("eggie-focus")==="1"?"0":"1"); applySettings(); render(); return; }
