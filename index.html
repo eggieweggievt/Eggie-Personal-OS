@@ -474,6 +474,9 @@
   .panel,.soft-card,.citem,.note,.kcol,.alert,.cal-ev,.eu-msg{overflow-wrap:break-word;}
   [id]{scroll-margin-top:64px;}
   @media (pointer:coarse){ .home-tools button,.home-resize{opacity:.6;} }
+  /* ✦ Neurodiversity: honour OS-level sensory prefs (only active when the user has set them) */
+  @media (prefers-contrast:more){ .panel,.soft-card,.inp,.btn,.chip,.chiptog,.citem,.kcol,.cal-cell{border-color:var(--lav-deep);} .muted{color:var(--ink-soft);} }
+  @media (prefers-reduced-transparency:reduce){ #rail{backdrop-filter:none;background:#fff;} .home-tools button,.home-resize{background:#fff;} }
   /* ✦ END UI UPGRADE LAYER */
 </style>
 </head>
@@ -1073,12 +1076,13 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.54";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.56";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
-  "2026-06-14.54: 🧹 QUALITY-OF-LIFE PASS — little frictions smoothed everywhere: press Esc to close any pop-up, opening a pop-up now drops your cursor straight in the first box (on desktop), every AI button (optimize, script, email, thumbnail, Egg Jean, reflect…) now shows a little spinner while it's thinking so you know it heard you, the Settings comfort options are real on/off switches, cold loads show a gentle skeleton instead of a blank flash, long text can't blow out a card anymore, and scroll-to spots no longer hide under the top bar. Nothing moved or changed colour — it just feels less fiddly.",
+  "2026-06-14.56: 🌈 the OS now follows your device's accessibility settings — if you've turned on 'increase contrast' it firms up the card borders, and 'reduce transparency' flattens the frosted top bar — both make things calmer and clearer for sensory needs, automatically, no toggles to find.",
+  "2026-06-14.55: 🧹 QUALITY-OF-LIFE PASS — little frictions smoothed everywhere: press Esc to close any pop-up; opening a pop-up drops your cursor in the first box and keeps Tab inside it (desktop); Enter saves from a text box on the safe forms (never on send/delete — those still need a tap); every AI button (optimize, script, email, thumbnail, Egg Jean, reflect…) shows a little spinner while it's thinking; a gentle 'are you sure?' now guards the few un-undoable deletes (a client, a sponsor, a saved script, a content brief, a med, a habit); the Settings comfort options are real on/off switches; cold loads show a soft skeleton instead of a blank flash; long text can't blow out a card; and scroll-to spots no longer hide under the top bar. Nothing moved or changed colour — it just feels less fiddly.",
   "2026-06-14.53: 💅 UI GLOW-UP — a design-system pass landed across the whole app: one keyboard focus ring everywhere (accessibility), gentle playful motion on buttons/chips/scales (soft spring on press + hover, all of it still instantly OFF in calm mode / reduce-motion), and a set of new reusable bits you'll see appear over time — proper on/off switches, info/success/warn/error banners, loading skeletons + spinners, button busy-spinners, count badges, status dots, and kinder empty states. Colours and layout are unchanged; nothing moved, it just feels more polished and responsive on phone/iPad/desktop. New window.UI helpers (toast/modal/skeleton/busy) are available for future features.",
   "2026-06-14.52: 🧠 EGG JEAN GOT SMARTER — he now has SEMANTIC MEMORY. Older facts, past-chat digests and reflected insights are stored as embeddings (Supabase pgvector + the built-in gte-small model, no new vendor) and the ones that MATCH what you're asking are surfaced by MEANING, not just recency — so he recalls the right thing even if it's from weeks ago. He can also dig mid-answer with two new tools: recall_memory (search his long-term memory) and query_history (pull one daily metric across up to 120 days) for real trend/correlation questions. It's a read-then-act loop that quietly falls back to the proven path if anything hiccups (kill switch: EUGENE_TOOLS_OFF=1). Caching, extended thinking and structured outputs were already on. Needs eggie-os-memory-vectors.sql run + a one-time embedBackfill — see the runbook.",
   "2026-06-14.51: PERF PASS - faster tab switches and lighter on battery: the app no longer captures a stack trace on every repaint, day/config row reads de-duplicate concurrent fetches (one network call per tab load instead of several), and the Home grid measures every card in one batch instead of forcing a layout reflow per card. Nothing about how the OS works or looks changed.",
@@ -5231,6 +5235,37 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ const m=document.
     if(f&&f.focus)f.focus({preventScroll:true});
   }catch(_e){} }).observe(m,{childList:true});
 })();
+/* ✦ QoL: gentle confirm before the few HIGH-STAKES, hard-to-undo deletes (kept deliberately rare —
+   over-confirming is its own friction). Capture-phase: blocks, asks, re-fires the click on confirm.
+   If the modal helper isn't loaded it does NOT block, so deletes always still work. */
+(function(){ var GUARD=new Set(["clientDel","delContent","delContentModal","delScript","delSponsorModal","delMed","delHabit","mgrDel"]);
+  document.addEventListener("click",function(e){ try{
+    var el=e.target.closest("[data-act]"); if(!el||!GUARD.has(el.dataset.act))return;
+    if(el.dataset.confirmed){ delete el.dataset.confirmed; return; }
+    if(!window.UI||!UI.modal)return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    UI.modal({ title:"Delete this?", body:"This one can't be undone, love. 🐙 Remove it for good?", confirm:"Yes, delete", cancel:"Keep it", onConfirm:function(){ el.dataset.confirmed="1"; el.click(); } });
+  }catch(_e){} }, true);
+})();
+/* ✦ QoL: Enter inside a modal TEXT field triggers its primary Save — but never a send/delete/reset
+   one (those need a deliberate tap). Errs toward doing nothing, never toward a risky action. */
+document.addEventListener("keydown",function(e){ try{
+  if(e.key!=="Enter"||e.shiftKey)return;
+  var ae=document.activeElement; if(!ae||ae.tagName!=="INPUT")return;
+  var t=(ae.type||"text").toLowerCase(); if(t==="checkbox"||t==="radio"||t==="button"||t==="range")return;
+  var m=document.getElementById("modal"); if(!m||!m.contains(ae))return;
+  var risky=function(a){ return /del|remove|send|message|passed|bulk|reset|sign|wipe|migrate/i.test(String(a||"")); };
+  var btns=m.querySelectorAll(".btn-pink,.btn-primary");
+  for(var i=0;i<btns.length;i++){ var a=btns[i].dataset.act||""; if(a&&!risky(a)){ e.preventDefault(); btns[i].click(); return; } }
+}catch(_e){} });
+/* ✦ QoL: keep keyboard focus inside an open modal (simple Tab trap) */
+document.addEventListener("keydown",function(e){ try{
+  if(e.key!=="Tab")return; var m=document.getElementById("modal"); if(!m||!m.innerHTML.trim())return;
+  var f=m.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'); if(!f.length)return;
+  var first=f[0], last=f[f.length-1];
+  if(e.shiftKey&&document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); }
+}catch(_e){} });
 document.addEventListener("click",async(e)=>{
   const el=e.target.closest("[data-act]"); if(!el)return; const act=el.dataset.act, id=el.dataset.id;
   if(RO && WRITE_ACTS.includes(act)){ toast("Read-only mode 🌸"); return; }
