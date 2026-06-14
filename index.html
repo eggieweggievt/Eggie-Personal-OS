@@ -902,7 +902,7 @@ async function authBoot(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.47";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.48";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
@@ -3806,7 +3806,7 @@ function renderClientPage(c){
     </div>
     ${clientCalendarHTML(c)}
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">📝 Notes & meeting log</h2></div>
-      <div style="display:flex;gap:8px;margin-bottom:10px"><input class="inp" id="cm_notetext" placeholder="add a note / call summary…" style="flex:1" ${RO?"disabled":""}/><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}" ${RO?"disabled":""}>+ note</button></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-end"><textarea class="inp" id="cm_notetext" rows="2" placeholder="add a note / call summary… (Shift+Enter = new line)" ${RO?"disabled":""} style="flex:1;resize:none;min-height:46px;max-height:220px;line-height:1.5" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,220)+'px'"></textarea><button class="btn btn-pink" data-act="clientNoteAdd" data-id="${c.id}" ${RO?"disabled":""}>+ note</button></div>
       ${notes.length?`<div style="display:flex;flex-direction:column;gap:6px">${notes.map(nt=>`<div class="soft-card" style="padding:9px 11px"><div style="display:flex;justify-content:space-between;align-items:center"><span class="label">${esc(nt.date||"")}</span><button class="ft-ic" data-act="clientNoteDel" data-id="${c.id}" data-nid="${nt.id}" style="color:var(--rose)">🗑</button></div><div style="font-size:12.5px;white-space:pre-wrap;margin-top:2px">${esc(nt.text)}</div></div>`).join("")}</div>`:`<p class="soft" style="font-size:12px;margin:0">No notes yet — log calls, preferences, anything worth remembering.</p>`}
     </div>
   </div>`;
@@ -5969,7 +5969,7 @@ document.addEventListener("keydown",async(e)=>{
   if(t.id==="nsvInput"){ const b=document.querySelector('[data-act="nsvAdd"]'); if(b)b.click(); }
   if(t.id==="cl_name"){ const b=document.querySelector('[data-act="clientAdd"]'); if(b)b.click(); }
   if(t.id==="cm_tasktext"){ const b=document.querySelector('[data-act="clientTaskAdd"]'); if(b)b.click(); }
-  if(t.id==="cm_notetext"){ const b=document.querySelector('[data-act="clientNoteAdd"]'); if(b)b.click(); }
+  if(t.id==="cm_notetext"){ if(e.shiftKey)return; /* Shift+Enter = new line */ e.preventDefault(); const b=document.querySelector('[data-act="clientNoteAdd"]'); if(b)b.click(); }
   if(t.id==="ideaText"){ const b=document.querySelector('[data-act="artIdeaAdd"]'); if(b)b.click(); }
   if(t.id==="inspoUrl"||t.id==="inspoNote"){ const b=document.querySelector('[data-act="artInspoAdd"]'); if(b)b.click(); }
   if(t.id==="smartQ")smart();
