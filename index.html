@@ -972,11 +972,12 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.51";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.52";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.52: 🧠 EGG JEAN GOT SMARTER — he now has SEMANTIC MEMORY. Older facts, past-chat digests and reflected insights are stored as embeddings (Supabase pgvector + the built-in gte-small model, no new vendor) and the ones that MATCH what you're asking are surfaced by MEANING, not just recency — so he recalls the right thing even if it's from weeks ago. He can also dig mid-answer with two new tools: recall_memory (search his long-term memory) and query_history (pull one daily metric across up to 120 days) for real trend/correlation questions. It's a read-then-act loop that quietly falls back to the proven path if anything hiccups (kill switch: EUGENE_TOOLS_OFF=1). Caching, extended thinking and structured outputs were already on. Needs eggie-os-memory-vectors.sql run + a one-time embedBackfill — see the runbook.",
   "2026-06-14.51: PERF PASS - faster tab switches and lighter on battery: the app no longer captures a stack trace on every repaint, day/config row reads de-duplicate concurrent fetches (one network call per tab load instead of several), and the Home grid measures every card in one batch instead of forcing a layout reflow per card. Nothing about how the OS works or looks changed.",
   "2026-06-12.49: 👀 CLIENT LOGINS — talents can now sign up (email + pick which talent they are) and, once Eggie approves them on the Clients page, sign in to a READ-ONLY page that shows ONLY their own to-dos, calendar and profile. True isolation: a client can never see another client's data, your notes, or your brand-brain — their page is served by a JWT-checked function and they have no direct database access. Needs the eggie-os-client-signup.sql run.",
   "2026-06-12.47: 📔 JOURNAL is a real tab now (creator mode, under Content) — a daily free-write with a rotating gentle prompt, PLUS every past entry browsable, searchable, and editable, each tagged with that day's energy/inside-weather/stream. The old home journal card still works and now opens the full tab. Say 'journal that …' and I'll append to today (journalAdd). For her eyes only, no streaks.",
