@@ -482,13 +482,75 @@
   /* ✦ Neurodiversity: honour OS-level sensory prefs (only active when the user has set them) */
   @media (prefers-contrast:more){ .panel,.soft-card,.inp,.btn,.chip,.chiptog,.citem,.kcol,.cal-cell{border-color:var(--lav-deep);} .muted{color:var(--ink-soft);} }
   @media (prefers-reduced-transparency:reduce){ #rail{backdrop-filter:none;background:#fff;} .home-tools button,.home-resize{background:#fff;} }
+  /* ============================================================
+     ✦ REDESIGN LAYER (2026-06-14) — brings the approved demo look
+     to EVERY page: calmer cards, softer shadows, more breathing
+     room, cleaner nav + headers. CSS only — no markup or logic
+     changed, so it applies app-wide and reverts cleanly. ====== */
+  :root{ --e-soft:0 1px 2px rgba(150,110,160,.06),0 5px 18px rgba(160,120,170,.08); }
+  main{ max-width:1120px; padding:22px; }
+  .panel{ border-radius:20px; padding:20px; box-shadow:var(--e-soft); border-color:#efe2ef; }
+  .soft-card{ border-radius:15px; }
+  .card-head{ margin-bottom:15px; }
+  /* nav: cleaner pills + demo-style active (a white card, not the gradient wash) */
+  #rail{ padding:11px 24px; }
+  .tab{ font-size:13px; padding:7px 14px; border-radius:12px; font-weight:700; }
+  .tab.active{ background:#fff; color:var(--pink-deep); box-shadow:var(--e-soft); }
+  .tab:hover{ background:var(--panel-soft); }
+  /* a little more air between cards */
+  .grid-modular{ gap:0 18px; }
+  .col,.grid-home{ gap:18px; }
+  .inp{ border-radius:12px; }
+  body::before{ opacity:.15; }   /* softer decorative backdrop — calmer canvas */
+
+  /* ===== ✦ GROUPED SIDEBAR (redesign) — desktop rail · mobile drawer · collapsible ===== */
+  .nv{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;text-align:left;padding:9px 11px;border-radius:11px;color:var(--ink-soft);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}
+  .nv:hover{background:var(--panel-soft);color:var(--ink);}
+  .nv.active{background:#fff;color:var(--pink-deep);box-shadow:var(--e-soft);}
+  .nv-ic{font-size:16px;width:22px;text-align:center;flex:0 0 auto;}
+  .nv-lb{overflow:hidden;text-overflow:ellipsis;}
+  .nv-group{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800;padding:12px 11px 3px;white-space:nowrap;}
+  .sb-toggle{align-self:flex-end;border:none;background:none;color:var(--muted);font-size:15px;cursor:pointer;border-radius:8px;padding:2px 8px;}
+  .sb-toggle:hover{background:var(--panel-soft);}
+  .hamburger{display:none;} .sb-scrim{display:none;}
+
+  @media (min-width:881px){
+    #rail{position:fixed;left:0;top:0;height:100vh;width:238px;flex-direction:column;align-items:stretch;justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:16px 12px;border-bottom:none;border-image:none;border-right:1px solid var(--line);z-index:40;transition:width .2s;}
+    #rail::-webkit-scrollbar{width:7px;} #rail::-webkit-scrollbar-thumb{background:#e7d6ec;border-radius:7px;}
+    #rail>div:first-child{flex-direction:column !important;align-items:stretch !important;gap:6px !important;}
+    #rail .brand{padding:2px 4px 4px;}
+    #nav{flex-direction:column;gap:2px;align-items:stretch;flex-wrap:nowrap;}
+    #rail .right{flex-direction:column;align-items:stretch;gap:6px;margin-top:auto;padding-top:10px;border-top:1px solid var(--line);}
+    #rail .right .chip,#rail .right a.chip{justify-content:flex-start;text-align:left;}
+    main#view{margin-left:238px;max-width:none;padding:26px 30px;}
+    main#view>*{max-width:1140px;margin-left:auto;margin-right:auto;}
+    body.sb-mini #rail{width:64px;}
+    body.sb-mini main#view{margin-left:64px;}
+    body.sb-mini .nv-lb,body.sb-mini .nv-group,body.sb-mini .brand-name,body.sb-mini #modePill,body.sb-mini #rail .right .chip,body.sb-mini #rail .right a.chip,body.sb-mini #rail .right .avatar{display:none;}
+    body.sb-mini .nv{justify-content:center;gap:0;padding:9px 0;}
+    body.sb-mini .sb-toggle{align-self:center;}
+  }
+  @media (max-width:880px){
+    #rail{position:fixed;left:0;top:0;height:100vh;width:250px;max-width:84vw;flex-direction:column;align-items:stretch;overflow-y:auto;transform:translateX(-100%);transition:transform .22s;z-index:60;border-right:1px solid var(--line);border-bottom:none;border-image:none;background:#fff;padding:16px 12px;}
+    body.sb-open #rail{transform:none;}
+    #rail>div:first-child{flex-direction:column !important;align-items:stretch !important;gap:6px !important;}
+    #nav{flex-direction:column;gap:2px;align-items:stretch;flex-wrap:nowrap;}
+    #rail .right{flex-direction:column;align-items:stretch;gap:6px;margin-top:auto;padding-top:10px;border-top:1px solid var(--line);}
+    .hamburger{display:flex;position:fixed;top:9px;left:9px;z-index:50;width:42px;height:42px;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line-2);border-radius:11px;font-size:18px;box-shadow:var(--e-soft);}
+    .sb-scrim{position:fixed;inset:0;background:rgba(80,55,85,.32);z-index:55;}
+    body.sb-open .sb-scrim{display:block;}
+    main#view{padding-top:58px;}
+  }
   /* ✦ END UI UPGRADE LAYER */
 </style>
 </head>
 <body>
+<button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+<div class="sb-scrim" id="sbScrim"></div>
 <div id="rail">
   <div style="display:flex;align-items:center;gap:22px">
     <span class="brand" data-act="osMode" title="tap to switch between 🎬 Creator OS and 💗 Health OS" style="cursor:pointer"><img class="brand-logo-img" src="EGGIE%20LOGOTYPE%20-%20FLAT%20GRADIENT.png" alt="Eggie" /><span class="brand-name">OS</span><span class="chip" id="modePill" style="margin-left:6px"></span></span>
+    <button class="sb-toggle" id="sbToggle" title="Collapse menu" aria-label="Collapse menu">«</button>
     <nav id="nav"></nav>
   </div>
   <div class="right">
@@ -1084,11 +1146,13 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.58";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.60";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.60: 🧭 NEW NAVIGATION — the top tab bar is now a grouped sidebar down the left (Create · Wellbeing · Business · Sakura), with every tab visible (no more ⋯ More menu). Tap « to collapse it to icons; on phone/iPad it's a slide-in drawer from the ☰ button. Same tabs, same modes — just easier to scan. Tap the logo still cycles Creator/Health/Sakura.",
+  "2026-06-14.59: 🎨 REDESIGN LOOK — the calmer visual language from the demo is now applied across every page: softer card shadows, rounder corners, more breathing room, cleaner nav tabs (the active tab is now a soft white card), and a gentler backdrop. Same tools, same layout logic — it just reads calmer. The grouped sidebar is coming as a separate step.",
   "2026-06-14.57: 🎚️ NEW in Settings → Comfort: a MOTION level — Full (playful), Gentle (no bounce), or Off — so you can dial the animation feel without going fully Calm. Calm mode still forces it to Off. Part of pulling all your sensory controls into one predictable spot.",
   "2026-06-14.56: 🌈 the OS now follows your device's accessibility settings — if you've turned on 'increase contrast' it firms up the card borders, and 'reduce transparency' flattens the frosted top bar — both make things calmer and clearer for sensory needs, automatically, no toggles to find.",
   "2026-06-14.55: 🧹 QUALITY-OF-LIFE PASS — little frictions smoothed everywhere: press Esc to close any pop-up; opening a pop-up drops your cursor in the first box and keeps Tab inside it (desktop); Enter saves from a text box on the safe forms (never on send/delete — those still need a tap); every AI button (optimize, script, email, thumbnail, Egg Jean, reflect…) shows a little spinner while it's thinking; a gentle 'are you sure?' now guards the few un-undoable deletes (a client, a sponsor, a saved script, a content brief, a med, a habit); the Settings comfort options are real on/off switches; cold loads show a soft skeleton instead of a blank flash; long text can't blow out a card; and scroll-to spots no longer hide under the top bar. Nothing moved or changed colour — it just feels less fiddly.",
@@ -1434,16 +1498,14 @@ async function renderCore(){
   const _hideByMode=OS_MODE==="health"?[...CREATOR_ONLY,...SAKURA_ONLY]:[...HEALTH_ONLY,...SAKURA_ONLY];
   let _vtabs=(OS_MODE==="sakura"||IS_MGR)?_tabs.filter(([t])=>SAKURA_ONLY.includes(t)):_tabs.filter(([t])=>!_hideByMode.includes(t));
   const MORE_TABS=(IS_MGR||OS_MODE==="sakura")?[]:OS_MODE==="creator"?["optimize","script","review","settings"]:["settings"];
-  const _egg=_vtabs.find(([t])=>t==="eugene");   // Egg Jean rides at the END of the bar in BOTH modes
-  const primary=_vtabs.filter(([t])=>!MORE_TABS.includes(t)&&t!=="eugene");
-  const more=_vtabs.filter(([t])=>MORE_TABS.includes(t));
-  const moreActive=more.some(([t])=>t===state.tab);
-  /* ⚠️ THE "double refresh", finally: this bar used to update HERE — instantly — while the page
-     content arrived ~half a second later (after the DB reads). Two visible beats on every tab
-     switch. The bar's HTML is built now but APPLIED in the same frame as the view swap below. */
-  const _navHTML = primary.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")
-    + (more.length?`<div style="position:relative"><button class="tab ${moreActive?'active':''}" data-act="moreMenu">⋯ More ▾</button>${state.moreOpen?`<div class="more-menu" id="moreMenu">${more.map(([t,l])=>`<button class="tab ${state.tab===t?"active":""}" data-act="tab" data-tab="${t}">${l}</button>`).join("")}</div>`:""}</div>`:"")
-    + (_egg?`<button class="tab ${state.tab==="eugene"?"active":""}" data-act="tab" data-tab="eugene">${_egg[1]}</button>`:"");
+  /* ✦ GROUPED SIDEBAR (redesign): mode filtering already happened above (_vtabs), so we just
+     organise the VISIBLE tabs into labelled sections — vertical room means no "More" menu needed.
+     Same data-act="tab" buttons, so navigation works exactly as before. */
+  const NAVGROUPS=[["",["home","planner","calendar","eugene"]],["Create",["content","journal","script","optimize","art","tools"]],["Wellbeing",["health","care","habits","food","fitness"]],["Business",["income","pitch"]],["Sakura team",["clients","cplanner","ccalendar","chelp"]],["",["review","settings"]]];
+  const _vis=new Map(_vtabs);
+  const _navItem=(id,l)=>{ const sp=l.indexOf(" "); const ic=sp>0?l.slice(0,sp):"•", tx=sp>0?l.slice(sp+1):l; return `<button class="nv ${state.tab===id?"active":""}" data-act="tab" data-tab="${id}" title="${tx}"><span class="nv-ic">${ic}</span><span class="nv-lb">${tx}</span></button>`; };
+  let _navHTML="";
+  for(const _g of NAVGROUPS){ const _items=_g[1].filter(id=>_vis.has(id)); if(!_items.length)continue; if(_g[0])_navHTML+=`<div class="nv-group">${_g[0]}</div>`; _navHTML+=_items.map(id=>_navItem(id,_vis.get(id))).join(""); }
   const _applyChrome=()=>{
     try{ document.body.dataset.osmode=OS_MODE; }catch(e){}
     const _mp=document.getElementById("modePill"); if(_mp) _mp.textContent=IS_MGR?"🌸 team":OS_MODE==="health"?"💗 health":OS_MODE==="sakura"?"🌸 sakura":"🎬 creator";
@@ -7254,6 +7316,20 @@ const FX_ON=()=>{ try{ return localStorage.getItem("eggie-fx")==="1"; }catch(e){
     }
   };
   window.UI = UI;
+})();
+</script>
+<!-- ✦ Sidebar controls (2026-06-14): desktop collapse + mobile drawer. Isolated + guarded. -->
+<script>
+(function(){
+  "use strict";
+  var body=document.body, ham=document.getElementById("hamburger"), scrim=document.getElementById("sbScrim"), tog=document.getElementById("sbToggle");
+  try{ if(localStorage.getItem("eggie-sb-mini")==="1") body.classList.add("sb-mini"); }catch(e){}
+  function syncTog(){ if(!tog)return; var on=body.classList.contains("sb-mini"); tog.textContent=on?"»":"«"; tog.title=on?"Expand menu":"Collapse menu"; }
+  syncTog();
+  if(tog) tog.addEventListener("click",function(e){ e.stopPropagation(); body.classList.toggle("sb-mini"); try{localStorage.setItem("eggie-sb-mini",body.classList.contains("sb-mini")?"1":"0");}catch(_e){} syncTog(); });
+  if(ham) ham.addEventListener("click",function(){ body.classList.toggle("sb-open"); });
+  if(scrim) scrim.addEventListener("click",function(){ body.classList.remove("sb-open"); });
+  document.addEventListener("click",function(e){ try{ if(e.target.closest && e.target.closest(".nv")) body.classList.remove("sb-open"); }catch(_e){} });
 })();
 </script>
 </body>
