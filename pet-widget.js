@@ -145,7 +145,13 @@
       sprite.style.backgroundPosition = "-" + (f.x * s).toFixed(1) + "px -" + (f.y * s).toFixed(1) + "px";
     }
     function facing() { var flip = (c.faces === "right") ? (S.dir < 0) : (S.dir > 0); return flip ? "scaleX(-1)" : "scaleX(1)"; }
-    function bounds() { return { min: c.leftClear, max: Math.max(c.leftClear + 10, innerWidth - c.rightClear - SPRW) }; }
+    function bounds() {
+      var lc = c.leftClear;
+      // keep Egg Jean out of the left sidebar on desktop (≥881px); on phone/iPad the sidebar is a
+      // hidden drawer, so he uses the full width as before. Narrower clearance when it's collapsed.
+      try { if (window.matchMedia && window.matchMedia("(min-width:881px)").matches) lc = (document.body.classList.contains("sb-mini") ? 64 : 238) + 16; } catch (e) {}
+      return { min: lc, max: Math.max(lc + 10, innerWidth - c.rightClear - SPRW) };
+    }
     function positionUI() {
       pet.style.left = Math.round(S.x) + "px"; pet.style.bottom = Math.round(14 + S.y) + "px";
       var topY = Math.round(14 + S.y + SPRH + 8);
