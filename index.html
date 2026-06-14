@@ -553,6 +553,19 @@
     body.sb-open .sb-scrim{display:block;}
     main#view{padding-top:58px;}
   }
+  /* ============================================================
+     ✦ MODULAR PAGES → clean uniform masonry (2026-06-14)
+     Home, Health, Care, Art, Money & Clients all share .grid-modular.
+     Switching it from the variable-width packing grid to equal-width
+     CSS columns gives the demo's calm, scannable card flow — every card
+     and tool stays exactly where it was, it just reads "easy to munch".
+     (Drag-RESIZE retires since widths are uniform; minimise / hide /
+     reorder and ＋cards all still work.) ====================== */
+  .grid-modular{ display:block !important; columns:340px; column-gap:18px; grid-template-columns:none !important; grid-auto-rows:auto !important; }
+  .grid-modular>.home-widget{ break-inside:avoid; width:100%; margin:0 0 18px; display:block; }
+  .grid-modular>.home-add{ column-span:all; width:100%; margin:2px 0 0; }
+  .home-resize{ display:none !important; }   /* widths are uniform now */
+  @media (max-width:560px){ .grid-modular{ columns:1; } }
   /* ✦ END UI UPGRADE LAYER */
 </style>
 </head>
@@ -1158,11 +1171,13 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.61";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.63";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.63: 🍱 CONSOLIDATED LAYOUT — Home, Health, Care, Art, Money and Clients now lay their cards out in calm, equal-width columns (like the demo) instead of the tight mosaic, so each page is easy to scan / 'munch'. Nothing was removed — every card and tool is exactly where it was. (Cards are uniform width now, so the manual drag-to-resize retired; minimise, hide, reorder and ＋cards all still work.)",
+  "2026-06-14.62: 🫧🌸 the bubble sea and sakura petal trail are ON by default again — no more hunting for the Sparkles toggle. Calm mode and your device's reduce-motion setting still switch them off automatically, and you can still turn them off any time in Settings → Comfort if a device runs hot.",
   "2026-06-14.61: ✨ the redesign now reaches every surface — kanban cards, inputs, habit buttons, calendar cells, secondary cards and chips all got the same soft, rounded, calm treatment as the main panels, so nothing looks like the 'old' style anymore. Pure cosmetics; every tool and layout is exactly where it was.",
   "2026-06-14.60: 🧭 NEW NAVIGATION — the top tab bar is now a grouped sidebar down the left (Create · Wellbeing · Business · Sakura), with every tab visible (no more ⋯ More menu). Tap « to collapse it to icons; on phone/iPad it's a slide-in drawer from the ☰ button. Same tabs, same modes — just easier to scan. Tap the logo still cycles Creator/Health/Sakura.",
   "2026-06-14.59: 🎨 REDESIGN LOOK — the calmer visual language from the demo is now applied across every page: softer card shadows, rounder corners, more breathing room, cleaner nav tabs (the active tab is now a soft white card), and a gentler backdrop. Same tools, same layout logic — it just reads calmer. The grouped sidebar is coming as a separate step.",
@@ -1849,6 +1864,7 @@ function modularPage(tab, labels, items, defCols){
 }
 /* JS masonry: pack each widget's row-span to its content (or its set/min height) so there are no gaps */
 function layoutHome(){
+  return;   /* ✦ 2026-06-14: modular pages now use CSS-column masonry (uniform cards) — no JS row-spans needed */
   const grid=document.querySelector(".grid-modular"); if(!grid)return;
   const rowH=8, gap=16;
   /* responsive spans: clamp each card to the columns that actually exist on THIS screen;
@@ -3499,7 +3515,7 @@ async function renderSettings(){
           ["setCalm", calm, "🌙 Calm mode", "stop motion + soften colours"],
           ["setText", big, "🔠 Larger text", "bump every font size up"],
           ["setFocus", foc, "🎯 Focus mode", "Home shows only today"],
-          ["setFx", (function(){try{return localStorage.getItem("eggie-fx")==="1"}catch(e){return false}})(), "✨ Sparkles", "petal trail + bubble sea (heavier on the GPU)"],
+          ["setFx", FX_ON(), "✨ Sparkles", "petal trail + bubble sea · on by default (turn off if a device runs hot)"],
         ].map(([act,on,title,sub])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1.5px solid var(--line-2);border-radius:14px;background:#fff">
           <span style="font-size:13px;font-weight:600;color:var(--ink)">${title} <span class="soft" style="font-weight:500">— ${sub}</span></span>
           <button class="switch" role="switch" aria-checked="${on?'true':'false'}" data-act="${act}" aria-label="${title.replace(/^[^ ]+ /,'')}"></button>
@@ -5807,7 +5823,7 @@ document.addEventListener("click",async(e)=>{
   if(act==="euPhotoClear"){ state.euImage=null; render(); return; }
   if(act==="euMic"){ euMicToggle(); return; }
   if(act==="euSpeak"){ let on=false; try{ on=localStorage.getItem("eugene-speak")==="1"; localStorage.setItem("eugene-speak",on?"0":"1"); }catch(e){} if(!on){ try{ const u=new SpeechSynthesisUtterance("Hi! I'll read my replies out loud now."); u.pitch=1.1; speechSynthesis.speak(u); }catch(e){} } else { try{speechSynthesis.cancel();}catch(e){} } render(); return; }
-  if(act==="setFx"){ let on=false; try{ on=localStorage.getItem("eggie-fx")!=="1"; localStorage.setItem("eggie-fx",on?"1":"0"); }catch(e){} toast(on?"✨ sparkles on — refresh the page to wake the bubble sea":"sparkles off — refresh to fully clear them 🌙"); render(); return; }
+  if(act==="setFx"){ let on=false; try{ on=!FX_ON(); localStorage.setItem("eggie-fx",on?"1":"0"); }catch(e){} toast(on?"✨ sparkles on — refresh the page to wake the bubble sea":"sparkles off — refresh to fully clear them 🌙"); render(); return; }
   if(act==="memOpen"){ memoryModal(); return; }
   if(act==="euIncognito"){ state.euIncognito=!state.euIncognito; toast(state.euIncognito?"🕶 incognito — this chat stays out of Egg Jean's memory":"memory back on 🧠"); render(); return; }
   if(act==="memPause"){ const on=!!(document.getElementById("mem_pause")||{}).checked; await DB.saveDaily(SENTINEL,n=>({...n,eugeneMemory:{...(n.eugeneMemory||{}),paused:on}})); toast(on?"⏸ memory paused — he keeps what he has, learns nothing new":"▶ memory back on 🧠"); return; }
@@ -6388,7 +6404,7 @@ authBoot().then(ok=>{ if(ok) render(); });   // sign-in gate (no-op until the lo
    ⚠️ OPT-IN since build .39 ("✨ sparkles" in Settings): petals + the bubble canvas together were
    heavy enough GPU/DOM churn to crash the tab on some machines — Chrome then silently reloads it,
    which looked exactly like "the page refreshed itself". Off by default. */
-const FX_ON=()=>{ try{ return localStorage.getItem("eggie-fx")==="1"; }catch(e){ return false; } };
+const FX_ON=()=>{ try{ return localStorage.getItem("eggie-fx")!=="0"; }catch(e){ return false; } };   // ✨ sparkles ON by default now (only an explicit "0" turns them off)
 (function(){
   const reduce=()=>{ try{ return !FX_ON()||document.body.classList.contains("calm")||matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return true; } };
   let last=0, count=0; const MAX=(innerWidth<640?20:42), TH=(innerWidth<640?95:55);
