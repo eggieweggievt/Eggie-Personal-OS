@@ -893,20 +893,21 @@ async function authBoot(){
     const em=String((SESSION.user||{}).email||"").toLowerCase();
     const meta=(SESSION.user||{}).user_metadata||{};
     const isOwner=em===OWNER_EMAIL;
-    // 🌸 CLIENT (talent) account — view-only, sees ONLY their own page. Identified by signup metadata.
-    if(!isOwner && (meta.role==="client" || meta.client_id)){
-      IS_CLIENT=true; IS_MGR=false;
-      try{ await SB.from("client_accounts").upsert({email:em,client_id:meta.client_id||null,talent_name:meta.talent_name||null},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
-      const ok=await loadClientView();              // JWT-checked fetch of THEIR record only
-      if(!ok){ showPending(em,"client"); return false; }   // not approved yet (or page not set up) → lobby
-      return true;
-    }
-    // 🌸 any other signed-in account that isn't Eggie = a Sakura manager: locked to the team hub,
-    // none of her personal surfaces ever render (RLS blocks the data anyway — this blocks the UI).
-    IS_MGR=!isOwner;
-    if(IS_MGR){
-      setOsMode("sakura"); state.tab="clients";
-      // self-registered managers wait in the lobby until Eggie approves them
+    if(!isOwner){
+      // 🌸 first sign-in after a talent signup: the metadata carries which talent they picked → create their row
+      if(meta.role==="client" || meta.client_id){ try{ await SB.from("client_accounts").upsert({email:em,client_id:meta.client_id||null,talent_name:meta.talent_name||null},{onConflict:"email",ignoreDuplicates:true}); }catch(e){} }
+      // AUTHORITATIVE role check: a row in client_accounts = a CLIENT (view-only, their own page ONLY).
+      // This never depends on fragile metadata once the row exists — a client can NEVER fall into the manager path.
+      let crow=null; try{ const r=await SB.from("client_accounts").select("approved").eq("email",em).maybeSingle(); crow=r&&r.data; }catch(e){}
+      if(crow){
+        IS_CLIENT=true; IS_MGR=false;
+        if(!crow.approved){ showPending(em,"client"); return false; }
+        const ok=await loadClientView();             // JWT-checked fetch of THEIR record only
+        if(!ok){ showPending(em,"client"); return false; }
+        return true;
+      }
+      // otherwise = a Sakura MANAGER (team hub, pending until approved)
+      IS_MGR=true; setOsMode("sakura"); state.tab="clients";
       try{
         try{ await SB.from("managers").upsert({email:em},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
         const {data:mrow}=await SB.from("managers").select("approved").eq("email",em).maybeSingle();
@@ -971,7 +972,7 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.49";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.50";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
