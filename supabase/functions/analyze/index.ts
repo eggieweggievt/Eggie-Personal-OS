@@ -161,6 +161,112 @@ async function claudeWeb(system: string | any[], user: string | any[], maxTokens
   return { text: stripCites(text), sources, refusal };
 }
 
+// ===================== SEMANTIC MEMORY (pgvector + Supabase gte-small) =====================
+// Embeddings come from Supabase's built-in gte-small model (384-dim) — runs inside the edge
+// runtime, no external vendor or API key. Everything here is best-effort: if embedding or the
+// match RPC fails (e.g. the SQL hasn't been run yet), callers silently fall back to the existing
+// recency-based memory, so the agent never breaks because of this layer.
+let _embedder: any = null;
+async function embed(text: string): Promise<number[] | null> {
+  try {
+    const t = String(text == null ? "" : text).slice(0, 1200).trim();
+    if (!t) return null;
+    // @ts-ignore — Supabase Edge runtime global
+    if (!_embedder) _embedder = new Supabase.ai.Session("gte-small");
+    const out = await _embedder.run(t, { mean_pool: true, normalize: true });
+    return Array.isArray(out) ? (out as number[]) : null;
+  } catch (_e) { return null; }
+}
+// upsert one memory row (replaces the prior row with the same user_id+kind+ref_id)
+async function memUpsert(sb: any, userId: string, kind: string, refId: string | null, text: string): Promise<void> {
+  try {
+    const e = await embed(text); if (!e) return;
+    await sb.from("eugene_memories").upsert(
+      { user_id: userId, kind, ref_id: refId, text: String(text).slice(0, 1200), embedding: e },
+      { onConflict: "user_id,kind,ref_id" });
+  } catch (_e) { /* never block a memory write on embeddings */ }
+}
+// semantic search → array of memory texts most relevant to `query`
+async function memSearch(sb: any, userId: string, query: string, count = 10): Promise<string[]> {
+  try {
+    const e = await embed(query); if (!e) return [];
+    const { data } = await sb.rpc("match_eugene_memories", { query_embedding: e, match_user: userId, match_count: count });
+    return Array.isArray(data) ? data.map((r: any) => String(r.text)) : [];
+  } catch (_e) { return []; }
+}
+// pull one daily metric across more days than the snapshot shows (for trend/correlation digging)
+async function queryHistory(sb: any, userId: string, metric: string, days: number): Promise<string> {
+  try {
+    const since = new Date(Date.now() - days * 86400000).toLocaleDateString("en-CA");
+    const { data } = await sb.from("daily_logs").select("log_date,notes")
+      .eq("user_id", userId).neq("log_date", "2000-01-01").gte("log_date", since)
+      .order("log_date", { ascending: true }).limit(400);
+    const key = String(metric || "").trim();
+    const rows = (data || []).map((r: any) => {
+      let n: any = {}; try { n = JSON.parse(r.notes || "{}"); } catch { n = {}; }
+      const v = n[key];
+      return (v === undefined || v === null || v === "") ? null : `${r.log_date}: ${typeof v === "object" ? JSON.stringify(v) : v}`;
+    }).filter(Boolean);
+    if (!rows.length) return `No "${key}" values logged in the last ${days} days. Valid keys are her daily fields, e.g. pain, fatigue, fog, dizziness, lighthead, palp, anxiety, focus, mood, water, salt, sleepH, sleepQ, weight, energy.`;
+    return `"${key}" over the last ${days} days (oldest first):\n` + rows.join("\n");
+  } catch (_e) { return "(couldn't read that history)"; }
+}
+// Read-then-act tool loop: the agent can call recall_memory + query_history (executed here) and
+// web_search (run by Anthropic), see the results, and decide its next step before answering.
+// Used by the agent mode; on ANY thrown error the caller falls back to the proven single-shot path.
+async function agentToolLoop(userId: string, sb: any, system: any[], userContent: string | any[], model: string): Promise<{ text: string; sources: { url: string; title: string }[]; refusal?: boolean }> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY"); if (!key) throw new Error("ANTHROPIC_API_KEY secret is not set");
+  const tools: any[] = [
+    { type: "web_search_20250305", name: "web_search", max_uses: 4 },
+    { name: "recall_memory", description: "Semantically search Eggie's long-term memory (older durable facts, past-conversation digests, reflected insights) BY MEANING. Use when she refers to something from a while ago, asks what you remember, or you need context the live snapshot doesn't already contain.", input_schema: { type: "object", properties: { query: { type: "string", description: "what to look for" } }, required: ["query"] } },
+    { name: "query_history", description: "Pull a single daily metric across more days than the snapshot shows (up to 120) for real trend/correlation questions. metric = one daily field key (pain, fatigue, fog, dizziness, lighthead, palp, anxiety, focus, mood, water, salt, sleepH, sleepQ, weight, energy).", input_schema: { type: "object", properties: { metric: { type: "string" }, days: { type: "integer" } }, required: ["metric"] } },
+  ];
+  const messages: any[] = [{ role: "user", content: userContent }];
+  const cited = new Map<string, string>(); const found = new Map<string, string>();
+  let text = "";
+  for (let hop = 0; hop < 7; hop++) {
+    const body: any = { model, max_tokens: 4000, system, messages, tools };
+    if (supportsAdaptive(model)) body.thinking = { type: "adaptive" };
+    if (!model.includes("haiku")) body.output_config = { effort: "medium" };
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || `Anthropic error ${res.status}`);
+    for (const b of (data.content || [])) {
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const r of b.content) if (r?.url && !found.has(r.url)) found.set(r.url, r.title || "");
+      if (b.type === "text" && Array.isArray(b.citations)) for (const c of b.citations) if (c?.url && !cited.has(c.url)) cited.set(c.url, c.title || "");
+    }
+    if (data.stop_reason === "refusal") return { text: "", sources: [], refusal: true };
+    if (data.stop_reason === "pause_turn") { messages.push({ role: "assistant", content: data.content }); continue; }
+    if (data.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: data.content });   // preserves thinking + tool_use blocks (required with extended thinking)
+      const results: any[] = [];
+      for (const b of (data.content || [])) {
+        if (b.type === "tool_use" && b.name && b.name !== "web_search") {
+          let out = "(unknown tool)";
+          try {
+            if (b.name === "recall_memory") out = (await memSearch(sb, userId, String(b.input?.query || ""), 12)).join("\n") || "(nothing relevant found in memory)";
+            else if (b.name === "query_history") out = await queryHistory(sb, userId, String(b.input?.metric || ""), Math.min(120, Math.max(7, Number(b.input?.days) || 60)));
+          } catch (_e) { out = "(tool error)"; }
+          results.push({ type: "tool_result", tool_use_id: b.id, content: String(out).slice(0, 4000) });
+        }
+      }
+      if (results.length) { messages.push({ role: "user", content: results }); }
+      continue;
+    }
+    text = (data.content || []).map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+    break;
+  }
+  if (!text) throw new Error("tool loop produced no final text");   // → caller falls back to the proven path
+  const sources: { url: string; title: string }[] = [];
+  for (const [url, title] of cited) { if (sources.length >= 5) break; sources.push({ url, title }); }
+  for (const [url, title] of found) { if (sources.length >= 5) break; if (!cited.has(url)) sources.push({ url, title }); }
+  return { text: stripCites(text), sources };
+}
+
 // Pull a compact snapshot of her ENTIRE OS so the pet can answer about (and act on)
 // any part of it: today's health/care/energy, tasks, schedule, goals, money, sponsors,
 // savings, and recent health/care trends. Kept short to stay token-cheap.
@@ -535,6 +641,15 @@ Max 12 events, future dates only.`,
           hist.map((m: any) => ((m.role === "me" ? (userId === "eggie" ? "Her: " : "Them: ") : "You: ")) + String(m.text || "").slice(0, 300)).join("\n") + "\n\n"
         : "";
       const ctx = await fullContext(userId, today);
+      // semantic recall: surface older memories that MATCH this message by meaning (not recency).
+      // Best-effort — if the vectors SQL hasn't run / nothing matches, this is empty and we keep
+      // the existing recency-based memory exactly as before.
+      let recalled = "";
+      try {
+        const sbRec = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const rel = await memSearch(sbRec, userId, q || "", 10);
+        if (rel.length) recalled = `\n--- RELEVANT MEMORIES (retrieved BY MEANING for this message — older facts/notes/insights that match what she's asking, surfaced even if they're outside the recent window; treat them as trustworthy as the recent ones) ---\n${rel.map((r) => "• " + r).join("\n")}\n--- END RELEVANT MEMORIES ---\n`;
+      } catch (_e) { /* no embeddings yet → recency-only, current behaviour */ }
       // live app info — the running page sends its build + changelog with every message, so this
       // assistant's self-knowledge can never lag behind a front-end-only deploy
       const appBuild = (body.input?.appBuild || "").toString().slice(0, 30);
@@ -722,6 +837,7 @@ DELETES: deleting is destructive — if her wording is ambiguous about WHICH ite
 
 MEMORY & LEARNING (your long-term memory — a real, living system; learning about her is core to who you are):
 - The snapshot carries YOUR MEMORY (a rolling summary), INSIGHTS (higher-level patterns you've reflected on across her data), OPEN LOOPS, RECENT CONVERSATIONS (episode digests), and REMEMBERED FACTS. A background process updates summary/loops/facts after chats, and a deeper reflection pass distills INSIGHTS from her actual data — you genuinely remember and learn across sessions. Use it all naturally: continuity is the whole point ("last time you were mid-thumbnail — want to pick that up?").
+- SEMANTIC RECALL + DIGGING: the DYNAMIC CONTEXT may include a RELEVANT MEMORIES block — older facts/notes/insights retrieved BY MEANING for this exact message; trust and use them like the recent ones. You can also actively dig when the snapshot doesn't already hold the answer: call recall_memory to search her long-term memory, and query_history to pull a single daily metric across up to 120 days for real trend/correlation questions. Prefer looking it up over guessing.
 - LEARN PROACTIVELY (without being asked): when a chat reveals something durable and reusable — a standing preference, a person and their role, a project, a recurring routine, a piece of her shorthand/terminology, or HOW she likes things done (a workflow) — capture it with rememberFact so future-you knows it. Don't wait to be told "remember this".
 - CORRECTIONS ARE SACRED: if she corrects you ("no, I meant…", "actually I prefer…", "stop doing X", "that's not how I like it"), that's the highest-value thing to learn — rememberFact it immediately (phrase it as the rule to follow), apply it for the rest of THIS chat, and never repeat the mistake. If a correction contradicts an old fact, forgetFact the old one.
 - RATINGS: she can rate your replies 👍/👎. The FEEDBACK section in the snapshot shows what she marked 👎 and why — treat those as standing corrections: change how you answer so you don't repeat the same miss, and lean into whatever earned a 👍.
@@ -781,7 +897,7 @@ Today (her local date) is ${today}; her calendar timezone is ${tz}.
 --- LIVE OS SNAPSHOT ---
 ${ctx}
 --- END SNAPSHOT ---
-${liveApp}`;
+${recalled}${liveApp}`;
       // non-eggie users: de-Eggify the shared instruction text (their persona is already at the top)
       if (userId !== "eggie") {
         const deEgg = (t: string) => t
@@ -806,7 +922,19 @@ ${liveApp}`;
       // model: Settings can pick one (validated against the allowlist); effort fixed at "medium"
       const reqModel = (body.input?.model || "").toString();
       const agentModel = AGENT_MODELS.includes(reqModel) ? reqModel : MODEL;
-      const { text: raw, sources, refusal } = await claudeWeb(sysBlocks, userContent, 4000, 4, { model: agentModel, effort: "medium", jsonSchema: AGENT_SCHEMA });
+      // read-then-act: try the tool loop (semantic recall + deep history + web). On ANY error it
+      // falls back to the proven single-shot structured path, so a rough deploy degrades to today's
+      // behaviour instead of breaking. Kill switch: set the EUGENE_TOOLS_OFF=1 function secret.
+      let raw = ""; let sources: { url: string; title: string }[] = []; let refusal = false;
+      try {
+        if (Deno.env.get("EUGENE_TOOLS_OFF") === "1") throw new Error("tools disabled by env");
+        const sbTool = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const r = await agentToolLoop(userId, sbTool, sysBlocks, userContent, agentModel);
+        raw = r.text; sources = r.sources; refusal = !!r.refusal;
+      } catch (_e) {
+        const r = await claudeWeb(sysBlocks, userContent, 4000, 4, { model: agentModel, effort: "medium", jsonSchema: AGENT_SCHEMA });
+        raw = r.text; sources = r.sources; refusal = !!r.refusal;
+      }
       if (refusal) return json({ reply: "I can't help with that one, love — but I'm right here for anything else. 🐙", actions: [], sources: [] });
       const parsed = parseJSON(raw);
       // Never leak the model's raw reasoning / a truncated JSON blob into her chat.
@@ -957,6 +1085,11 @@ FACT RULES (strict):
       ln.eugeneEpisodes = [...(Array.isArray(ln.eugeneEpisodes) ? ln.eugeneEpisodes : []), episode].slice(-14);
       if (live) await sb.from("daily_logs").update({ notes: JSON.stringify(ln) }).eq("user_id", userId).eq("log_date", "2000-01-01");
       else await sb.from("daily_logs").insert({ user_id: userId, log_date: "2000-01-01", notes: JSON.stringify(ln) });
+      // semantic memory: embed today's new/updated facts + this episode (best-effort, never blocks)
+      try {
+        for (const f of nf) if (f && f.learnedAt === today && f.id && f.text) await memUpsert(sb, userId, "fact", f.id, String(f.text));
+        if (episode.topics.length || episode.decisions) await memUpsert(sb, userId, "episode", episode.date, `${episode.date}: ${episode.topics.join(", ")}${episode.decisions ? " — " + episode.decisions : ""}`);
+      } catch (_e) { /* embeddings are a bonus layer; never fail the memory write */ }
       return json({ ok: true, learned, summary: ln.eugeneMemory.summary });
     }
 
@@ -989,7 +1122,23 @@ FACT RULES (strict):
       ln.eugeneMemory = { ...(ln.eugeneMemory || {}), summary: String(out.summary).slice(0, 2400), insights: merged, reflectedAt: new Date().toISOString(), paused: !!(ln.eugeneMemory && ln.eugeneMemory.paused) };
       if (live) await sb.from("daily_logs").update({ notes: JSON.stringify(ln) }).eq("user_id", userId).eq("log_date", "2000-01-01");
       else await sb.from("daily_logs").insert({ user_id: userId, log_date: "2000-01-01", notes: JSON.stringify(ln) });
+      // semantic memory: embed the refreshed insights so they're retrievable by meaning (best-effort)
+      try { for (const ins of merged) { const tx = String(ins.text || ins); if (tx) await memUpsert(sb, userId, "insight", "ins_" + tx.slice(0, 48).replace(/\s+/g, "_"), tx); } } catch (_e) { /* bonus layer */ }
       return json({ ok: true, summary: ln.eugeneMemory.summary, insights: merged.map((i) => i.text || i), count: merged.length });
+    }
+
+    // --- embedBackfill: one-time (idempotent) — embed existing facts/episodes/insights into the
+    // semantic memory table so old memory is searchable immediately after deploy. Safe to re-run. ---
+    if (mode === "embedBackfill") {
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: row } = await sb.from("daily_logs").select("notes").eq("user_id", userId).eq("log_date", "2000-01-01").maybeSingle();
+      let s: any = {}; try { s = JSON.parse(row?.notes || "{}"); } catch { s = {}; }
+      let n = 0;
+      const facts = Array.isArray(s.eugeneFacts) ? s.eugeneFacts : [];
+      for (let i = 0; i < facts.length; i++) { const f = facts[i]; const id = typeof f === "string" ? ("legacy_" + i) : (f?.id || "f_" + i); const tx = typeof f === "string" ? f : f?.text; if (tx) { await memUpsert(sb, userId, "fact", id, String(tx)); n++; } }
+      for (const e of (Array.isArray(s.eugeneEpisodes) ? s.eugeneEpisodes : [])) { if (e?.date) { await memUpsert(sb, userId, "episode", e.date, `${e.date}: ${(e.topics || []).join(", ")}${e.decisions ? " — " + e.decisions : ""}`); n++; } }
+      for (const ins of ((s.eugeneMemory?.insights) || [])) { const tx = String(ins?.text || ins); if (tx) { await memUpsert(sb, userId, "insight", "ins_" + tx.slice(0, 48).replace(/\s+/g, "_"), tx); n++; } }
+      return json({ ok: true, embedded: n });
     }
 
     // --- nudge: proactive care. Picks AT MOST ONE timely, gentle thing worth surfacing right now

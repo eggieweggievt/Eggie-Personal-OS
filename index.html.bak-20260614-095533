@@ -379,96 +379,6 @@
   .tp-text{padding:42vh 24px;max-width:70%;margin:0 auto;font-size:44px;line-height:1.6;white-space:pre-wrap;text-align:center;will-change:transform;}
   .tp-line{position:absolute;left:0;right:0;top:40vh;height:2px;background:rgba(236,127,175,.55);pointer-events:none;}
   .tp-mask{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#0b0b12 1%,transparent 24%,transparent 76%,#0b0b12 99%);}
-
-  /* =================================================================
-     ✦ UI UPGRADE LAYER (2026-06-14) — additive design-system pass.
-     Re-styles shared classes app-wide (motion + focus + state polish),
-     adds new reusable components, and is fully reduce-motion/calm safe
-     (the global !important calm + prefers-reduced-motion rules above
-     still win, and --mo flips to 0 so calc-based motion zeroes out).
-     New tokens only ADD — existing --r/--shadow etc. are untouched.
-     ================================================================= */
-  :root{
-    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
-    --r-sm:12px;--r-lg:24px;
-    --e1:0 2px 8px rgba(180,120,170,.10);--e2:0 6px 22px rgba(180,120,170,.14);--e3:0 16px 40px rgba(120,90,140,.22);
-    --ring:0 0 0 3px rgba(236,127,175,.40);--ring-lav:0 0 0 3px rgba(141,111,209,.35);
-    --grad:linear-gradient(135deg,var(--pink),var(--lav));--danger:#e0607a;
-    --mo:1;--t-fast:.13s;--t:.22s;--t-slow:.4s;--ease:cubic-bezier(.4,0,.2,1);--spring:cubic-bezier(.34,1.56,.64,1);
-  }
-  body.calm{--mo:0;}
-  @media (prefers-reduced-motion:reduce){:root{--mo:0;}}
-
-  /* one keyboard-focus ring everywhere (zero-specificity :where, so component focus styles can still override; outline can't clobber existing box-shadows or layout) */
-  :where(a,button,input,textarea,select,[tabindex],[role="tab"],[role="button"],[role="switch"],[role="checkbox"]):focus-visible{outline:2px solid var(--pink-deep);outline-offset:2px;border-radius:var(--r-sm);}
-
-  /* buttons: spring press + gentle hover-lift (transform only — never changes size/layout) */
-  .btn{transition:transform var(--t-fast) var(--spring),border-color var(--t),color var(--t),box-shadow var(--t),background var(--t);}
-  .btn:hover{transform:translateY(calc(var(--mo) * -1.5px));}
-  .btn:active{transform:scale(calc(1 - var(--mo) * .04));}
-  .btn-pink:hover{box-shadow:var(--e2);}
-  .seg button{transition:color var(--t),background var(--t),transform var(--t-fast) var(--spring);}
-  .scale button{transition:transform var(--t-fast) var(--spring),background var(--t),border-color var(--t),color var(--t);}
-  .scale button:hover{transform:translateY(calc(var(--mo) * -2px));}
-  .chiptog{transition:background var(--t),border-color var(--t),color var(--t),transform var(--t-fast) var(--spring);}
-  .tab{transition:color var(--t),background var(--t);}
-  .check{transition:background var(--t),border-color var(--t),transform var(--t-fast) var(--spring);}
-  .check.on{transform:scale(calc(1 + var(--mo) * .06));}
-
-  /* button busy/loading (opt-in via data-busy — existing buttons don't use it, so this is inert until wired) */
-  .btn[data-busy]{color:transparent!important;pointer-events:none;position:relative;}
-  .btn[data-busy]::after{content:"";position:absolute;top:50%;left:50%;width:15px;height:15px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;color:var(--pink-deep);animation:uiSpin .7s linear infinite;}
-  .btn-pink[data-busy]::after{color:#fff;}
-
-  /* button variants/sizes (new, opt-in) */
-  .btn-soft{background:#fde4ef;border-color:transparent;color:var(--pink-deep);}
-  .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-soft);}
-  .btn-danger{background:#fff;border-color:#f3c6d0;color:var(--danger);}
-  .btn-danger:hover{background:#fdeef1;border-color:var(--danger);color:var(--danger);}
-  .btn-sm{font-size:11px;padding:5px 11px;border-radius:10px;}
-  .btn-lg{font-size:14px;padding:11px 20px;border-radius:14px;}
-
-  /* gentle card hover + one-time entrance (opt-in classes; .panel/.home-widget left alone so drag/resize is unaffected) */
-  .lift{transition:transform var(--t) var(--spring),box-shadow var(--t);}
-  .lift:hover{transform:translateY(calc(var(--mo) * -3px));box-shadow:var(--e2);}
-  .reveal{animation:uiCardIn .4s var(--spring) both;}
-
-  /* switch (new) — for Settings toggles that want a true on/off */
-  .switch{width:44px;height:26px;border-radius:999px;background:#e7dcec;border:none;position:relative;cursor:pointer;padding:0;transition:background var(--t) var(--ease);flex:0 0 auto;}
-  .switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:var(--e1);transition:transform var(--t) var(--spring);}
-  .switch[aria-checked="true"]{background:var(--grad);}
-  .switch[aria-checked="true"]::after{transform:translateX(18px);}
-
-  /* alerts / inline banners (new) */
-  .alert{display:flex;gap:10px;align-items:flex-start;border-radius:var(--r);padding:11px 13px;font-size:13px;border:1px solid var(--line);background:var(--panel-soft);}
-  .alert .ai{font-size:16px;line-height:1.2;flex:0 0 auto;}
-  .alert-info{background:#f1f5fe;border-color:#d8e4fb;color:#3b5482;}
-  .alert-success{background:#eefaf4;border-color:#cdeede;color:#2f8d6c;}
-  .alert-warn{background:#fdf3e8;border-color:#f6e0c2;color:#9a6b2f;}
-  .alert-error{background:#fdeef1;border-color:#f4ccd5;color:#b24a60;}
-
-  /* skeletons + spinner (new) — shimmer auto-stops under calm/reduce via the global animation:none rules */
-  .skel{position:relative;overflow:hidden;background:#f1e8f1;border-radius:8px;}
-  .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);animation:uiShimmer 1.3s infinite;}
-  .skel-line{height:11px;margin:7px 0;} .skel-line.w90{width:90%;} .skel-line.w70{width:70%;} .skel-line.w40{width:40%;}
-  .skel-circle{width:40px;height:40px;border-radius:50%;}
-  .spinner{width:24px;height:24px;border-radius:50%;border:3px solid #efdcec;border-top-color:var(--pink);animation:uiSpin .7s linear infinite;display:inline-block;vertical-align:middle;}
-
-  /* status dots + count badge (new) */
-  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--mint);}
-  .dot.warn{background:var(--peach);} .dot.off{background:var(--muted);} .dot.live{background:var(--pink);animation:uiPulse 1.8s var(--ease) infinite;}
-  .badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--grad);color:#fff;font-size:10px;font-weight:800;}
-
-  /* empty state (new) */
-  .empty{text-align:center;padding:var(--s6) var(--s4);color:var(--ink-soft);}
-  .empty .em{font-size:34px;display:block;margin-bottom:6px;}
-  .empty h4{margin:0 0 4px;font-size:15px;} .empty p{margin:0 0 var(--s3);font-size:12.5px;color:var(--muted);}
-
-  @keyframes uiSpin{to{transform:rotate(360deg);}}
-  @keyframes uiShimmer{to{transform:translateX(100%);}}
-  @keyframes uiPulse{0%{box-shadow:0 0 0 0 rgba(236,127,175,.5);}70%{box-shadow:0 0 0 7px rgba(236,127,175,0);}100%{box-shadow:0 0 0 0 rgba(236,127,175,0);}}
-  @keyframes uiCardIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
-  /* ✦ END UI UPGRADE LAYER */
 </style>
 </head>
 <body>
@@ -802,11 +712,11 @@ const DB = {
   /* 🌸 the shared Sakura team row (user_id "sakura" · sentinel date). Managers' RLS reaches ONLY this. */
   async sakRow(){ if(DEMO)return {}; if(this._c.sak)return this._c.sak; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",SAK_UID).eq("log_date",SENTINEL).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.sak=n; },
   async saveSak(merge){ if(DEMO)return; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",SAK_UID).eq("log_date",SENTINEL).maybeSingle(); let base={}; if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} const next=merge({...base}); const {error}=await SB.from("daily_logs").upsert({user_id:SAK_UID,log_date:SENTINEL,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); if(error){ toast("⚠️ NOT saved — "+(error.message||"write blocked")+" 🌸"); throw new Error("sakura save failed"); } this._c.sak=next; return next; },
-  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const _f=(this._c._infl=this._c._infl||{}); if(_f[date])return _f[date]; const p=(async()=>{ const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(error&&!IS_MGR) throw new Error("couldn't read your data ("+(error.message||"network")+")"); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}}
+  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(error&&!IS_MGR) throw new Error("couldn't read your data ("+(error.message||"network")+")"); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}}
     /* sentinel reads transparently merge the 🌸 team space in, so every existing clients/inbox
        call site keeps working — before migration the keys still live on Eggie's row (fallback). */
     if(date===SENTINEL){ const sak=await this.sakRow(); if(sak._sakMigrated){ SAK_KEYS.forEach(k=>{ n[k]=sak[k]; }); n._sakMigrated=true; } }
-    return this._c.daily[date]=n; })(); _f[date]=p; try{ return await p; } finally{ delete _f[date]; } },
+    return this._c.daily[date]=n; },
   async saveDaily(date,merge){
     if(DEMO){ const cur=await DB.daily(date); const next=merge({...cur}); demo.daily[date]=next; return next; }
     // Re-read the LIVE row for EVERY date right before writing (not just the sentinel). The
@@ -1062,14 +972,11 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-14.53";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-12.50";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
-  "2026-06-14.53: 💅 UI GLOW-UP — a design-system pass landed across the whole app: one keyboard focus ring everywhere (accessibility), gentle playful motion on buttons/chips/scales (soft spring on press + hover, all of it still instantly OFF in calm mode / reduce-motion), and a set of new reusable bits you'll see appear over time — proper on/off switches, info/success/warn/error banners, loading skeletons + spinners, button busy-spinners, count badges, status dots, and kinder empty states. Colours and layout are unchanged; nothing moved, it just feels more polished and responsive on phone/iPad/desktop. New window.UI helpers (toast/modal/skeleton/busy) are available for future features.",
-  "2026-06-14.52: 🧠 EGG JEAN GOT SMARTER — he now has SEMANTIC MEMORY. Older facts, past-chat digests and reflected insights are stored as embeddings (Supabase pgvector + the built-in gte-small model, no new vendor) and the ones that MATCH what you're asking are surfaced by MEANING, not just recency — so he recalls the right thing even if it's from weeks ago. He can also dig mid-answer with two new tools: recall_memory (search his long-term memory) and query_history (pull one daily metric across up to 120 days) for real trend/correlation questions. It's a read-then-act loop that quietly falls back to the proven path if anything hiccups (kill switch: EUGENE_TOOLS_OFF=1). Caching, extended thinking and structured outputs were already on. Needs eggie-os-memory-vectors.sql run + a one-time embedBackfill — see the runbook.",
-  "2026-06-14.51: PERF PASS - faster tab switches and lighter on battery: the app no longer captures a stack trace on every repaint, day/config row reads de-duplicate concurrent fetches (one network call per tab load instead of several), and the Home grid measures every card in one batch instead of forcing a layout reflow per card. Nothing about how the OS works or looks changed.",
   "2026-06-12.49: 👀 CLIENT LOGINS — talents can now sign up (email + pick which talent they are) and, once Eggie approves them on the Clients page, sign in to a READ-ONLY page that shows ONLY their own to-dos, calendar and profile. True isolation: a client can never see another client's data, your notes, or your brand-brain — their page is served by a JWT-checked function and they have no direct database access. Needs the eggie-os-client-signup.sql run.",
   "2026-06-12.47: 📔 JOURNAL is a real tab now (creator mode, under Content) — a daily free-write with a rotating gentle prompt, PLUS every past entry browsable, searchable, and editable, each tagged with that day's energy/inside-weather/stream. The old home journal card still works and now opens the full tab. Say 'journal that …' and I'll append to today (journalAdd). For her eyes only, no streaks.",
   "2026-06-12.46: 🌸 Sakura gained a 📖 GUIDE tab — a step-by-step manager handbook: getting in/approval, the Clients roster, Tasks planner, Calendar, the full Discord message pipeline (channel linking, message-one, 📣 message-many with {name}, /sakura inbox + reply-closes-the-loop), who Egg Jean is (the bot delivers team messages; the in-app chat stays Eggie-only), and troubleshooting",
@@ -1383,7 +1290,7 @@ async function runDailyEngines(sent){
 /* render() coalesces concurrent calls — two near-simultaneous renders used to double-run the
    entrance animation ("the page refreshes twice"). One runs; extras fold into a single follow-up. */
 async function render(){
-  render._caller="";   /* PERF 2026-06-14: was new Error().stack on every render */
+  try{ render._caller=new Error().stack||""; }catch(e){ render._caller=""; }
   if(render._busy){ render._again=true; return; }
   render._busy=true;
   try{ await renderCore(); }
@@ -1449,7 +1356,7 @@ async function renderCore(){
   const tabChanged=state._animTab!==state.tab;
   if(!tabChanged) view.classList.remove("view-enter");      // no entrance animation on in-place updates (toggles/edits)
   const sy=window.scrollY;                                  // remember scroll so in-place updates don't jump
-  if(!view.innerHTML) view.innerHTML=`<div style="display:flex;flex-direction:column;gap:16px;max-width:1380px;margin:0 auto" aria-label="loading" role="status">`+`<div class="panel"><div class="skel skel-line w40" style="height:14px;margin-bottom:12px"></div><div class="skel skel-line w90"></div><div class="skel skel-line w70"></div></div>`.repeat(3)+`</div>`;  // only on the very first paint — branded skeleton instead of a bare "loading…"
+  if(!view.innerHTML) view.innerHTML=`<div class="label">loading…</div>`;  // only on the very first paint
   try{
     let html;
     if(state.tab==="home") html=await renderHome();
@@ -1762,11 +1669,12 @@ function layoutHome(){
     const cur=/span (\d+)/.exec(w.style.gridColumn||"");
     if(!cur||+cur[1]!==span) w.style.gridColumn="span "+span;
   });
-  var _ws=Array.prototype.slice.call(grid.querySelectorAll(".home-widget"));
-  // PERF 2026-06-14: batch reads/writes -- set all min-heights, measure all heights, then set all row-spans (one reflow, not one per card)
-  _ws.forEach(function(w){ if(w.classList.contains("min"))return; var panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return; var sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; });
-  var _hs=_ws.map(function(w){ if(w.classList.contains("min"))return 50; var panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return 0; return panel.getBoundingClientRect().height; });
-  _ws.forEach(function(w,i){ var h=_hs[i]; if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH)); });
+  grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return;
+    let h;
+    if(w.classList.contains("min")){ h=50; }
+    else { const sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; h=panel.getBoundingClientRect().height; }
+    if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
+  });
 }
 const WLABEL={wellbeing:"Body & brain 💗",profile:"Octopus card 🐙",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",habits:"Daily habits ✅",gacha:"Gacha dailies 🎮",mission:"Content mission control",opportunities:"Content opportunities 💡",artcorner:"Art corner",money:"Money pulse",goals:"Goals",channel:"Channel pulse",schedule:"Stream schedule",eventPrep:"Event prep 🧳",weightMini:"Weight trend ⚖️",braindump:"Brain dump",noticed:"Egg Jean noticed ✨",focus:"Suggested focus 🌸",healthSnap:"Health snapshot 💗"};
 /* merge-update one page's layout block on the sentinel row */
@@ -3395,15 +3303,10 @@ async function renderSettings(){
 
     <div class="panel"><div class="card-head"><h2 style="font-size:17px">🌙 Comfort & display</h2><span class="label">stays on this device</span></div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        ${[
-          ["setCalm", calm, "🌙 Calm mode", "stop motion + soften colours"],
-          ["setText", big, "🔠 Larger text", "bump every font size up"],
-          ["setFocus", foc, "🎯 Focus mode", "Home shows only today"],
-          ["setFx", (function(){try{return localStorage.getItem("eggie-fx")==="1"}catch(e){return false}})(), "✨ Sparkles", "petal trail + bubble sea (heavier on the GPU)"],
-        ].map(([act,on,title,sub])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1.5px solid var(--line-2);border-radius:14px;background:#fff">
-          <span style="font-size:13px;font-weight:600;color:var(--ink)">${title} <span class="soft" style="font-weight:500">— ${sub}</span></span>
-          <button class="switch" role="switch" aria-checked="${on?'true':'false'}" data-act="${act}" aria-label="${title.replace(/^[^ ]+ /,'')}"></button>
-        </div>`).join("")}
+        <button class="chiptog ${calm?'on':''}" data-act="setCalm"><span class="check ${calm?'on':''}"></span>🌙 Calm mode — stop motion + soften colours</button>
+        <button class="chiptog ${big?'on':''}" data-act="setText"><span class="check ${big?'on':''}"></span>🔠 Larger text</button>
+        <button class="chiptog ${foc?'on':''}" data-act="setFocus"><span class="check ${foc?'on':''}"></span>🎯 Focus mode — Home shows only today</button>
+        <button class="chiptog ${(function(){try{return localStorage.getItem("eggie-fx")==="1"}catch(e){return false}})()?'on':''}" data-act="setFx"><span class="check ${(function(){try{return localStorage.getItem("eggie-fx")==="1"}catch(e){return false}})()?'on':''}"></span>✨ Sparkles — petal trail + bubble sea (heavier on the GPU)</button>
       </div>
       <p class="soft" style="font-size:11.5px;margin:10px 0 0">Your device's "reduce motion" setting is always honoured too. Sparkles are off by default — they were heavy enough to crash the tab on some machines.</p>
     </div>
@@ -4954,7 +4857,6 @@ async function runOptimize(){
   const out=document.getElementById("optOut"); if(!out)return;
   if(DEMO||!SB){ out.innerHTML=`<div class="soft-card"><div class="soft" style="font-size:12.5px">✨ Runs once the analyze function is deployed and demo is off. See EDGE-FUNCTION-SETUP.md. 🐙</div></div>`; return; }
   out.innerHTML=`<div class="label">optimizing… 🐙</div>`;
-  const _btn=document.querySelector('[data-act="runOptimize"]'); if(window.UI&&_btn)UI.busy(_btn,true);
   try{
     const fmtEl=document.getElementById("oFormat"), platEl=document.getElementById("oPlatform");
     const input={ kind:state.optMode, title:document.getElementById("oTitle").value, format:fmtEl?fmtEl.value:"long", platform:platEl?platEl.value:"youtube", topic:document.getElementById("oTopic").value, footer:CONFIG.descFooter };
@@ -4965,7 +4867,6 @@ async function runOptimize(){
     state.optResult=r; state.optResultMode=input.kind;   // persist the result across re-renders
     out.innerHTML=optResultHTML(r,input.kind);
   }catch(e){ out.innerHTML=`<div class="soft-card" style="font-size:12.5px;color:var(--rose)">Couldn't reach the optimizer: ${esc(e.message||e)}.</div>`; }
-  finally{ if(window.UI&&_btn)UI.busy(_btn,false); }
 }
 
 /* ===================== SCHEDULE · JOURNAL · BACKUP ===================== */
@@ -7129,55 +7030,6 @@ const FX_ON=()=>{ try{ return localStorage.getItem("eggie-fx")==="1"; }catch(e){
     }catch(e){}
   }
   setTimeout(checkReminders, 5000); setInterval(checkReminders, 30000);
-})();
-</script>
-<!-- ✦ UI helper module (2026-06-14) — reusable, self-contained, namespaced. Opt-in utilities
-     for the upgraded component layer: skeletons, button busy state, a focus-trapped modal, and a
-     toast that uses its OWN layer so it never collides with the app's existing toast(). -->
-<script>
-(function(){
-  "use strict";
-  var reduce = function(){ try{ return document.body.classList.contains("calm") || matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } };
-  var UI = {
-    busy:function(btn,on){ if(!btn)return; if(on!==false){ btn.dataset.busy="1"; btn.setAttribute("aria-busy","true"); } else { delete btn.dataset.busy; btn.removeAttribute("aria-busy"); } },
-    skeleton:function(el,lines){ if(!el)return; lines=lines||3; var h=""; for(var i=0;i<lines-1;i++) h+='<div class="skel skel-line w90"></div>'; h+='<div class="skel skel-line w40"></div>'; el.innerHTML=h; },
-    toast:function(msg,opts){ opts=opts||{};
-      var layer=document.getElementById("uiToastLayer");
-      if(!layer){ layer=document.createElement("div"); layer.id="uiToastLayer"; layer.setAttribute("role","status"); layer.setAttribute("aria-live","polite");
-        layer.style.cssText="position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(92vw,420px);pointer-events:none;"; document.body.appendChild(layer); }
-      var t=document.createElement("div"); t.className="panel"; t.style.cssText="width:100%;border-left:4px solid var(--pink);box-shadow:var(--e3,0 16px 40px rgba(120,90,140,.22));display:flex;align-items:center;gap:10px;pointer-events:auto;font-size:13px;padding:11px 13px;";
-      if(!reduce()) t.style.animation="uiCardIn .3s var(--spring) both";
-      var tx=document.createElement("span"); tx.style.flex="1"; tx.textContent=msg; t.appendChild(tx);
-      var x=document.createElement("button"); x.className="btn btn-ghost btn-sm"; x.textContent=(opts.action&&opts.action.label)||"dismiss"; t.appendChild(x);
-      var close=function(){ if(t.parentNode) t.parentNode.removeChild(t); };
-      x.addEventListener("click",function(){ if(opts.action&&opts.action.fn) opts.action.fn(); close(); });
-      layer.appendChild(t);
-      var ms=opts.ms||3200, timer=setTimeout(close,ms);
-      t.addEventListener("mouseenter",function(){ clearTimeout(timer); });
-      t.addEventListener("mouseleave",function(){ timer=setTimeout(close,1200); });
-      return close;
-    },
-    modal:function(o){ o=o||{};
-      var prev=document.activeElement;
-      var bg=document.createElement("div"); bg.className="modal-bg";
-      var safe=function(s){ return String(s==null?"":s).replace(/"/g,"&quot;"); };
-      bg.innerHTML='<div class="panel" role="dialog" aria-modal="true" aria-label="'+safe(o.title)+'">'+
-        '<div class="card-head"><h3 style="font-size:16px">'+(o.title||"")+'</h3><button class="btn btn-ghost btn-sm" data-x aria-label="Close">✕</button></div>'+
-        '<div style="margin-bottom:16px">'+(o.body||"")+'</div>'+
-        '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-sm" data-x>'+(o.cancel||"Cancel")+'</button><button class="btn btn-pink btn-sm" data-ok>'+(o.confirm||"OK")+'</button></div></div>';
-      var close=function(){ document.removeEventListener("keydown",onKey); if(bg.parentNode) bg.parentNode.removeChild(bg); if(prev&&prev.focus) prev.focus(); };
-      var onKey=function(e){ if(e.key==="Escape") close();
-        if(e.key==="Tab"){ var f=bg.querySelectorAll("button,[href],input,select,textarea,[tabindex]:not([tabindex='-1'])"); if(!f.length)return; var a=f[0],b=f[f.length-1];
-          if(e.shiftKey&&document.activeElement===a){ e.preventDefault(); b.focus(); } else if(!e.shiftKey&&document.activeElement===b){ e.preventDefault(); a.focus(); } } };
-      bg.addEventListener("click",function(e){ if(e.target===bg) close(); });
-      Array.prototype.forEach.call(bg.querySelectorAll("[data-x]"),function(b){ b.addEventListener("click",close); });
-      bg.querySelector("[data-ok]").addEventListener("click",function(){ if(o.onConfirm) o.onConfirm(); close(); });
-      document.addEventListener("keydown",onKey); document.body.appendChild(bg);
-      var ok=bg.querySelector("[data-ok]"); if(ok) ok.focus();
-      return close;
-    }
-  };
-  window.UI = UI;
 })();
 </script>
 </body>
