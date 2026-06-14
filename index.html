@@ -712,11 +712,11 @@ const DB = {
   /* 🌸 the shared Sakura team row (user_id "sakura" · sentinel date). Managers' RLS reaches ONLY this. */
   async sakRow(){ if(DEMO)return {}; if(this._c.sak)return this._c.sak; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",SAK_UID).eq("log_date",SENTINEL).maybeSingle(); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}} return this._c.sak=n; },
   async saveSak(merge){ if(DEMO)return; const {data}=await SB.from("daily_logs").select("notes").eq("user_id",SAK_UID).eq("log_date",SENTINEL).maybeSingle(); let base={}; if(data&&data.notes){try{base=JSON.parse(data.notes);}catch{}} const next=merge({...base}); const {error}=await SB.from("daily_logs").upsert({user_id:SAK_UID,log_date:SENTINEL,notes:JSON.stringify(next),updated_at:new Date().toISOString()},{onConflict:"user_id,log_date"}); if(error){ toast("⚠️ NOT saved — "+(error.message||"write blocked")+" 🌸"); throw new Error("sakura save failed"); } this._c.sak=next; return next; },
-  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(error&&!IS_MGR) throw new Error("couldn't read your data ("+(error.message||"network")+")"); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}}
+  async daily(date){ if(DEMO)return demo.daily[date]||{}; if(this._c.daily[date])return this._c.daily[date]; const _f=(this._c._infl=this._c._infl||{}); if(_f[date])return _f[date]; const p=(async()=>{ const {data,error}=await SB.from("daily_logs").select("notes").eq("user_id",UID).eq("log_date",date).maybeSingle(); if(error&&!IS_MGR) throw new Error("couldn't read your data ("+(error.message||"network")+")"); let n={}; if(data&&data.notes){try{n=JSON.parse(data.notes);}catch{}}
     /* sentinel reads transparently merge the 🌸 team space in, so every existing clients/inbox
        call site keeps working — before migration the keys still live on Eggie's row (fallback). */
     if(date===SENTINEL){ const sak=await this.sakRow(); if(sak._sakMigrated){ SAK_KEYS.forEach(k=>{ n[k]=sak[k]; }); n._sakMigrated=true; } }
-    return this._c.daily[date]=n; },
+    return this._c.daily[date]=n; })(); _f[date]=p; try{ return await p; } finally{ delete _f[date]; } },
   async saveDaily(date,merge){
     if(DEMO){ const cur=await DB.daily(date); const next=merge({...cur}); demo.daily[date]=next; return next; }
     // Re-read the LIVE row for EVERY date right before writing (not just the sentinel). The
@@ -972,11 +972,12 @@ function renderClientOwnPage(){
 }
 
 /* ===================== STATE + ROUTER ===================== */
-const APP_BUILD="2026-06-12.50";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
+const APP_BUILD="2026-06-14.51";   // bump on every change — shown in Settings → Data so any device can prove which build it runs
 /* OS_NEWS — a tiny changelog the app SENDS TO EUGENE with every message, so he always knows the
    current build + latest features WITHOUT an Edge redeploy. Working agreement with Claude: every
    feature change updates this list (newest first, keep ~12 lines, one line per change). */
 const OS_NEWS=[
+  "2026-06-14.51: PERF PASS - faster tab switches and lighter on battery: the app no longer captures a stack trace on every repaint, day/config row reads de-duplicate concurrent fetches (one network call per tab load instead of several), and the Home grid measures every card in one batch instead of forcing a layout reflow per card. Nothing about how the OS works or looks changed.",
   "2026-06-12.49: 👀 CLIENT LOGINS — talents can now sign up (email + pick which talent they are) and, once Eggie approves them on the Clients page, sign in to a READ-ONLY page that shows ONLY their own to-dos, calendar and profile. True isolation: a client can never see another client's data, your notes, or your brand-brain — their page is served by a JWT-checked function and they have no direct database access. Needs the eggie-os-client-signup.sql run.",
   "2026-06-12.47: 📔 JOURNAL is a real tab now (creator mode, under Content) — a daily free-write with a rotating gentle prompt, PLUS every past entry browsable, searchable, and editable, each tagged with that day's energy/inside-weather/stream. The old home journal card still works and now opens the full tab. Say 'journal that …' and I'll append to today (journalAdd). For her eyes only, no streaks.",
   "2026-06-12.46: 🌸 Sakura gained a 📖 GUIDE tab — a step-by-step manager handbook: getting in/approval, the Clients roster, Tasks planner, Calendar, the full Discord message pipeline (channel linking, message-one, 📣 message-many with {name}, /sakura inbox + reply-closes-the-loop), who Egg Jean is (the bot delivers team messages; the in-app chat stays Eggie-only), and troubleshooting",
@@ -1290,7 +1291,7 @@ async function runDailyEngines(sent){
 /* render() coalesces concurrent calls — two near-simultaneous renders used to double-run the
    entrance animation ("the page refreshes twice"). One runs; extras fold into a single follow-up. */
 async function render(){
-  try{ render._caller=new Error().stack||""; }catch(e){ render._caller=""; }
+  render._caller="";   /* PERF 2026-06-14: was new Error().stack on every render */
   if(render._busy){ render._again=true; return; }
   render._busy=true;
   try{ await renderCore(); }
@@ -1669,12 +1670,11 @@ function layoutHome(){
     const cur=/span (\d+)/.exec(w.style.gridColumn||"");
     if(!cur||+cur[1]!==span) w.style.gridColumn="span "+span;
   });
-  grid.querySelectorAll(".home-widget").forEach(w=>{ const panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return;
-    let h;
-    if(w.classList.contains("min")){ h=50; }
-    else { const sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; h=panel.getBoundingClientRect().height; }
-    if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH));   // row-gap is 0 — the 16px breathing room lives inside the span, so snapping error is ≤8px and gaps look uniform
-  });
+  var _ws=Array.prototype.slice.call(grid.querySelectorAll(".home-widget"));
+  // PERF 2026-06-14: batch reads/writes -- set all min-heights, measure all heights, then set all row-spans (one reflow, not one per card)
+  _ws.forEach(function(w){ if(w.classList.contains("min"))return; var panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return; var sh=parseFloat(w.dataset.h||"0")||0; panel.style.minHeight=sh?sh+"px":""; });
+  var _hs=_ws.map(function(w){ if(w.classList.contains("min"))return 50; var panel=w.querySelector(".panel,section")||w.lastElementChild; if(!panel)return 0; return panel.getBoundingClientRect().height; });
+  _ws.forEach(function(w,i){ var h=_hs[i]; if(h>0)w.style.gridRowEnd="span "+Math.max(2,Math.ceil((h+gap)/rowH)); });
 }
 const WLABEL={wellbeing:"Body & brain 💗",profile:"Octopus card 🐙",plate:"Today's plate ☀️",clientsToday:"Clients · today's three",today:"Today at a glance",habits:"Daily habits ✅",gacha:"Gacha dailies 🎮",mission:"Content mission control",opportunities:"Content opportunities 💡",artcorner:"Art corner",money:"Money pulse",goals:"Goals",channel:"Channel pulse",schedule:"Stream schedule",eventPrep:"Event prep 🧳",weightMini:"Weight trend ⚖️",braindump:"Brain dump",noticed:"Egg Jean noticed ✨",focus:"Suggested focus 🌸",healthSnap:"Health snapshot 💗"};
 /* merge-update one page's layout block on the sentinel row */
